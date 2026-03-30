@@ -1,5 +1,11 @@
+import { createServer } from "http";
+import { Server as SocketServer } from "socket.io";
 import app from "./app";
 import { logger } from "./lib/logger";
+import { setSocketIO } from "./routes/orders";
+import { verifyToken } from "./lib/auth";
+import { initTelegramBot } from "./routes/telegram";
+import { seedSudo } from "./lib/seed";
 
 const rawPort = process.env["PORT"];
 
@@ -15,11 +21,45 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
+const httpServer = createServer(app);
+
+const io = new SocketServer(httpServer, {
+  cors: { origin: "*" },
+  path: "/socket.io",
+});
+
+setSocketIO(io);
+
+io.on("connection", (socket) => {
+  const token = socket.handshake.auth?.token as string | undefined;
+  if (token) {
+    const payload = verifyToken(token);
+    if (payload?.storeId) {
+      socket.join(`store:${payload.storeId}`);
+    }
+    if (payload?.role === "sudo") {
+      socket.join("sudo");
+    }
+  }
+
+  socket.on("join-store", (storeId: number) => {
+    socket.join(`store:${storeId}`);
+  });
+});
+
+// Seed SUDO account on startup
+seedSudo().catch((err) => logger.error({ err }, "Seed error"));
+
+// Init Telegram bot if token provided
+const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+if (telegramToken) {
+  initTelegramBot(telegramToken);
+}
+
+httpServer.listen(port, (err?: Error) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
   }
-
   logger.info({ port }, "Server listening");
 });
