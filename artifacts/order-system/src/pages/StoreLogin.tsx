@@ -35,7 +35,7 @@ export default function StoreLogin() {
           toast({ title: "Muvaffaqiyatli", description: "Tizimga kirdingiz" });
         } else if (res.role === 'sudo') {
           // generic superuser
-          setStoreAuth(res.token, 0, 'sudo', 'Superuser', 'sudo');
+          setStoreAuth(res.token, -1, 'sudo', 'Superuser', 'sudo');
           setLocation('/sudo');
         }
       },
