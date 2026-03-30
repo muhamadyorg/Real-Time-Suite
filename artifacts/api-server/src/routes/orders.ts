@@ -318,11 +318,13 @@ router.patch("/:id/status", async (req, res) => {
         if (client?.telegramUserId) {
           await sendTelegramNotification(
             client.telegramUserId,
-            `HURMATLI ${client.firstName} ${client.lastName}\n` +
-            `Sizning #${order.orderId} sonli buyurtmangiz:\n` +
-            `Xizmat: ${order.serviceTypeName}\n` +
-            `Miqdor: ${order.quantity}${order.unit ? " " + order.unit : ""}\n` +
-            `qabul qilindi. Tayyor bo'lishi bilanoq sizni ogohlantiramiz.`
+            `⚡️ <b>Buyurtma qabul qilindi!</b>\n\n` +
+            `👋 Hurmatli <b>${client.firstName} ${client.lastName}</b>,\n\n` +
+            `📦 Buyurtma raqami: <b>${order.orderId}</b>\n` +
+            `🛠 Xizmat: <b>${order.serviceTypeName}</b>\n` +
+            `🔢 Miqdor: <b>${order.quantity}${order.unit ? " " + order.unit : ""}</b>\n\n` +
+            `⏳ Buyurtmangiz tayyorlanmoqda...\n` +
+            `Tayyor bo'lishi bilanoq xabar beramiz! 🔔`
           );
         }
       } catch (_e) { /* Telegram not configured */ }
@@ -335,11 +337,13 @@ router.patch("/:id/status", async (req, res) => {
         if (client?.telegramUserId) {
           await sendTelegramNotification(
             client.telegramUserId,
-            `HURMATLI ${client.firstName} ${client.lastName}\n` +
-            `Sizning #${order.orderId} sonli buyurtmangiz tayyor!\n` +
-            `Xizmat: ${order.serviceTypeName}\n` +
-            `Miqdor: ${order.quantity}${order.unit ? " " + order.unit : ""}\n` +
-            `Olib ketishingiz mumkin.`
+            `✅ <b>Buyurtmangiz TAYYOR!</b>\n\n` +
+            `🎉 Hurmatli <b>${client.firstName} ${client.lastName}</b>,\n\n` +
+            `📦 Buyurtma raqami: <b>${order.orderId}</b>\n` +
+            `🛠 Xizmat: <b>${order.serviceTypeName}</b>\n` +
+            `🔢 Miqdor: <b>${order.quantity}${order.unit ? " " + order.unit : ""}</b>\n\n` +
+            `🏪 Buyurtmangizni olib ketishingiz mumkin!\n` +
+            `💎 Bizga ishonganingiz uchun katta rahmat!`
           );
         }
       } catch (_e) { /* Telegram not configured */ }

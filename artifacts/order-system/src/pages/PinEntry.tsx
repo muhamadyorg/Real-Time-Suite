@@ -4,7 +4,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { usePinLogin } from "@workspace/api-client-react";
 import { useInactivityTimer } from "@/hooks/useInactivityTimer";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Delete, LogOut, Store } from "lucide-react";
 
@@ -15,15 +14,19 @@ export default function PinEntry() {
   const pinLogin = usePinLogin();
   const { toast } = useToast();
 
+  // Timeout: faqat PIN ni tozala, do'kondan chiqma
   const handleTimeout = useCallback(() => {
+    setPin("");
+  }, []);
+
+  // Explicit chiqish: do'kondan to'liq chiq
+  const handleStoreLogout = useCallback(() => {
     clearStoreAuth();
     setLocation("/");
   }, [clearStoreAuth, setLocation]);
 
-  // Use 15 seconds as specified
   const { secondsLeft } = useInactivityTimer(15, handleTimeout);
 
-  // Add effect to auto-login when pin length reaches 6
   if (pin.length === 6 && storeId && !pinLogin.isPending) {
     pinLogin.mutate({ data: { pin, storeId } }, {
       onSuccess: (data) => {
@@ -34,15 +37,14 @@ export default function PinEntry() {
         else if (data.role === 'viewer') setLocation('/viewer');
         else if (data.role === 'sudo') setLocation('/sudo');
         else setLocation('/worker');
-        
-        toast({ title: `Xush kelibsiz, ${data.account.name}` });
+        toast({ title: `Xush kelibsiz, ${data.account.name}!` });
       },
       onError: (err) => {
         setPin("");
-        toast({ 
-          title: "Xatolik", 
-          description: err.data?.error || "PIN kod noto'g'ri", 
-          variant: "destructive" 
+        toast({
+          title: "Xatolik",
+          description: err.data?.error || "PIN kod noto'g'ri",
+          variant: "destructive"
         });
       }
     });
@@ -58,7 +60,7 @@ export default function PinEntry() {
   }
 
   const handlePadClick = (num: string) => {
-    if (pin.length < 6) {
+    if (pin.length < 6 && !pinLogin.isPending) {
       setPin(prev => prev + num);
     }
   };
@@ -71,87 +73,88 @@ export default function PinEntry() {
 
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center bg-background relative overflow-hidden">
-      <div className="absolute top-0 inset-x-0 h-64 bg-primary/5 rounded-b-[100%] z-0" />
-      
-      <div className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-card px-3 py-1.5 rounded-full shadow-sm border text-sm font-medium">
-        <span className="relative flex h-2.5 w-2.5">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-accent"></span>
+      {/* Top gradient decoration */}
+      <div className="absolute top-0 inset-x-0 h-72 bg-gradient-to-b from-primary/10 to-transparent rounded-b-[80%] z-0 pointer-events-none" />
+
+      {/* Timer badge */}
+      <div className={`absolute top-4 right-4 z-10 flex items-center gap-2 px-3 py-1.5 rounded-full shadow text-sm font-semibold border transition-colors ${
+        secondsLeft <= 5 ? 'bg-destructive/10 border-destructive/30 text-destructive' : 'bg-card border-border text-foreground'
+      }`}>
+        <span className="relative flex h-2 w-2">
+          <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${secondsLeft <= 5 ? 'bg-destructive' : 'bg-primary'}`} />
+          <span className={`relative inline-flex rounded-full h-2 w-2 ${secondsLeft <= 5 ? 'bg-destructive' : 'bg-primary'}`} />
         </span>
-        Vaqt: {secondsLeft}s
+        {secondsLeft}s
       </div>
 
+      {/* Store name badge */}
       <div className="z-10 flex flex-col items-center mb-8">
-        <div className="flex items-center gap-2 text-primary/80 font-medium mb-4 bg-primary/10 px-4 py-2 rounded-full">
-          <Store className="w-5 h-5" />
+        <div className="flex items-center gap-2 text-primary font-semibold mb-4 bg-primary/10 px-5 py-2 rounded-full border border-primary/20 shadow-sm">
+          <Store className="w-4 h-4" />
           {storeName}
         </div>
         <h1 className="text-3xl font-bold tracking-tight mb-2">PIN kodni kiriting</h1>
-        <p className="text-muted-foreground text-center px-4 max-w-sm">Tizimga kirish uchun o'z parolingizni kiriting</p>
+        <p className="text-muted-foreground text-center px-4 max-w-xs text-sm">
+          Tizimga kirish uchun o'z PIN kodingizni kiriting
+        </p>
       </div>
 
-      <Card className="w-full max-w-sm border-0 shadow-none bg-transparent z-10">
-        <CardContent className="p-4 sm:p-6 flex flex-col items-center">
-          
-          <div className="flex gap-4 mb-10 h-6">
-            {[0, 1, 2, 3, 4, 5].map((idx) => (
-              <div 
-                key={idx} 
-                className={`w-5 h-5 rounded-full border-2 transition-all duration-200 ${
-                  idx < pin.length 
-                    ? "bg-primary border-primary scale-110" 
-                    : "bg-transparent border-muted-foreground/30"
-                }`} 
-              />
-            ))}
-          </div>
+      {/* PIN dots */}
+      <div className="flex gap-4 mb-10 z-10">
+        {[0, 1, 2, 3, 4, 5].map((idx) => (
+          <div
+            key={idx}
+            className={`w-5 h-5 rounded-full border-2 transition-all duration-200 ${
+              idx < pin.length
+                ? "bg-primary border-primary scale-110 shadow-[0_0_8px_hsl(var(--primary)/0.5)]"
+                : "bg-transparent border-muted-foreground/30"
+            }`}
+          />
+        ))}
+      </div>
 
-          <div className="grid grid-cols-3 gap-x-6 gap-y-4 sm:gap-x-8 sm:gap-y-6 w-full max-w-[280px]">
-            {padNumbers.map((num) => (
-              <Button 
-                key={num} 
-                variant="outline" 
-                className="h-20 w-20 rounded-full text-3xl font-light shadow-sm bg-card hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-all"
-                onClick={() => handlePadClick(num)}
-                disabled={pinLogin.isPending}
-              >
-                {num}
-              </Button>
-            ))}
-            
-            <div className="flex items-center justify-center">
-              <Button 
-                variant="ghost" 
-                className="h-16 w-16 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive flex flex-col gap-1"
-                onClick={handleTimeout}
-              >
-                <LogOut className="h-6 w-6" />
-                <span className="text-[10px] font-medium uppercase">Chiqish</span>
-              </Button>
-            </div>
+      {/* Keypad */}
+      <div className="grid grid-cols-3 gap-4 z-10 w-full max-w-[280px]">
+        {padNumbers.map((num) => (
+          <Button
+            key={num}
+            variant="outline"
+            className="h-20 w-full rounded-2xl text-3xl font-light shadow-sm bg-card hover:bg-primary hover:text-primary-foreground hover:border-primary hover:scale-105 active:scale-95 transition-all duration-150"
+            onClick={() => handlePadClick(num)}
+            disabled={pinLogin.isPending}
+          >
+            {num}
+          </Button>
+        ))}
 
-            <Button 
-              variant="outline" 
-              className="h-20 w-20 rounded-full text-3xl font-light shadow-sm bg-card hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-all"
-              onClick={() => handlePadClick("0")}
-              disabled={pinLogin.isPending}
-            >
-              0
-            </Button>
+        {/* Chiqish button */}
+        <Button
+          variant="ghost"
+          className="h-20 w-full rounded-2xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive flex flex-col gap-1 transition-all duration-150"
+          onClick={handleStoreLogout}
+        >
+          <LogOut className="h-5 w-5" />
+          <span className="text-[10px] font-medium uppercase tracking-wider">Chiqish</span>
+        </Button>
 
-            <div className="flex items-center justify-center">
-              <Button 
-                variant="ghost" 
-                className="h-16 w-16 rounded-full text-muted-foreground hover:bg-muted"
-                onClick={handleBackspace}
-                disabled={pin.length === 0 || pinLogin.isPending}
-              >
-                <Delete className="h-8 w-8" />
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        <Button
+          variant="outline"
+          className="h-20 w-full rounded-2xl text-3xl font-light shadow-sm bg-card hover:bg-primary hover:text-primary-foreground hover:border-primary hover:scale-105 active:scale-95 transition-all duration-150"
+          onClick={() => handlePadClick("0")}
+          disabled={pinLogin.isPending}
+        >
+          0
+        </Button>
+
+        <Button
+          variant="ghost"
+          className="h-20 w-full rounded-2xl text-muted-foreground hover:bg-muted active:scale-95 transition-all duration-150"
+          onClick={handleBackspace}
+          disabled={pin.length === 0 || pinLogin.isPending}
+        >
+          <Delete className="h-7 w-7" />
+        </Button>
+      </div>
     </div>
   );
 }

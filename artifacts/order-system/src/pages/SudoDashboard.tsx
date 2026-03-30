@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Header } from "@/components/Header";
-import { 
-  useGetStores, useCreateStore, useDeleteStore,
-  useGetAccounts, useCreateAccount, useDeleteAccount,
+import {
+  useGetStores, useCreateStore, useDeleteStore, useUpdateStore,
+  useGetAccounts, useCreateAccount, useDeleteAccount, useUpdateAccount,
   useGetServiceTypes, useCreateServiceType, useDeleteServiceType,
   useGetClients, useApproveClient, useRejectClient,
   useGetOrders,
@@ -11,40 +11,91 @@ import {
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, CheckCircle, XCircle } from "lucide-react";
+import {
+  Loader2, Plus, Trash2, CheckCircle, XCircle, Pencil,
+  Store, Users, Layers, UserCheck, ShoppingBag, LayoutDashboard
+} from "lucide-react";
 import { format } from "date-fns";
+
+const ROLE_LABELS: Record<string, string> = {
+  superadmin: "Superadmin",
+  admin: "Admin",
+  viewer: "Viewer",
+  worker: "Ishchi",
+};
+
+const ROLE_COLORS: Record<string, string> = {
+  superadmin: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300",
+  admin: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  viewer: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300",
+  worker: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+};
 
 function StoresView() {
   const { data, isLoading } = useGetStores({ query: { queryKey: getGetStoresQueryKey() } });
   const createStore = useCreateStore();
   const deleteStore = useDeleteStore();
+  const updateStore = useUpdateStore();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<any>(null);
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
+  const [editName, setEditName] = useState("");
+  const [editUsername, setEditUsername] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+
   const handleCreate = () => {
+    if (!name || !username || !password) return toast({ title: "Xatolik", description: "Barcha maydonlarni to'ldiring", variant: "destructive" });
     createStore.mutate({ data: { name, username, password } }, {
       onSuccess: () => {
-        toast({ title: "Muvaffaqiyatli saqlandi" });
+        toast({ title: "Do'kon yaratildi" });
         queryClient.invalidateQueries({ queryKey: getGetStoresQueryKey() });
-        setOpen(false);
+        setOpen(false); setName(""); setUsername(""); setPassword("");
+      },
+      onError: (err) => toast({ title: "Xatolik", description: err.data?.error, variant: "destructive" })
+    });
+  };
+
+  const openEdit = (store: any) => {
+    setEditTarget(store);
+    setEditName(store.name);
+    setEditUsername(store.username);
+    setEditPassword("");
+    setEditOpen(true);
+  };
+
+  const handleEdit = () => {
+    if (!editTarget) return;
+    const data: any = {};
+    if (editName !== editTarget.name) data.name = editName;
+    if (editUsername !== editTarget.username) data.username = editUsername;
+    if (editPassword) data.password = editPassword;
+    updateStore.mutate({ id: editTarget.id, data }, {
+      onSuccess: () => {
+        toast({ title: "Do'kon yangilandi" });
+        queryClient.invalidateQueries({ queryKey: getGetStoresQueryKey() });
+        setEditOpen(false);
       },
       onError: (err) => toast({ title: "Xatolik", description: err.data?.error, variant: "destructive" })
     });
   };
 
   const handleDelete = (id: number) => {
-    if(confirm("Haqiqatan ham o'chirmoqchimisiz?")) {
+    if (confirm("Haqiqatan ham o'chirmoqchimisiz?")) {
       deleteStore.mutate({ id }, {
         onSuccess: () => {
           toast({ title: "O'chirildi" });
@@ -52,51 +103,92 @@ function StoresView() {
         }
       });
     }
-  }
+  };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Do'konlar</h2>
+        <div>
+          <h2 className="text-2xl font-bold">Do'konlar</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">{data?.length ?? 0} ta do'kon</p>
+        </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button><Plus className="w-4 h-4 mr-2" /> Yangi</Button></DialogTrigger>
+          <DialogTrigger asChild>
+            <Button className="gap-2"><Plus className="w-4 h-4" /> Yangi do'kon</Button>
+          </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Yangi do'kon</DialogTitle></DialogHeader>
-            <div className="space-y-4 py-4">
-              <Input placeholder="Nomi" value={name} onChange={e=>setName(e.target.value)} />
-              <Input placeholder="Login" value={username} onChange={e=>setUsername(e.target.value)} />
-              <Input placeholder="Parol" type="password" value={password} onChange={e=>setPassword(e.target.value)} />
+            <DialogHeader>
+              <DialogTitle>Yangi do'kon qo'shish</DialogTitle>
+              <DialogDescription>Do'kon ma'lumotlarini kiriting</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5"><Label>Nomi</Label><Input placeholder="Do'kon nomi" value={name} onChange={e => setName(e.target.value)} /></div>
+              <div className="space-y-1.5"><Label>Login</Label><Input placeholder="do'kon_login" value={username} onChange={e => setUsername(e.target.value)} /></div>
+              <div className="space-y-1.5"><Label>Parol</Label><Input placeholder="••••••••" type="password" value={password} onChange={e => setPassword(e.target.value)} /></div>
             </div>
             <DialogFooter>
-              <Button onClick={handleCreate} disabled={createStore.isPending}>Saqlash</Button>
+              <Button variant="outline" onClick={() => setOpen(false)}>Bekor</Button>
+              <Button onClick={handleCreate} disabled={createStore.isPending}>
+                {createStore.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Saqlash
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Edit dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Do'konni tahrirlash</DialogTitle>
+            <DialogDescription>O'zgartirmoqchi bo'lgan maydonlarni yangilang</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5"><Label>Nomi</Label><Input value={editName} onChange={e => setEditName(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Login</Label><Input value={editUsername} onChange={e => setEditUsername(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Yangi parol (ixtiyoriy)</Label><Input placeholder="O'zgartirmasangiz bo'sh qoldiring" type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)} /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Bekor</Button>
+            <Button onClick={handleEdit} disabled={updateStore.isPending}>
+              {updateStore.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Saqlash
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>ID</TableHead>
+              <TableHead className="w-12">#</TableHead>
               <TableHead>Nomi</TableHead>
               <TableHead>Login</TableHead>
               <TableHead>Yaratilgan</TableHead>
-              <TableHead></TableHead>
+              <TableHead className="text-right">Amallar</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? <TableRow><TableCell colSpan={5} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow> : 
-             data?.map(store => (
-              <TableRow key={store.id}>
-                <TableCell>{store.id}</TableCell>
-                <TableCell className="font-medium">{store.name}</TableCell>
-                <TableCell>{store.username}</TableCell>
-                <TableCell>{format(new Date(store.createdAt), "dd.MM.yyyy HH:mm")}</TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" onClick={() => handleDelete(store.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-                </TableCell>
-              </TableRow>
-            ))}
+            {isLoading
+              ? <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
+              : data?.map(store => (
+                <TableRow key={store.id}>
+                  <TableCell className="text-muted-foreground text-sm">{store.id}</TableCell>
+                  <TableCell className="font-semibold">{store.name}</TableCell>
+                  <TableCell className="font-mono text-sm text-muted-foreground">{store.username}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{format(new Date(store.createdAt), "dd.MM.yyyy")}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(store)}>
+                        <Pencil className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(store.id)}>
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
           </TableBody>
         </Table>
       </Card>
@@ -109,35 +201,73 @@ function AccountsView() {
   const { data: stores } = useGetStores({ query: { queryKey: getGetStoresQueryKey() } });
   const createAccount = useCreateAccount();
   const deleteAccount = useDeleteAccount();
+  const updateAccount = useUpdateAccount();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<any>(null);
+
   const [name, setName] = useState("");
   const [role, setRole] = useState<any>("worker");
   const [pin, setPin] = useState("");
   const [storeId, setStoreId] = useState<string>("none");
 
+  const [editName, setEditName] = useState("");
+  const [editRole, setEditRole] = useState<any>("worker");
+  const [editPin, setEditPin] = useState("");
+  const [editStoreId, setEditStoreId] = useState<string>("none");
+
   const handleCreate = () => {
-    createAccount.mutate({ 
-      data: { 
-        name, 
-        role, 
-        pin: pin || null, 
-        storeId: storeId !== "none" ? Number(storeId) : null 
-      } 
+    createAccount.mutate({
+      data: {
+        name,
+        role,
+        pin: pin || null,
+        storeId: storeId !== "none" ? Number(storeId) : null
+      }
     }, {
       onSuccess: () => {
-        toast({ title: "Muvaffaqiyatli saqlandi" });
+        toast({ title: "Hisob yaratildi" });
         queryClient.invalidateQueries({ queryKey: getGetAccountsQueryKey() });
-        setOpen(false);
+        setOpen(false); setName(""); setPin(""); setStoreId("none"); setRole("worker");
+      },
+      onError: (err) => toast({ title: "Xatolik", description: err.data?.error, variant: "destructive" })
+    });
+  };
+
+  const openEdit = (acc: any) => {
+    setEditTarget(acc);
+    setEditName(acc.name);
+    setEditRole(acc.role);
+    setEditPin(acc.pin || "");
+    setEditStoreId(acc.storeId ? String(acc.storeId) : "none");
+    setEditOpen(true);
+  };
+
+  const handleEdit = () => {
+    if (!editTarget) return;
+    updateAccount.mutate({
+      id: editTarget.id,
+      data: {
+        name: editName,
+        role: editRole,
+        pin: editPin || null,
+        storeId: editStoreId !== "none" ? Number(editStoreId) : null,
+      }
+    }, {
+      onSuccess: () => {
+        toast({ title: "Hisob yangilandi" });
+        queryClient.invalidateQueries({ queryKey: getGetAccountsQueryKey() });
+        setEditOpen(false);
       },
       onError: (err) => toast({ title: "Xatolik", description: err.data?.error, variant: "destructive" })
     });
   };
 
   const handleDelete = (id: number) => {
-    if(confirm("Haqiqatan ham o'chirmoqchimisiz?")) {
+    if (confirm("Haqiqatan ham o'chirmoqchimisiz?")) {
       deleteAccount.mutate({ id }, {
         onSuccess: () => {
           toast({ title: "O'chirildi" });
@@ -145,64 +275,141 @@ function AccountsView() {
         }
       });
     }
-  }
+  };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Hisoblar</h2>
+        <div>
+          <h2 className="text-2xl font-bold">Hisoblar</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">{data?.length ?? 0} ta foydalanuvchi</p>
+        </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button><Plus className="w-4 h-4 mr-2" /> Yangi</Button></DialogTrigger>
+          <DialogTrigger asChild>
+            <Button className="gap-2"><Plus className="w-4 h-4" /> Yangi hisob</Button>
+          </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Yangi hisob</DialogTitle></DialogHeader>
-            <div className="space-y-4 py-4">
-              <Input placeholder="Ism" value={name} onChange={e=>setName(e.target.value)} />
-              <Select value={role} onValueChange={setRole}>
-                <SelectTrigger><SelectValue placeholder="Rol" /></SelectTrigger>
+            <DialogHeader>
+              <DialogTitle>Yangi hisob qo'shish</DialogTitle>
+              <DialogDescription>Foydalanuvchi ma'lumotlarini kiriting</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5"><Label>Ism</Label><Input placeholder="To'liq ism" value={name} onChange={e => setName(e.target.value)} /></div>
+              <div className="space-y-1.5">
+                <Label>Rol</Label>
+                <Select value={role} onValueChange={setRole}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="superadmin">Superadmin</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="viewer">Viewer</SelectItem>
+                    <SelectItem value="worker">Ishchi</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5"><Label>PIN kod (6 ta raqam)</Label><Input placeholder="123456" value={pin} onChange={e => setPin(e.target.value)} maxLength={6} /></div>
+              <div className="space-y-1.5">
+                <Label>Do'kon</Label>
+                <Select value={storeId} onValueChange={setStoreId}>
+                  <SelectTrigger><SelectValue placeholder="Tanlang..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Biriktirilmagan</SelectItem>
+                    {stores?.map(s => <SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpen(false)}>Bekor</Button>
+              <Button onClick={handleCreate} disabled={createAccount.isPending}>
+                {createAccount.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Saqlash
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Hisobni tahrirlash</DialogTitle>
+            <DialogDescription>"{editTarget?.name}" hisobi ma'lumotlarini o'zgartiring</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5"><Label>Ism</Label><Input value={editName} onChange={e => setEditName(e.target.value)} /></div>
+            <div className="space-y-1.5">
+              <Label>Rol</Label>
+              <Select value={editRole} onValueChange={setEditRole}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="superadmin">Superadmin</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="viewer">Viewer</SelectItem>
-                  <SelectItem value="worker">Worker</SelectItem>
+                  <SelectItem value="worker">Ishchi</SelectItem>
                 </SelectContent>
               </Select>
-              <Input placeholder="PIN (6 raqam, ixtiyoriy)" value={pin} onChange={e=>setPin(e.target.value)} />
-              <Select value={storeId} onValueChange={setStoreId}>
-                <SelectTrigger><SelectValue placeholder="Do'kon (ixtiyoriy)" /></SelectTrigger>
+            </div>
+            <div className="space-y-1.5">
+              <Label>PIN kod</Label>
+              <Input placeholder="6 ta raqam" value={editPin} onChange={e => setEditPin(e.target.value)} maxLength={6} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Do'kon</Label>
+              <Select value={editStoreId} onValueChange={setEditStoreId}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Biriktirilmagan</SelectItem>
                   {stores?.map(s => <SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <DialogFooter>
-              <Button onClick={handleCreate} disabled={createAccount.isPending}>Saqlash</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Bekor</Button>
+            <Button onClick={handleEdit} disabled={updateAccount.isPending}>
+              {updateAccount.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Saqlash
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Ism</TableHead>
               <TableHead>Rol</TableHead>
+              <TableHead>PIN</TableHead>
               <TableHead>Do'kon</TableHead>
-              <TableHead></TableHead>
+              <TableHead className="text-right">Amallar</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? <TableRow><TableCell colSpan={4} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow> : 
-             data?.map(acc => (
-              <TableRow key={acc.id}>
-                <TableCell className="font-medium">{acc.name}</TableCell>
-                <TableCell>{acc.role}</TableCell>
-                <TableCell>{acc.storeName || "-"}</TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" onClick={() => handleDelete(acc.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-                </TableCell>
-              </TableRow>
-            ))}
+            {isLoading
+              ? <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
+              : data?.map(acc => (
+                <TableRow key={acc.id}>
+                  <TableCell className="font-semibold">{acc.name}</TableCell>
+                  <TableCell>
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${ROLE_COLORS[acc.role] ?? ''}`}>
+                      {ROLE_LABELS[acc.role] ?? acc.role}
+                    </span>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm">{acc.pin || <span className="text-muted-foreground">—</span>}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{acc.storeName || <span className="text-muted-foreground">—</span>}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(acc)}>
+                        <Pencil className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(acc.id)}>
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
           </TableBody>
         </Table>
       </Card>
@@ -225,15 +432,15 @@ function ServiceTypesView() {
   const handleCreate = () => {
     createService.mutate({ data: { name, storeId: storeId !== "none" ? Number(storeId) : null } }, {
       onSuccess: () => {
-        toast({ title: "Muvaffaqiyatli saqlandi" });
+        toast({ title: "Xizmat turi qo'shildi" });
         queryClient.invalidateQueries({ queryKey: getGetServiceTypesQueryKey() });
-        setOpen(false);
+        setOpen(false); setName(""); setStoreId("none");
       }
     });
   };
 
   const handleDelete = (id: number) => {
-    if(confirm("Haqiqatan ham o'chirmoqchimisiz?")) {
+    if (confirm("Haqiqatan ham o'chirmoqchimisiz?")) {
       deleteService.mutate({ id }, {
         onSuccess: () => {
           toast({ title: "O'chirildi" });
@@ -241,28 +448,42 @@ function ServiceTypesView() {
         }
       });
     }
-  }
+  };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Xizmat turlari</h2>
+        <div>
+          <h2 className="text-2xl font-bold">Xizmat turlari</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">{data?.length ?? 0} ta xizmat</p>
+        </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild><Button><Plus className="w-4 h-4 mr-2" /> Yangi</Button></DialogTrigger>
+          <DialogTrigger asChild>
+            <Button className="gap-2"><Plus className="w-4 h-4" /> Yangi xizmat</Button>
+          </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Yangi xizmat</DialogTitle></DialogHeader>
-            <div className="space-y-4 py-4">
-              <Input placeholder="Nomi" value={name} onChange={e=>setName(e.target.value)} />
-              <Select value={storeId} onValueChange={setStoreId}>
-                <SelectTrigger><SelectValue placeholder="Do'kon (ixtiyoriy, agar faqat bitta do'konga tegishli bo'lsa)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Barchasi uchun</SelectItem>
-                  {stores?.map(s => <SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <DialogHeader>
+              <DialogTitle>Yangi xizmat turi</DialogTitle>
+              <DialogDescription>Xizmat nomi va do'konini kiriting</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5"><Label>Nomi</Label><Input placeholder="Xizmat nomi" value={name} onChange={e => setName(e.target.value)} /></div>
+              <div className="space-y-1.5">
+                <Label>Do'kon (ixtiyoriy)</Label>
+                <Select value={storeId} onValueChange={setStoreId}>
+                  <SelectTrigger><SelectValue placeholder="Tanlang..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Barcha do'konlar uchun</SelectItem>
+                    {stores?.map(s => <SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleCreate} disabled={createService.isPending}>Saqlash</Button>
+              <Button variant="outline" onClick={() => setOpen(false)}>Bekor</Button>
+              <Button onClick={handleCreate} disabled={createService.isPending}>
+                {createService.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Saqlash
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -273,20 +494,25 @@ function ServiceTypesView() {
             <TableRow>
               <TableHead>Nomi</TableHead>
               <TableHead>Do'kon</TableHead>
-              <TableHead></TableHead>
+              <TableHead className="text-right">Amallar</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? <TableRow><TableCell colSpan={3} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow> : 
-             data?.map(s => (
-              <TableRow key={s.id}>
-                <TableCell className="font-medium">{s.name}</TableCell>
-                <TableCell>{s.storeId ? stores?.find(x=>x.id===s.storeId)?.name : "Barchasi"}</TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-                </TableCell>
-              </TableRow>
-            ))}
+            {isLoading
+              ? <TableRow><TableCell colSpan={3} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
+              : data?.map(s => (
+                <TableRow key={s.id}>
+                  <TableCell className="font-semibold">{s.name}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {s.storeId ? stores?.find(x => x.id === s.storeId)?.name : "Barchasi"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)}>
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
           </TableBody>
         </Table>
       </Card>
@@ -302,34 +528,19 @@ function ClientsView() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const handleApprove = (id: number) => {
-    approve.mutate({ id }, {
-      onSuccess: () => {
-        toast({ title: "Mijoz tasdiqlandi" });
-        queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey({ status }) });
-      }
-    });
-  }
-
-  const handleReject = (id: number) => {
-    reject.mutate({ id }, {
-      onSuccess: () => {
-        toast({ title: "Mijoz rad etildi" });
-        queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey({ status }) });
-      }
-    });
-  }
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Mijozlar</h2>
+        <div>
+          <h2 className="text-2xl font-bold">Mijozlar</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Telegram orqali ro'yxatdan o'tganlar</p>
+        </div>
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="pending">Kutilmoqda</SelectItem>
-            <SelectItem value="approved">Tasdiqlangan</SelectItem>
-            <SelectItem value="rejected">Rad etilgan</SelectItem>
+            <SelectItem value="pending">⏳ Kutilmoqda</SelectItem>
+            <SelectItem value="approved">✅ Tasdiqlangan</SelectItem>
+            <SelectItem value="rejected">❌ Rad etilgan</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -340,26 +551,41 @@ function ClientsView() {
               <TableHead>Ism</TableHead>
               <TableHead>Telefon</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead></TableHead>
+              <TableHead className="text-right">Amallar</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? <TableRow><TableCell colSpan={4} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow> : 
-             data?.map(c => (
-              <TableRow key={c.id}>
-                <TableCell className="font-medium">{c.firstName} {c.lastName}</TableCell>
-                <TableCell>{c.phone}</TableCell>
-                <TableCell>{c.status}</TableCell>
-                <TableCell className="text-right">
-                  {c.status === "pending" && (
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="icon" className="text-green-600" onClick={() => handleApprove(c.id)}><CheckCircle className="w-4 h-4" /></Button>
-                      <Button variant="outline" size="icon" className="text-red-600" onClick={() => handleReject(c.id)}><XCircle className="w-4 h-4" /></Button>
-                    </div>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
+            {isLoading
+              ? <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
+              : data?.map(c => (
+                <TableRow key={c.id}>
+                  <TableCell className="font-semibold">{c.firstName} {c.lastName}</TableCell>
+                  <TableCell className="font-mono text-sm">{c.phone}</TableCell>
+                  <TableCell>
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                      c.status === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' :
+                      c.status === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
+                      'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
+                    }`}>
+                      {c.status === 'approved' ? 'Tasdiqlangan' : c.status === 'rejected' ? 'Rad etilgan' : 'Kutilmoqda'}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {c.status === "pending" && (
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="sm" className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 gap-1.5"
+                          onClick={() => approve.mutate({ id: c.id }, { onSuccess: () => { toast({ title: "Tasdiqlandi" }); queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey({ status }) }); } })}>
+                          <CheckCircle className="w-4 h-4" /> Tasdiqla
+                        </Button>
+                        <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50 gap-1.5"
+                          onClick={() => reject.mutate({ id: c.id }, { onSuccess: () => { toast({ title: "Rad etildi" }); queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey({ status }) }); } })}>
+                          <XCircle className="w-4 h-4" /> Rad et
+                        </Button>
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
           </TableBody>
         </Table>
       </Card>
@@ -371,11 +597,20 @@ function OrdersView() {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const { data, isLoading } = useGetOrders({ date }, { query: { queryKey: getGetOrdersQueryKey({ date }) } });
 
+  const statusColors: Record<string, string> = {
+    new: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+    accepted: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300",
+    ready: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Barcha Zakazlar</h2>
-        <Input type="date" value={date} onChange={e=>setDate(e.target.value)} className="w-[200px]" />
+        <div>
+          <h2 className="text-2xl font-bold">Barcha Zakazlar</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">{data?.length ?? 0} ta zakaz</p>
+        </div>
+        <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-[160px]" />
       </div>
       <Card>
         <Table>
@@ -389,16 +624,21 @@ function OrdersView() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? <TableRow><TableCell colSpan={5} className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto" /></TableCell></TableRow> : 
-             data?.map(o => (
-              <TableRow key={o.id}>
-                <TableCell className="font-medium">{o.orderId}</TableCell>
-                <TableCell>{o.storeName}</TableCell>
-                <TableCell>{o.serviceTypeName} x {o.quantity}</TableCell>
-                <TableCell>{o.status}</TableCell>
-                <TableCell>{format(new Date(o.createdAt), "dd.MM.yyyy HH:mm")}</TableCell>
-              </TableRow>
-            ))}
+            {isLoading
+              ? <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
+              : data?.map(o => (
+                <TableRow key={o.id}>
+                  <TableCell className="font-mono font-bold text-primary">{o.orderId}</TableCell>
+                  <TableCell>{o.storeName}</TableCell>
+                  <TableCell>{o.serviceTypeName} × {o.quantity}</TableCell>
+                  <TableCell>
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${statusColors[o.status] ?? ''}`}>
+                      {o.status === 'new' ? 'Yangi' : o.status === 'accepted' ? 'Qabul' : 'Tayyor'}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{format(new Date(o.createdAt), "dd.MM.yy HH:mm")}</TableCell>
+                </TableRow>
+              ))}
           </TableBody>
         </Table>
       </Card>
@@ -406,8 +646,16 @@ function OrdersView() {
   );
 }
 
+const NAV_ITEMS = [
+  { key: "stores", label: "Do'konlar", icon: Store },
+  { key: "accounts", label: "Hisoblar", icon: Users },
+  { key: "services", label: "Xizmatlar", icon: Layers },
+  { key: "clients", label: "Mijozlar", icon: UserCheck },
+  { key: "orders", label: "Zakazlar", icon: ShoppingBag },
+];
+
 export default function SudoDashboard() {
-  const { accountName } = useAuth();
+  const { accountName, clearStoreAuth } = useAuth();
   const [view, setView] = useState("stores");
 
   const views: any = {
@@ -420,16 +668,39 @@ export default function SudoDashboard() {
 
   return (
     <div className="min-h-screen bg-muted/20 flex flex-col">
-      <Header title={`SUDO: ${accountName}`} showLogout={true} />
-      
+      <header className="flex items-center justify-between px-6 py-3 bg-card border-b shadow-sm sticky top-0 z-20">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+            <LayoutDashboard className="w-4 h-4 text-primary-foreground" />
+          </div>
+          <div>
+            <span className="font-bold text-primary tracking-tight">SUDO Panel</span>
+            <span className="text-xs text-muted-foreground ml-2">· {accountName}</span>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={clearStoreAuth} className="text-destructive border-destructive/30 hover:bg-destructive/10 gap-2">
+          Chiqish
+        </Button>
+      </header>
+
       <div className="flex flex-1 overflow-hidden">
-        <aside className="w-64 bg-card border-r flex flex-col p-4 gap-2">
-          <Button variant={view === "stores" ? "secondary" : "ghost"} className="justify-start" onClick={() => setView("stores")}>Do'konlar</Button>
-          <Button variant={view === "accounts" ? "secondary" : "ghost"} className="justify-start" onClick={() => setView("accounts")}>Hisoblar</Button>
-          <Button variant={view === "services" ? "secondary" : "ghost"} className="justify-start" onClick={() => setView("services")}>Xizmat turlari</Button>
-          <Button variant={view === "clients" ? "secondary" : "ghost"} className="justify-start" onClick={() => setView("clients")}>Mijozlar</Button>
-          <Button variant={view === "orders" ? "secondary" : "ghost"} className="justify-start" onClick={() => setView("orders")}>Zakazlar</Button>
+        <aside className="w-56 bg-card border-r flex flex-col p-3 gap-1 shrink-0">
+          {NAV_ITEMS.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setView(key)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                view === key
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              {label}
+            </button>
+          ))}
         </aside>
+
         <main className="flex-1 p-6 overflow-auto">
           <div className="max-w-5xl mx-auto">
             {views[view]}
