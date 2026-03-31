@@ -21,23 +21,31 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 
 // Searchable client selector
 function ClientSearch({ clients, value, onChange }: { clients: any[], value: string, onChange: (id: string, name: string, phone: string) => void }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 0 });
   const selectedClient = clients.find(c => c.id.toString() === value);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  const openDropdown = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    }
+    setOpen(v => !v);
+  };
 
   const filtered = q.trim() === "" ? clients.slice(0, 8) : clients.filter(c => {
     const s = q.toLowerCase();
@@ -57,10 +65,10 @@ function ClientSearch({ clients, value, onChange }: { clients: any[], value: str
   };
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={triggerRef} className="relative">
       <div
         className="h-12 flex items-center gap-2 px-3 border rounded-lg bg-card cursor-pointer hover:border-primary/50 transition-colors"
-        onClick={() => setOpen(v => !v)}
+        onClick={openDropdown}
       >
         <Users className="w-4 h-4 text-muted-foreground shrink-0" />
         {selectedClient ? (
@@ -75,7 +83,10 @@ function ClientSearch({ clients, value, onChange }: { clients: any[], value: str
         )}
       </div>
       {open && (
-        <div className="absolute z-50 w-full mt-1 bg-card border rounded-lg shadow-xl overflow-hidden">
+        <div
+          className="fixed z-[200] bg-card border rounded-lg shadow-2xl overflow-hidden"
+          style={{ top: dropPos.top, left: dropPos.left, width: dropPos.width }}
+        >
           <div className="p-2 border-b">
             <Input
               autoFocus
@@ -86,7 +97,7 @@ function ClientSearch({ clients, value, onChange }: { clients: any[], value: str
               onClick={e => e.stopPropagation()}
             />
           </div>
-          <div className="max-h-52 overflow-y-auto">
+          <div className="max-h-48 overflow-y-auto">
             {filtered.length === 0 && <div className="p-3 text-sm text-center text-muted-foreground">Topilmadi</div>}
             {filtered.map(c => (
               <button
@@ -189,7 +200,7 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
         </DialogHeader>
         
         <form onSubmit={onSubmit} className="flex-1 flex flex-col overflow-hidden">
-          <ScrollArea className="flex-1">
+          <div className="flex-1 overflow-y-auto overscroll-contain">
             <div className="space-y-5 px-6 py-5">
               
               <div className="space-y-2">
@@ -288,7 +299,7 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
               </div>
 
             </div>
-          </ScrollArea>
+          </div>
           
           <DialogFooter className="px-6 pb-6 pt-4 border-t shrink-0">
             <Button type="submit" size="lg" className="w-full h-14 text-lg font-bold" disabled={createOrder.isPending}>
