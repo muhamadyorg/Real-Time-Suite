@@ -314,7 +314,7 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
 }
 
 export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: { hideHeader?: boolean, stickyTop?: number }) {
-  const { accountName, storeId, role } = useAuth();
+  const { accountName, storeId, role, token } = useAuth();
   const [activeTab, setActiveTab] = useState("new");
   const [search, setSearch] = useState("");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -322,14 +322,14 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
 
   const isViewer = role === 'viewer';
 
-  useSocket();
+  useSocket(token, storeId);
 
-  const { data: summary } = useGetOrdersSummary({ query: { queryKey: ["getOrdersSummary"] } });
+  const { data: summary } = useGetOrdersSummary({ query: { queryKey: ["getOrdersSummary"], refetchInterval: 15000 } });
   
-  const { data: newOrders, isLoading: isNewLoading } = useGetOrders({ status: "new", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "new", storeId: storeId! }) } });
-  const { data: acceptedOrders, isLoading: isAcceptedLoading } = useGetOrders({ status: "accepted", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "accepted", storeId: storeId! }) } });
-  const { data: readyOrders, isLoading: isReadyLoading } = useGetOrders({ status: "ready", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "ready", storeId: storeId! }) } });
-  const { data: historyOrders, isLoading: isHistoryLoading } = useGetOrders({ storeId: storeId!, date }, { query: { queryKey: getGetOrdersQueryKey({ storeId: storeId!, date }) } });
+  const { data: newOrders, isLoading: isNewLoading } = useGetOrders({ status: "new", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "new", storeId: storeId! }), refetchInterval: 10000 } });
+  const { data: acceptedOrders, isLoading: isAcceptedLoading } = useGetOrders({ status: "accepted", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "accepted", storeId: storeId! }), refetchInterval: 10000 } });
+  const { data: readyOrders, isLoading: isReadyLoading } = useGetOrders({ status: "ready", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "ready", storeId: storeId! }), refetchInterval: 10000 } });
+  const { data: historyOrders, isLoading: isHistoryLoading } = useGetOrders({ storeId: storeId!, date }, { query: { queryKey: getGetOrdersQueryKey({ storeId: storeId!, date }), refetchInterval: 10000 } });
 
   const filterBySearch = (orders: any[] | undefined) => {
     if (!orders) return [];
