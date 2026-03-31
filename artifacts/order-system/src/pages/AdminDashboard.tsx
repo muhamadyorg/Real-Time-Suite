@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
-import { Search, Loader2, Plus, Users, X } from "lucide-react";
+import { Search, Loader2, Plus, Users, X, QrCode, Hash, Clock, Package, CheckCircle, Phone, User, FileText, Building2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,6 +22,118 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { QRCodeSVG } from "qrcode.react";
+
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  new: { label: "Yangi", color: "text-blue-600 bg-blue-50 border border-blue-200" },
+  accepted: { label: "Qabul qilindi", color: "text-amber-600 bg-amber-50 border border-amber-200" },
+  ready: { label: "Tayyor!", color: "text-green-600 bg-green-50 border border-green-200" },
+};
+
+function OrderDetailModal({ order, open, onClose }: { order: any, open: boolean, onClose: () => void }) {
+  if (!order) return null;
+  const baseUrl = window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, "");
+  const qrUrl = `${baseUrl}/order/${order.orderId.replace(/^#/, "")}`;
+  const statusInfo = STATUS_LABELS[order.status] ?? { label: order.status, color: "text-gray-600 bg-gray-50" };
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="w-full max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 font-mono text-xl">
+            <Hash className="w-5 h-5 text-primary" />
+            {order.orderId}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${statusInfo.color}`}>
+            {order.status === 'new' && <Clock className="w-4 h-4" />}
+            {order.status === 'accepted' && <Package className="w-4 h-4" />}
+            {order.status === 'ready' && <CheckCircle className="w-4 h-4" />}
+            {statusInfo.label}
+          </div>
+          <div className="bg-muted/40 rounded-xl p-4 space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Xizmat turi</span>
+              <span className="font-bold text-primary">{order.serviceTypeName}</span>
+            </div>
+            <div className="flex justify-between items-center border-t border-border/50 pt-2">
+              <span className="text-sm text-muted-foreground">Miqdor</span>
+              <span className="font-black text-xl">{order.quantity}{order.unit ? <span className="text-muted-foreground text-base ml-1">{order.unit}</span> : ""}</span>
+            </div>
+            {order.shelf && (
+              <div className="flex justify-between items-center border-t border-border/50 pt-2">
+                <span className="text-sm text-muted-foreground">Qolib</span>
+                <span className="font-mono font-semibold">{order.shelf}</span>
+              </div>
+            )}
+          </div>
+          {(order.clientName || order.clientPhone) && (
+            <div className="bg-muted/40 rounded-xl p-4 space-y-2">
+              <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-2">Mijoz</div>
+              {order.clientName && (
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-medium">{order.clientName}</span>
+                </div>
+              )}
+              {order.clientPhone && (
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-muted-foreground" />
+                  <span>{order.clientPhone}</span>
+                </div>
+              )}
+            </div>
+          )}
+          {order.notes && (
+            <div className="bg-accent/10 border border-accent/20 rounded-xl p-3">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                <FileText className="w-3.5 h-3.5" />
+                Izoh
+              </div>
+              <p className="text-sm italic">{order.notes}</p>
+            </div>
+          )}
+          <div className="bg-muted/40 rounded-xl p-4 space-y-2">
+            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-2">Vaqt</div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Yaratildi</span>
+              <span className="font-medium">{format(new Date(order.createdAt), "dd.MM.yyyy HH:mm")}</span>
+            </div>
+            {order.acceptedAt && (
+              <div className="flex justify-between text-sm text-amber-600">
+                <span>Qabul</span>
+                <span className="font-medium">{format(new Date(order.acceptedAt), "dd.MM.yyyy HH:mm")}</span>
+              </div>
+            )}
+            {order.readyAt && (
+              <div className="flex justify-between text-sm text-green-600">
+                <span>Tayyor</span>
+                <span className="font-medium">{format(new Date(order.readyAt), "dd.MM.yyyy HH:mm")}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-between text-sm">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Building2 className="w-3.5 h-3.5" />
+              <span>{order.storeName}</span>
+            </div>
+            <span className="text-muted-foreground">{order.createdByName}</span>
+          </div>
+          <div className="flex flex-col items-center pt-2 pb-1">
+            <div className="text-xs text-muted-foreground mb-3 flex items-center gap-1">
+              <QrCode className="w-3.5 h-3.5" />
+              Zakaz QR kodi
+            </div>
+            <div className="bg-white p-3 rounded-xl border">
+              <QRCodeSVG value={qrUrl} size={140} level="M" />
+            </div>
+            <p className="text-xs text-muted-foreground mt-2 text-center break-all">{qrUrl}</p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // Searchable client selector
 function ClientSearch({ clients, value, onChange }: { clients: any[], value: string, onChange: (id: string, name: string, phone: string) => void }) {
@@ -319,6 +431,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
   const [search, setSearch] = useState("");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
   const isViewer = role === 'viewer';
 
@@ -355,7 +468,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
         {filtered.map(order => (
-          <OrderCard key={order.id} order={order} search={search} />
+          <OrderCard key={order.id} order={order} search={search} onOrderClick={() => setSelectedOrder(order)} />
         ))}
       </div>
     );
@@ -435,6 +548,12 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
           <CreateOrderDialog storeId={storeId!} open={createOpen} onOpenChange={setCreateOpen} />
         </>
       )}
+
+      <OrderDetailModal
+        order={selectedOrder}
+        open={!!selectedOrder}
+        onClose={() => setSelectedOrder(null)}
+      />
     </div>
   );
 }

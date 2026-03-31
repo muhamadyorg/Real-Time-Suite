@@ -1,7 +1,8 @@
 import { useRoute } from "wouter";
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { Loader2, Package, CheckCircle, Clock, AlertCircle } from "lucide-react";
+import { Loader2, Package, CheckCircle, Clock, AlertCircle, QrCode } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 
 interface PublicOrder {
   id: number;
@@ -162,6 +163,18 @@ export default function PublicOrderPage() {
                     <span>{format(new Date(order.readyAt), "dd.MM.yyyy HH:mm")}</span>
                   </div>
                 )}
+              </div>
+
+              {/* QR Code */}
+              <div className="border-t pt-4 flex flex-col items-center gap-2">
+                <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>Zakaz QR kodi</span>
+                </div>
+                <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
+                  <QRCodeSVG value={window.location.href} size={150} level="M" />
+                </div>
+                <p className="text-[10px] text-gray-400 text-center break-all px-2">{window.location.href}</p>
               </div>
             </div>
           </div>
