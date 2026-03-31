@@ -6,7 +6,6 @@ import { getGetOrdersQueryKey, getGetOrdersSummaryQueryKey } from '@workspace/ap
 let socket: Socket | null = null;
 let currentToken: string | null = null;
 
-// Disconnect old socket on HMR module replacement
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     socket?.disconnect();
@@ -16,18 +15,17 @@ if (import.meta.hot) {
 }
 
 function getOrCreateSocket(token: string | null): Socket {
-  // Socket.io lives on the API server, which is proxied via /api prefix.
-  // The Replit proxy strips /api and forwards to the API server at /socket.io
-  const socketPath = '/api/socket.io';
-
   if (!socket) {
     socket = io({
-      path: socketPath,
+      path: '/api/socket.io',
       auth: { token: token ?? '' },
       autoConnect: false,
       reconnection: true,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
       reconnectionAttempts: Infinity,
+      transports: ['websocket', 'polling'],
+      timeout: 10000,
     });
   }
 
@@ -55,29 +53,57 @@ export function useSocket(token: string | null = null, storeId: number | null = 
   useEffect(() => {
     const s = getOrCreateSocket(token);
 
-    const handleConnect = () => {
+    const invalidateOrders = () => {
+      queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
+      queryClient.invalidateQueries({ queryKey: [getGetOrdersSummaryQueryKey()[0]] });
+    };
+
+    const joinStore = () => {
       if (storeIdRef.current) {
         s.emit('join-store', storeIdRef.current);
       }
     };
 
-    const handleOrderUpdate = () => {
-      queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
-      queryClient.invalidateQueries({ queryKey: [getGetOrdersSummaryQueryKey()[0]] });
+    const handleConnect = () => {
+      joinStore();
+      invalidateOrders();
+    };
+
+    const handleReconnect = () => {
+      joinStore();
+      invalidateOrders();
     };
 
     s.on('connect', handleConnect);
-    s.on('order:created', handleOrderUpdate);
-    s.on('order:updated', handleOrderUpdate);
+    s.on('reconnect', handleReconnect);
+    s.on('order:created', invalidateOrders);
+    s.on('order:updated', invalidateOrders);
+    s.on('order:deleted', invalidateOrders);
 
     if (s.connected && storeId) {
-      s.emit('join-store', storeId);
+      joinStore();
     }
+
+    // When tab becomes visible → refetch immediately
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        invalidateOrders();
+        if (storeIdRef.current && s.connected) {
+          joinStore();
+        } else if (token && !s.connected) {
+          s.connect();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       s.off('connect', handleConnect);
-      s.off('order:created', handleOrderUpdate);
-      s.off('order:updated', handleOrderUpdate);
+      s.off('reconnect', handleReconnect);
+      s.off('order:created', invalidateOrders);
+      s.off('order:updated', invalidateOrders);
+      s.off('order:deleted', invalidateOrders);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [queryClient, token, storeId]);
 }

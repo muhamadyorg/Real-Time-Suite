@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, accountsTable, storesTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, accountsTable, storesTable, ordersTable } from "@workspace/db";
+import { eq, and, sql } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 
 const router = Router();
@@ -140,6 +140,9 @@ router.delete("/:id", async (req, res) => {
       return;
     }
     const id = parseInt(req.params.id);
+    // Nullify order references to allow deletion (name fields are preserved)
+    await db.update(ordersTable).set({ createdById: sql`NULL` }).where(eq(ordersTable.createdById, id));
+    await db.update(ordersTable).set({ acceptedById: sql`NULL` }).where(eq(ordersTable.acceptedById, id));
     await db.delete(accountsTable).where(eq(accountsTable.id, id));
     res.json({ success: true, message: "O'chirildi" });
   } catch (err) {
