@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, ordersTable, serviceTypesTable, clientsTable, storesTable } from "@workspace/db";
+import { db, ordersTable, serviceTypesTable, clientsTable, storesTable, accountsTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 import type { Server as SocketServer } from "socket.io";
@@ -76,13 +76,22 @@ router.get("/summary", async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // For workers: always fetch fresh serviceTypeId from DB (not JWT, may be stale)
+    let workerServiceTypeId: number | null = null;
+    if (payload.role === "worker" && payload.accountId) {
+      const account = await db.query.accountsTable.findFirst({
+        where: eq(accountsTable.id, payload.accountId),
+      });
+      workerServiceTypeId = account?.serviceTypeId ?? null;
+    }
+
     const conditions: ReturnType<typeof eq>[] = [];
     if (payload.role !== "sudo" && payload.storeId) {
       conditions.push(eq(ordersTable.storeId, payload.storeId));
     }
-    // Workers only see their service type
-    if (payload.role === "worker" && payload.serviceTypeId) {
-      conditions.push(eq(ordersTable.serviceTypeId, payload.serviceTypeId));
+    // Workers only see their service type (read from DB, not stale JWT)
+    if (payload.role === "worker" && workerServiceTypeId) {
+      conditions.push(eq(ordersTable.serviceTypeId, workerServiceTypeId));
     }
 
     const all = await db.query.ordersTable.findMany({
@@ -117,6 +126,15 @@ router.get("/", async (req, res) => {
       search?: string;
     };
 
+    // For workers: always fetch fresh serviceTypeId from DB (not JWT, may be stale)
+    let workerServiceTypeId: number | null = null;
+    if (payload.role === "worker" && payload.accountId) {
+      const account = await db.query.accountsTable.findFirst({
+        where: eq(accountsTable.id, payload.accountId),
+      });
+      workerServiceTypeId = account?.serviceTypeId ?? null;
+    }
+
     const conditions: ReturnType<typeof eq>[] = [];
 
     if (payload.role !== "sudo") {
@@ -127,9 +145,9 @@ router.get("/", async (req, res) => {
       conditions.push(eq(ordersTable.storeId, parseInt(storeId)));
     }
 
-    // Workers only see orders for their assigned service type
-    if (payload.role === "worker" && payload.serviceTypeId) {
-      conditions.push(eq(ordersTable.serviceTypeId, payload.serviceTypeId));
+    // Workers only see orders for their assigned service type (from DB, not stale JWT)
+    if (payload.role === "worker" && workerServiceTypeId) {
+      conditions.push(eq(ordersTable.serviceTypeId, workerServiceTypeId));
     }
 
     if (status && ["new", "accepted", "ready"].includes(status)) {
