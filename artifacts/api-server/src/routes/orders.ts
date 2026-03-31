@@ -85,6 +85,12 @@ router.get("/summary", async (req, res) => {
       workerServiceTypeId = account?.serviceTypeId ?? null;
     }
 
+    // If worker has no service type assigned → return zero counts (strict isolation)
+    if (payload.role === "worker" && !workerServiceTypeId) {
+      res.json({ new: 0, accepted: 0, ready: 0, today: 0 });
+      return;
+    }
+
     const conditions: ReturnType<typeof eq>[] = [];
     if (payload.role !== "sudo" && payload.storeId) {
       conditions.push(eq(ordersTable.storeId, payload.storeId));
@@ -133,6 +139,12 @@ router.get("/", async (req, res) => {
         where: eq(accountsTable.id, payload.accountId),
       });
       workerServiceTypeId = account?.serviceTypeId ?? null;
+    }
+
+    // If worker has no service type assigned → return empty (strict isolation)
+    if (payload.role === "worker" && !workerServiceTypeId) {
+      res.json([]);
+      return;
     }
 
     const conditions: ReturnType<typeof eq>[] = [];
