@@ -24,6 +24,26 @@ export function initTelegramBot(token: string) {
         });
 
         if (text === "/start") {
+          if (client && client.registrationStep === "done") {
+            const statusText =
+              client.status === "approved"
+                ? "✅ <b>Tasdiqlangan mijoz</b>"
+                : client.status === "pending"
+                  ? "⏳ <b>Tasdiqlanish kutilmoqda</b>"
+                  : "❌ <b>Rad etilgan</b>";
+
+            await bot!.sendMessage(
+              chatId,
+              `👋 <b>Xush kelibsiz!</b>\n\n` +
+              `ℹ️ Siz allaqachon ro'yxatdan o'tgansiz:\n\n` +
+              `👤 Ism: <b>${client.firstName} ${client.lastName}</b>\n` +
+              `📱 Telefon: <b>${client.phone}</b>\n` +
+              `📊 Holat: ${statusText}`,
+              { parse_mode: "HTML" }
+            );
+            return;
+          }
+
           if (client) {
             await db.update(clientsTable).set({
               registrationStep: "first_name",
