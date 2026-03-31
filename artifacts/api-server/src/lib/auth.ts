@@ -13,6 +13,7 @@ export async function comparePassword(password: string, hash: string): Promise<b
 export interface AuthPayload {
   accountId?: number;
   storeId?: number;
+  serviceTypeId?: number;
   role: string;
   name?: string;
 }

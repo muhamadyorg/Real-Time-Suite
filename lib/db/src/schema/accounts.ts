@@ -2,6 +2,7 @@ import { pgTable, serial, text, integer, timestamp, pgEnum } from "drizzle-orm/p
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { storesTable } from "./stores";
+import { serviceTypesTable } from "./service_types";
 
 export const accountRoleEnum = pgEnum("account_role", ["sudo", "superadmin", "admin", "viewer", "worker"]);
 
@@ -13,6 +14,7 @@ export const accountsTable = pgTable("accounts", {
   username: text("username").unique(),
   passwordHash: text("password_hash"),
   storeId: integer("store_id").references(() => storesTable.id, { onDelete: "cascade" }),
+  serviceTypeId: integer("service_type_id").references(() => serviceTypesTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

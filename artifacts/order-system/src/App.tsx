@@ -12,6 +12,7 @@ import WorkerDashboard from "@/pages/WorkerDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
 import SuperadminDashboard from "@/pages/SuperadminDashboard";
 import SudoDashboard from "@/pages/SudoDashboard";
+import PublicOrderPage from "@/pages/PublicOrderPage";
 
 function ProtectedRoute({ path, component: Component, allowedRoles }: { path: string, component: any, allowedRoles: string[] }) {
   return (
@@ -55,6 +56,7 @@ function Router() {
       <ProtectedRoute path="/viewer" component={AdminDashboard} allowedRoles={['viewer']} />
       <ProtectedRoute path="/superadmin" component={SuperadminDashboard} allowedRoles={['superadmin']} />
       <ProtectedRoute path="/sudo" component={SudoDashboard} allowedRoles={['sudo']} />
+      <Route path="/order/:orderId" component={PublicOrderPage} />
       <Route component={NotFound} />
     </Switch>
   );

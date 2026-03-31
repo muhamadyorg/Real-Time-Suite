@@ -1,38 +1,50 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Order } from "@workspace/api-client-react";
 import { format } from "date-fns";
 
 export function HighlightText({ text, search }: { text?: string | null, search?: string }) {
   if (!text) return null;
-  if (!search) return <span>{text}</span>;
+  if (!search || !search.trim()) return <span>{text}</span>;
   
-  const parts = text.toString().split(new RegExp(`(${search})`, 'gi'));
+  const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const parts = text.toString().split(new RegExp(`(${escaped})`, 'gi'));
   return (
     <span>
       {parts.map((part, i) => 
         part.toLowerCase() === search.toLowerCase() ? 
-          <mark key={i} className="bg-yellow-300 text-black px-1 rounded-sm">{part}</mark> : part
+          <mark key={i} className="bg-yellow-300 dark:bg-yellow-500 text-black px-0.5 rounded-sm">{part}</mark> : part
       )}
     </span>
   );
 }
 
 interface OrderCardProps {
-  order: Order;
+  order: any;
   search?: string;
   actionButton?: React.ReactNode;
+  onOrderClick?: () => void;
 }
 
-export function OrderCard({ order, search = "", actionButton }: OrderCardProps) {
+const STATUS_COLORS: Record<string, string> = {
+  new: "border-l-blue-500",
+  accepted: "border-l-amber-500",
+  ready: "border-l-green-500",
+};
+
+export function OrderCard({ order, search = "", actionButton, onOrderClick }: OrderCardProps) {
   return (
-    <Card className="shadow-sm border-l-4 transition-all hover:shadow-md" style={{ borderLeftColor: order.status === 'new' ? 'var(--color-chart-1)' : order.status === 'accepted' ? 'var(--color-chart-4)' : 'var(--color-chart-3)' }}>
+    <Card className={`shadow-sm border-l-4 transition-all hover:shadow-md ${STATUS_COLORS[order.status] ?? "border-l-primary"}`}>
       <CardContent className="p-4 flex flex-col gap-3">
         <div className="flex justify-between items-start">
-          <div className="font-bold text-lg tracking-wider font-mono">
+          <button
+            type="button"
+            onClick={onOrderClick}
+            className={`font-bold text-lg tracking-wider font-mono ${onOrderClick ? 'text-primary hover:underline cursor-pointer' : 'cursor-default'}`}
+            disabled={!onOrderClick}
+          >
             <HighlightText text={order.orderId} search={search} />
-          </div>
+          </button>
           <div className="text-sm font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md">
-            {format(new Date(order.createdAt), "HH:mm")}
+            <HighlightText text={format(new Date(order.createdAt), "HH:mm")} search={search} />
           </div>
         </div>
 
@@ -43,22 +55,23 @@ export function OrderCard({ order, search = "", actionButton }: OrderCardProps) 
         <div className="flex justify-between items-center bg-secondary/50 p-3 rounded-lg border border-secondary">
           <span className="font-medium text-muted-foreground text-sm uppercase tracking-wider">Miqdor</span>
           <span className="text-xl font-black">
-            <HighlightText text={order.quantity.toString()} search={search} /> {order.unit && <span className="text-muted-foreground text-base ml-1"><HighlightText text={order.unit} search={search} /></span>}
+            <HighlightText text={String(order.quantity)} search={search} />
+            {order.unit && <span className="text-muted-foreground text-base ml-1"><HighlightText text={order.unit} search={search} /></span>}
           </span>
         </div>
 
         <div className="grid gap-2 text-sm">
           {order.shelf && (
             <div className="flex justify-between items-center pb-1 border-b border-border/50">
-              <span className="text-muted-foreground">Polka:</span>
-              <span className="font-semibold text-foreground"><HighlightText text={order.shelf} search={search} /></span>
+              <span className="text-muted-foreground">Qolib:</span>
+              <span className="font-semibold font-mono text-foreground"><HighlightText text={order.shelf} search={search} /></span>
             </div>
           )}
           
           {order.clientName && (
             <div className="flex justify-between items-center pb-1 border-b border-border/50">
               <span className="text-muted-foreground">Mijoz:</span>
-              <span className="font-medium truncate max-w-[200px]"><HighlightText text={order.clientName} search={search} /></span>
+              <span className="font-medium truncate max-w-[180px]"><HighlightText text={order.clientName} search={search} /></span>
             </div>
           )}
         </div>
@@ -70,21 +83,21 @@ export function OrderCard({ order, search = "", actionButton }: OrderCardProps) 
           </div>
         )}
 
-        <div className="text-xs text-muted-foreground mt-2 flex flex-col gap-1 bg-muted/30 p-2 rounded-md">
-           <div className="flex justify-between">
-             <span>Yaratdi:</span>
-             <span className="font-medium text-foreground"><HighlightText text={order.createdByName} search={search} /></span>
-           </div>
-           {order.acceptedByName && (
-             <div className="flex justify-between">
-               <span>Qabul qildi:</span>
-               <span className="font-medium text-foreground"><HighlightText text={order.acceptedByName} search={search} /></span>
-             </div>
-           )}
+        <div className="text-xs text-muted-foreground flex flex-col gap-1 bg-muted/30 p-2 rounded-md">
+          <div className="flex justify-between">
+            <span>Yaratdi:</span>
+            <span className="font-medium text-foreground"><HighlightText text={order.createdByName} search={search} /></span>
+          </div>
+          {order.acceptedByName && (
+            <div className="flex justify-between">
+              <span>Qabul qildi:</span>
+              <span className="font-medium text-foreground"><HighlightText text={order.acceptedByName} search={search} /></span>
+            </div>
+          )}
         </div>
         
         {actionButton && (
-          <div className="mt-2">
+          <div className="mt-1">
             {actionButton}
           </div>
         )}

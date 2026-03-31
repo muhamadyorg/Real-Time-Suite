@@ -94,6 +94,7 @@ router.post("/pin-login", async (req, res) => {
     const token = createToken({
       accountId: account.id,
       storeId: account.storeId ?? undefined,
+      serviceTypeId: account.serviceTypeId ?? undefined,
       role: account.role,
       name: account.name,
     });
@@ -106,6 +107,7 @@ router.post("/pin-login", async (req, res) => {
         role: account.role,
         pin: account.pin,
         storeId: account.storeId,
+        serviceTypeId: account.serviceTypeId,
         storeName: store?.name ?? null,
         createdAt: account.createdAt,
       },

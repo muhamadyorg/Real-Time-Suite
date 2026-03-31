@@ -4,6 +4,19 @@
 
 Multi-store real-time order management system with Telegram bot integration. PWA-enabled for mobile use.
 
+## Key Features (v2)
+- PIN-code login with phone keypad (15s inactivity auto-lock for workers)
+- Role-based access: SUDO, Superadmin, Admin, Viewer, Worker
+- Worker serviceTypeId assignment: workers only see orders for their assigned service type
+- Searchable client input (by name or last 4 digits of phone)
+- Center Dialog (not side Sheet) for creating orders
+- QR code on order detail modal (links to /order/:orderId public page)
+- Public order page: /order/:orderId (no auth required)
+- "Qolib" (formerly "Polka") - renamed throughout
+- Telegram quantity: no .00 suffix (integer formatting)
+- Date display: DD.MM.YYYY throughout
+- qrcode.react installed for QR code generation
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Header } from "@/components/Header";
 import { useSocket } from "@/hooks/useSocket";
@@ -14,18 +14,108 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
-import { Search, Loader2, Plus, Users } from "lucide-react";
+import { Search, Loader2, Plus, Users, X } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription, SheetFooter } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 
-function CreateOrderSheet({ storeId }: { storeId: number }) {
+// Searchable client selector
+function ClientSearch({ clients, value, onChange }: { clients: any[], value: string, onChange: (id: string, name: string, phone: string) => void }) {
+  const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selectedClient = clients.find(c => c.id.toString() === value);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = q.trim() === "" ? clients.slice(0, 8) : clients.filter(c => {
+    const s = q.toLowerCase();
+    const phone = (c.phone ?? "").replace(/\D/g, "");
+    const lastFour = phone.slice(-4);
+    return (
+      (c.firstName + " " + c.lastName).toLowerCase().includes(s) ||
+      lastFour.includes(s) ||
+      (c.phone ?? "").toLowerCase().includes(s)
+    );
+  });
+
+  const highlight = (text: string) => {
+    if (!q.trim()) return text;
+    const parts = text.split(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+    return parts.map((p, i) => p.toLowerCase() === q.toLowerCase() ? <mark key={i} className="bg-yellow-300 text-black rounded px-0.5">{p}</mark> : p);
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <div
+        className="h-12 flex items-center gap-2 px-3 border rounded-lg bg-card cursor-pointer hover:border-primary/50 transition-colors"
+        onClick={() => setOpen(v => !v)}
+      >
+        <Users className="w-4 h-4 text-muted-foreground shrink-0" />
+        {selectedClient ? (
+          <span className="flex-1 text-sm font-medium truncate">{selectedClient.firstName} {selectedClient.lastName} ({selectedClient.phone})</span>
+        ) : (
+          <span className="flex-1 text-sm text-muted-foreground">Mijoz qidiring...</span>
+        )}
+        {value && (
+          <button type="button" onClick={e => { e.stopPropagation(); onChange("", "", ""); setQ(""); }}>
+            <X className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="absolute z-50 w-full mt-1 bg-card border rounded-lg shadow-xl overflow-hidden">
+          <div className="p-2 border-b">
+            <Input
+              autoFocus
+              placeholder="Ism yoki oxirgi 4 raqam..."
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              className="h-9 text-sm"
+              onClick={e => e.stopPropagation()}
+            />
+          </div>
+          <div className="max-h-52 overflow-y-auto">
+            {filtered.length === 0 && <div className="p-3 text-sm text-center text-muted-foreground">Topilmadi</div>}
+            {filtered.map(c => (
+              <button
+                key={c.id}
+                type="button"
+                className="w-full text-left px-3 py-2.5 hover:bg-muted/50 flex items-center gap-3 transition-colors"
+                onClick={() => {
+                  onChange(c.id.toString(), c.firstName + " " + c.lastName, c.phone);
+                  setQ("");
+                  setOpen(false);
+                }}
+              >
+                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                  {c.firstName?.[0]?.toUpperCase()}
+                </div>
+                <div>
+                  <div className="text-sm font-medium">{highlight(c.firstName + " " + c.lastName)}</div>
+                  <div className="text-xs text-muted-foreground">{highlight(c.phone)}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, open: boolean, onOpenChange: (v: boolean) => void }) {
   const [serviceTypeId, setServiceTypeId] = useState<string>("");
   const [quantity, setQuantity] = useState("1");
   const [unit, setUnit] = useState("");
@@ -80,37 +170,32 @@ function CreateOrderSheet({ storeId }: { storeId: number }) {
         onSuccess: () => {
           toast({ title: "Muvaffaqiyatli", description: "Yangi zakaz qo'shildi" });
           queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
-          setOpen(false);
+          onOpenChange(false);
           resetForm();
         },
         onError: (err) => {
-          toast({ title: "Xatolik", description: err.data?.error || "Xatolik yuz berdi", variant: "destructive" });
+          toast({ title: "Xatolik", description: (err as any).data?.error || "Xatolik yuz berdi", variant: "destructive" });
         }
       }
     );
   };
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button size="lg" className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl hover:shadow-2xl transition-all p-0 z-50">
-          <Plus className="w-6 h-6" />
-        </Button>
-      </SheetTrigger>
-      <SheetContent className="w-full sm:max-w-md flex flex-col h-full bg-background border-l">
-        <SheetHeader className="pb-4 border-b">
-          <SheetTitle className="text-2xl font-bold">Yangi Zakaz</SheetTitle>
-          <SheetDescription>Mijoz uchun yangi buyurtma yarating</SheetDescription>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) resetForm(); }}>
+      <DialogContent className="w-full max-w-md mx-4 max-h-[90vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+          <DialogTitle className="text-xl font-bold">Yangi Zakaz</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">Mijoz uchun yangi buyurtma yarating</DialogDescription>
+        </DialogHeader>
         
-        <form onSubmit={onSubmit} className="flex-1 flex flex-col h-full overflow-hidden">
-          <ScrollArea className="flex-1 -mx-6 px-6">
-            <div className="space-y-6 py-6">
+        <form onSubmit={onSubmit} className="flex-1 flex flex-col overflow-hidden">
+          <ScrollArea className="flex-1">
+            <div className="space-y-5 px-6 py-5">
               
               <div className="space-y-2">
-                <Label htmlFor="service">Xizmat turi *</Label>
+                <Label>Xizmat turi *</Label>
                 <Select value={serviceTypeId} onValueChange={setServiceTypeId}>
-                  <SelectTrigger id="service" className="h-12 bg-card">
+                  <SelectTrigger className="h-12 bg-card">
                     <SelectValue placeholder="Xizmatni tanlang..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -124,11 +209,11 @@ function CreateOrderSheet({ storeId }: { storeId: number }) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="quantity">Soni *</Label>
+                  <Label>Soni *</Label>
                   <Input 
-                    id="quantity" 
                     type="number" 
                     min="1"
+                    step="1"
                     value={quantity} 
                     onChange={e => setQuantity(e.target.value)} 
                     className="h-12 bg-card font-semibold text-lg"
@@ -136,9 +221,8 @@ function CreateOrderSheet({ storeId }: { storeId: number }) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="unit">O'lchov birligi</Label>
+                  <Label>O'lchov</Label>
                   <Input 
-                    id="unit" 
                     placeholder="dona, m2..." 
                     value={unit} 
                     onChange={e => setUnit(e.target.value)} 
@@ -148,9 +232,8 @@ function CreateOrderSheet({ storeId }: { storeId: number }) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="shelf">Polka (joylashuv)</Label>
+                <Label>Qolib (joylashuv)</Label>
                 <Input 
-                  id="shelf" 
                   placeholder="Masalan: A-12" 
                   value={shelf} 
                   onChange={e => setShelf(e.target.value)} 
@@ -158,61 +241,45 @@ function CreateOrderSheet({ storeId }: { storeId: number }) {
                 />
               </div>
 
-              <div className="p-4 bg-muted/50 rounded-lg border space-y-4">
+              <div className="p-4 bg-muted/50 rounded-xl border space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2 cursor-pointer">
+                  <Label className="flex items-center gap-2">
                     <Users className="w-4 h-4 text-primary" />
-                    <span>Mijoz malumotlari</span>
+                    Mijoz
                   </Label>
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="manual-client" className="text-xs text-muted-foreground cursor-pointer">Qo'lda kiritish</Label>
-                    <Switch id="manual-client" checked={isClientManual} onCheckedChange={setIsClientManual} />
+                    <Label className="text-xs text-muted-foreground cursor-pointer">Qo'lda</Label>
+                    <Switch checked={isClientManual} onCheckedChange={setIsClientManual} />
                   </div>
                 </div>
 
                 {!isClientManual ? (
-                  <div className="space-y-2">
-                    <Select value={clientId} onValueChange={setClientId}>
-                      <SelectTrigger className="h-12 bg-card">
-                        <SelectValue placeholder="Ro'yxatdan mijoz tanlang..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clients?.map(c => (
-                          <SelectItem key={c.id} value={c.id.toString()}>{c.firstName} {c.lastName} ({c.phone})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <ClientSearch
+                    clients={clients ?? []}
+                    value={clientId}
+                    onChange={(id, name, phone) => { setClientId(id); setClientName(name); setClientPhone(phone); }}
+                  />
                 ) : (
-                  <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
-                    <div className="space-y-2">
-                      <Label htmlFor="clientName">Ism / Familiya</Label>
-                      <Input 
-                        id="clientName" 
-                        placeholder="Mijoz ismi..." 
-                        value={clientName} 
-                        onChange={e => setClientName(e.target.value)} 
-                        className="h-12 bg-card"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="clientPhone">Telefon raqam</Label>
-                      <Input 
-                        id="clientPhone" 
-                        placeholder="+998..." 
-                        value={clientPhone} 
-                        onChange={e => setClientPhone(e.target.value)} 
-                        className="h-12 bg-card"
-                      />
-                    </div>
+                  <div className="space-y-3">
+                    <Input 
+                      placeholder="Ism / Familiya" 
+                      value={clientName} 
+                      onChange={e => setClientName(e.target.value)} 
+                      className="h-12 bg-card"
+                    />
+                    <Input 
+                      placeholder="+998..." 
+                      value={clientPhone} 
+                      onChange={e => setClientPhone(e.target.value)} 
+                      className="h-12 bg-card"
+                    />
                   </div>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="notes">Qo'shimcha izoh</Label>
+                <Label>Qo'shimcha izoh</Label>
                 <Input 
-                  id="notes" 
                   placeholder="Buyurtma haqida izoh..." 
                   value={notes} 
                   onChange={e => setNotes(e.target.value)} 
@@ -223,23 +290,24 @@ function CreateOrderSheet({ storeId }: { storeId: number }) {
             </div>
           </ScrollArea>
           
-          <SheetFooter className="pt-4 mt-auto border-t">
+          <DialogFooter className="px-6 pb-6 pt-4 border-t shrink-0">
             <Button type="submit" size="lg" className="w-full h-14 text-lg font-bold" disabled={createOrder.isPending}>
               {createOrder.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
               SAQLASH
             </Button>
-          </SheetFooter>
+          </DialogFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-export default function AdminDashboard({ hideHeader = false }: { hideHeader?: boolean }) {
+export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: { hideHeader?: boolean, stickyTop?: number }) {
   const { accountName, storeId, role } = useAuth();
   const [activeTab, setActiveTab] = useState("new");
   const [search, setSearch] = useState("");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [createOpen, setCreateOpen] = useState(false);
 
   const isViewer = role === 'viewer';
 
@@ -261,7 +329,10 @@ export default function AdminDashboard({ hideHeader = false }: { hideHeader?: bo
       o.serviceTypeName.toLowerCase().includes(s) || 
       (o.clientName && o.clientName.toLowerCase().includes(s)) ||
       (o.notes && o.notes.toLowerCase().includes(s)) ||
-      (o.shelf && o.shelf.toLowerCase().includes(s))
+      (o.shelf && o.shelf.toLowerCase().includes(s)) ||
+      String(o.quantity).includes(s) ||
+      (o.unit && o.unit.toLowerCase().includes(s)) ||
+      format(new Date(o.createdAt), "HH:mm").includes(s)
     );
   };
 
@@ -271,7 +342,7 @@ export default function AdminDashboard({ hideHeader = false }: { hideHeader?: bo
     if (!filtered.length) return <div className="text-center p-12 text-muted-foreground bg-muted/20 rounded-xl mt-4 border border-dashed">Malumot topilmadi</div>;
     
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 p-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
         {filtered.map(order => (
           <OrderCard key={order.id} order={order} search={search} />
         ))}
@@ -280,48 +351,48 @@ export default function AdminDashboard({ hideHeader = false }: { hideHeader?: bo
   };
 
   return (
-    <div className="min-h-screen bg-muted/20 pb-20">
+    <div className="min-h-screen bg-muted/20 pb-24">
       {!hideHeader && <Header title={`${isViewer ? 'Kuzatuvchi' : 'Admin'}: ${accountName}`} showLogout={true} />}
       
       {summary && (
-        <div className="grid grid-cols-4 gap-2 p-4 pb-0">
-          <div className="bg-chart-1/10 text-chart-1 rounded-lg p-3 text-center border border-chart-1/20 shadow-sm">
+        <div className="grid grid-cols-4 gap-2 p-4 pb-3">
+          <div className="bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl p-3 text-center border border-blue-500/20 shadow-sm">
             <div className="text-2xl font-bold">{summary.new}</div>
-            <div className="text-[10px] font-medium uppercase tracking-wider">Yangi</div>
+            <div className="text-[10px] font-medium uppercase tracking-wider mt-0.5">Yangi</div>
           </div>
-          <div className="bg-chart-4/10 text-chart-4 rounded-lg p-3 text-center border border-chart-4/20 shadow-sm">
+          <div className="bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl p-3 text-center border border-amber-500/20 shadow-sm">
             <div className="text-2xl font-bold">{summary.accepted}</div>
-            <div className="text-[10px] font-medium uppercase tracking-wider">Qabul</div>
+            <div className="text-[10px] font-medium uppercase tracking-wider mt-0.5">Qabul</div>
           </div>
-          <div className="bg-chart-3/10 text-chart-3 rounded-lg p-3 text-center border border-chart-3/20 shadow-sm">
+          <div className="bg-green-500/10 text-green-600 dark:text-green-400 rounded-xl p-3 text-center border border-green-500/20 shadow-sm">
             <div className="text-2xl font-bold">{summary.ready}</div>
-            <div className="text-[10px] font-medium uppercase tracking-wider">Tayyor</div>
+            <div className="text-[10px] font-medium uppercase tracking-wider mt-0.5">Tayyor</div>
           </div>
-          <div className="bg-primary/10 text-primary rounded-lg p-3 text-center border border-primary/20 shadow-sm">
+          <div className="bg-primary/10 text-primary rounded-xl p-3 text-center border border-primary/20 shadow-sm">
             <div className="text-2xl font-bold">{summary.totalToday}</div>
-            <div className="text-[10px] font-medium uppercase tracking-wider">Jami(Bugun)</div>
+            <div className="text-[10px] font-medium uppercase tracking-wider mt-0.5">Bugun</div>
           </div>
         </div>
       )}
 
-      <div className="p-4 sticky top-[60px] z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+      <div className="p-4 pt-2 sticky z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b" style={{ top: stickyTop }}>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid grid-cols-4 w-full h-14 bg-muted/50 p-1">
-            <TabsTrigger value="new" className="text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">YANGI</TabsTrigger>
-            <TabsTrigger value="accepted" className="text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">QABUL</TabsTrigger>
-            <TabsTrigger value="ready" className="text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">TAYYOR</TabsTrigger>
-            <TabsTrigger value="history" className="text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">TARIX</TabsTrigger>
+          <TabsList className="grid grid-cols-4 w-full h-12 bg-muted/50 p-1">
+            <TabsTrigger value="new" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">YANGI</TabsTrigger>
+            <TabsTrigger value="accepted" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">QABUL</TabsTrigger>
+            <TabsTrigger value="ready" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">TAYYOR</TabsTrigger>
+            <TabsTrigger value="history" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">TARIX</TabsTrigger>
           </TabsList>
         </Tabs>
         
-        <div className="mt-4 flex gap-2">
+        <div className="mt-3 flex gap-2">
           <div className="relative flex-1 group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
             <Input 
-              placeholder="Qidirish (id, mijoz, xizmat)..." 
+              placeholder="Qidirish..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 h-12 text-base bg-card shadow-sm border-muted-foreground/20 focus-visible:ring-primary/50 transition-all"
+              className="pl-9 h-11 text-sm bg-card shadow-sm border-muted-foreground/20 focus-visible:ring-primary/50 transition-all"
             />
           </div>
           {activeTab === "history" && (
@@ -329,7 +400,7 @@ export default function AdminDashboard({ hideHeader = false }: { hideHeader?: bo
               type="date" 
               value={date} 
               onChange={(e) => setDate(e.target.value)} 
-              className="w-[150px] h-12 bg-card shadow-sm border-muted-foreground/20"
+              className="w-[140px] h-11 bg-card shadow-sm border-muted-foreground/20 text-sm"
             />
           )}
         </div>
@@ -342,7 +413,17 @@ export default function AdminDashboard({ hideHeader = false }: { hideHeader?: bo
         {activeTab === "history" && renderList(historyOrders, isHistoryLoading)}
       </div>
 
-      {!isViewer && <CreateOrderSheet storeId={storeId!} />}
+      {!isViewer && (
+        <>
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-primary text-white shadow-xl hover:shadow-2xl hover:scale-105 transition-all flex items-center justify-center z-50"
+          >
+            <Plus className="w-7 h-7" />
+          </button>
+          <CreateOrderDialog storeId={storeId!} open={createOpen} onOpenChange={setCreateOpen} />
+        </>
+      )}
     </div>
   );
 }

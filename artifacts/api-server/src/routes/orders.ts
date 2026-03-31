@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, ordersTable, serviceTypesTable, clientsTable, storesTable } from "@workspace/db";
-import { eq, and, desc, sql, ilike, or } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 import type { Server as SocketServer } from "socket.io";
 
@@ -15,9 +15,56 @@ async function generateOrderId(): Promise<string> {
   return String(count + 1).padStart(5, "0");
 }
 
+function formatQty(qty: string | number): string {
+  const n = parseFloat(String(qty));
+  return n % 1 === 0 ? String(Math.round(n)) : n.toString();
+}
+
+function mapOrder(o: typeof ordersTable.$inferSelect) {
+  return {
+    id: o.id,
+    orderId: "#" + o.orderId,
+    status: o.status,
+    serviceTypeId: o.serviceTypeId,
+    serviceTypeName: o.serviceTypeName,
+    quantity: parseFloat(o.quantity),
+    unit: o.unit,
+    shelf: o.shelf,
+    notes: o.notes,
+    storeId: o.storeId,
+    storeName: o.storeName,
+    clientId: o.clientId,
+    clientName: o.clientName,
+    clientPhone: o.clientPhone,
+    createdByName: o.createdByName,
+    acceptedByName: o.acceptedByName,
+    acceptedAt: o.acceptedAt,
+    readyAt: o.readyAt,
+    createdAt: o.createdAt,
+  };
+}
+
 const router = Router();
 
-// GET /orders/summary - must come before /:id
+// Public endpoint: GET /orders/public/:orderId (no auth needed)
+router.get("/public/:orderId", async (req, res) => {
+  try {
+    const rawId = req.params.orderId.replace(/^#/, "");
+    const order = await db.query.ordersTable.findFirst({
+      where: eq(ordersTable.orderId, rawId),
+    });
+    if (!order) {
+      res.status(404).json({ error: "Zakaz topilmadi" });
+      return;
+    }
+    res.json(mapOrder(order));
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server xatosi" });
+  }
+});
+
+// GET /orders/summary
 router.get("/summary", async (req, res) => {
   try {
     const payload = await authenticateToken(req.headers.authorization);
@@ -29,12 +76,18 @@ router.get("/summary", async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    let whereClause = undefined;
+    const conditions: ReturnType<typeof eq>[] = [];
     if (payload.role !== "sudo" && payload.storeId) {
-      whereClause = eq(ordersTable.storeId, payload.storeId);
+      conditions.push(eq(ordersTable.storeId, payload.storeId));
+    }
+    // Workers only see their service type
+    if (payload.role === "worker" && payload.serviceTypeId) {
+      conditions.push(eq(ordersTable.serviceTypeId, payload.serviceTypeId));
     }
 
-    const all = await db.query.ordersTable.findMany({ where: whereClause });
+    const all = await db.query.ordersTable.findMany({
+      where: conditions.length > 0 ? and(...conditions) : undefined,
+    });
 
     const newCount = all.filter((o) => o.status === "new").length;
     const acceptedCount = all.filter((o) => o.status === "accepted").length;
@@ -48,6 +101,7 @@ router.get("/summary", async (req, res) => {
   }
 });
 
+// GET /orders
 router.get("/", async (req, res) => {
   try {
     const payload = await authenticateToken(req.headers.authorization);
@@ -73,6 +127,11 @@ router.get("/", async (req, res) => {
       conditions.push(eq(ordersTable.storeId, parseInt(storeId)));
     }
 
+    // Workers only see orders for their assigned service type
+    if (payload.role === "worker" && payload.serviceTypeId) {
+      conditions.push(eq(ordersTable.serviceTypeId, payload.serviceTypeId));
+    }
+
     if (status && ["new", "accepted", "ready"].includes(status)) {
       conditions.push(eq(ordersTable.status, status as "new" | "accepted" | "ready"));
     }
@@ -92,39 +151,19 @@ router.get("/", async (req, res) => {
     if (search) {
       const q = search.toLowerCase();
       orders = orders.filter((o) =>
-        [o.orderId, o.serviceTypeName, o.clientName, o.clientPhone, o.shelf, o.notes, o.createdByName, o.acceptedByName]
+        [o.orderId, o.serviceTypeName, o.clientName, o.clientPhone, o.shelf, o.notes, o.createdByName, o.acceptedByName, String(parseFloat(o.quantity))]
           .some((v) => v && v.toLowerCase().includes(q))
       );
     }
 
-    res.json(
-      orders.map((o) => ({
-        id: o.id,
-        orderId: "#" + o.orderId,
-        status: o.status,
-        serviceTypeName: o.serviceTypeName,
-        quantity: parseFloat(o.quantity),
-        unit: o.unit,
-        shelf: o.shelf,
-        notes: o.notes,
-        storeId: o.storeId,
-        storeName: o.storeName,
-        clientId: o.clientId,
-        clientName: o.clientName,
-        clientPhone: o.clientPhone,
-        createdByName: o.createdByName,
-        acceptedByName: o.acceptedByName,
-        acceptedAt: o.acceptedAt,
-        readyAt: o.readyAt,
-        createdAt: o.createdAt,
-      }))
-    );
+    res.json(orders.map(mapOrder));
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Server xatosi" });
   }
 });
 
+// POST /orders
 router.post("/", async (req, res) => {
   try {
     const payload = await authenticateToken(req.headers.authorization);
@@ -167,7 +206,6 @@ router.post("/", async (req, res) => {
     const storeId = payload.storeId ?? serviceType.storeId ?? 0;
     const orderId = await generateOrderId();
 
-    // Get store name
     const store = await db.query.storesTable.findFirst({ where: (t, { eq: e }) => e(t.id, storeId) });
 
     const [order] = await db
@@ -191,29 +229,8 @@ router.post("/", async (req, res) => {
       })
       .returning();
 
-    const response = {
-      id: order.id,
-      orderId: "#" + order.orderId,
-      status: order.status,
-      serviceTypeName: order.serviceTypeName,
-      quantity: parseFloat(order.quantity),
-      unit: order.unit,
-      shelf: order.shelf,
-      notes: order.notes,
-      storeId: order.storeId,
-      storeName: order.storeName,
-      clientId: order.clientId,
-      clientName: order.clientName,
-      clientPhone: order.clientPhone,
-      createdByName: order.createdByName,
-      acceptedByName: order.acceptedByName,
-      acceptedAt: order.acceptedAt,
-      readyAt: order.readyAt,
-      createdAt: order.createdAt,
-    };
-
+    const response = mapOrder(order);
     io?.to(`store:${storeId}`).emit("order:created", response);
-
     res.status(201).json(response);
   } catch (err) {
     req.log.error(err);
@@ -221,6 +238,7 @@ router.post("/", async (req, res) => {
   }
 });
 
+// GET /orders/:id
 router.get("/:id", async (req, res) => {
   try {
     const payload = await authenticateToken(req.headers.authorization);
@@ -234,32 +252,14 @@ router.get("/:id", async (req, res) => {
       res.status(404).json({ error: "Zakaz topilmadi" });
       return;
     }
-    res.json({
-      id: order.id,
-      orderId: "#" + order.orderId,
-      status: order.status,
-      serviceTypeName: order.serviceTypeName,
-      quantity: parseFloat(order.quantity),
-      unit: order.unit,
-      shelf: order.shelf,
-      notes: order.notes,
-      storeId: order.storeId,
-      storeName: order.storeName,
-      clientId: order.clientId,
-      clientName: order.clientName,
-      clientPhone: order.clientPhone,
-      createdByName: order.createdByName,
-      acceptedByName: order.acceptedByName,
-      acceptedAt: order.acceptedAt,
-      readyAt: order.readyAt,
-      createdAt: order.createdAt,
-    });
+    res.json(mapOrder(order));
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Server xatosi" });
   }
 });
 
+// PATCH /orders/:id/status
 router.patch("/:id/status", async (req, res) => {
   try {
     const payload = await authenticateToken(req.headers.authorization);
@@ -287,27 +287,7 @@ router.patch("/:id/status", async (req, res) => {
       .where(eq(ordersTable.id, id))
       .returning();
 
-    const response = {
-      id: order.id,
-      orderId: "#" + order.orderId,
-      status: order.status,
-      serviceTypeName: order.serviceTypeName,
-      quantity: parseFloat(order.quantity),
-      unit: order.unit,
-      shelf: order.shelf,
-      notes: order.notes,
-      storeId: order.storeId,
-      storeName: order.storeName,
-      clientId: order.clientId,
-      clientName: order.clientName,
-      clientPhone: order.clientPhone,
-      createdByName: order.createdByName,
-      acceptedByName: order.acceptedByName,
-      acceptedAt: order.acceptedAt,
-      readyAt: order.readyAt,
-      createdAt: order.createdAt,
-    };
-
+    const response = mapOrder(order);
     io?.to(`store:${order.storeId}`).emit("order:updated", response);
 
     // Telegram notification for client
@@ -316,13 +296,14 @@ router.patch("/:id/status", async (req, res) => {
         const { sendTelegramNotification } = await import("./telegram");
         const client = await db.query.clientsTable.findFirst({ where: eq(clientsTable.id, order.clientId) });
         if (client?.telegramUserId) {
+          const qty = formatQty(order.quantity);
           await sendTelegramNotification(
             client.telegramUserId,
             `⚡️ <b>Buyurtma qabul qilindi!</b>\n\n` +
             `👋 Hurmatli <b>${client.firstName} ${client.lastName}</b>,\n\n` +
             `📦 Buyurtma raqami: <b>${order.orderId}</b>\n` +
             `🛠 Xizmat: <b>${order.serviceTypeName}</b>\n` +
-            `🔢 Miqdor: <b>${order.quantity}${order.unit ? " " + order.unit : ""}</b>\n\n` +
+            `🔢 Miqdor: <b>${qty}${order.unit ? " " + order.unit : ""}</b>\n\n` +
             `⏳ Buyurtmangiz tayyorlanmoqda...\n` +
             `Tayyor bo'lishi bilanoq xabar beramiz! 🔔`
           );
@@ -335,13 +316,14 @@ router.patch("/:id/status", async (req, res) => {
         const { sendTelegramNotification } = await import("./telegram");
         const client = await db.query.clientsTable.findFirst({ where: eq(clientsTable.id, order.clientId) });
         if (client?.telegramUserId) {
+          const qty = formatQty(order.quantity);
           await sendTelegramNotification(
             client.telegramUserId,
             `✅ <b>Buyurtmangiz TAYYOR!</b>\n\n` +
             `🎉 Hurmatli <b>${client.firstName} ${client.lastName}</b>,\n\n` +
             `📦 Buyurtma raqami: <b>${order.orderId}</b>\n` +
             `🛠 Xizmat: <b>${order.serviceTypeName}</b>\n` +
-            `🔢 Miqdor: <b>${order.quantity}${order.unit ? " " + order.unit : ""}</b>\n\n` +
+            `🔢 Miqdor: <b>${qty}${order.unit ? " " + order.unit : ""}</b>\n\n` +
             `🏪 Buyurtmangizni olib ketishingiz mumkin!\n` +
             `💎 Bizga ishonganingiz uchun katta rahmat!`
           );

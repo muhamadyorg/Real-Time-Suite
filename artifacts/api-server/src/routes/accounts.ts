@@ -43,6 +43,7 @@ router.get("/", async (req, res) => {
         pin: a.pin,
         storeId: a.storeId,
         storeName: a.storeId ? (storeMap.get(a.storeId) ?? null) : null,
+        serviceTypeId: a.serviceTypeId,
         createdAt: a.createdAt,
       }))
     );
@@ -59,11 +60,12 @@ router.post("/", async (req, res) => {
       res.status(403).json({ error: "Ruxsat yo'q" });
       return;
     }
-    const { name, role, pin, storeId } = req.body as {
+    const { name, role, pin, storeId, serviceTypeId } = req.body as {
       name: string;
       role: string;
       pin?: string;
       storeId?: number;
+      serviceTypeId?: number;
     };
 
     const effectiveStoreId = payload.role === "superadmin" ? payload.storeId : storeId;
@@ -75,6 +77,7 @@ router.post("/", async (req, res) => {
         role: role as "superadmin" | "admin" | "viewer" | "worker",
         pin: pin ?? null,
         storeId: effectiveStoreId ?? null,
+        serviceTypeId: serviceTypeId ?? null,
       })
       .returning();
 
@@ -99,11 +102,12 @@ router.put("/:id", async (req, res) => {
       return;
     }
     const id = parseInt(req.params.id);
-    const { name, role, pin, storeId } = req.body as {
+    const { name, role, pin, storeId, serviceTypeId } = req.body as {
       name?: string;
       role?: string;
       pin?: string;
       storeId?: number;
+      serviceTypeId?: number | null;
     };
 
     const updates: Record<string, unknown> = {};
@@ -111,6 +115,7 @@ router.put("/:id", async (req, res) => {
     if (role !== undefined) updates.role = role;
     if (pin !== undefined) updates.pin = pin;
     if (storeId !== undefined && payload.role === "sudo") updates.storeId = storeId;
+    if (serviceTypeId !== undefined) updates.serviceTypeId = serviceTypeId;
 
     const [account] = await db.update(accountsTable).set(updates).where(eq(accountsTable.id, id)).returning();
 
