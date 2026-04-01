@@ -668,7 +668,7 @@ export default function WorkerDashboard() {
       <div className="w-full max-w-[1600px] mx-auto">
         {activeTab === "new" && renderNewOrders(newOrders, isNewLoading)}
         {activeTab === "accepted" && renderAcceptedOrders(myAcceptedOrders, isAcceptedLoading)}
-        {activeTab === "ready" && renderList(readyOrders, isReadyLoading)}
+        {activeTab === "ready" && renderList(readyOrders ? [...readyOrders].reverse() : readyOrders, isReadyLoading)}
         {activeTab === "history" && renderList(historyOrders, isHistoryLoading)}
       </div>
 
