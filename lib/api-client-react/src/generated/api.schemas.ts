@@ -235,6 +235,10 @@ export const GetOrdersStatus = {
   ready: "ready",
 } as const;
 
+export type DeleteOrder200 = {
+  ok?: boolean;
+};
+
 export type GetClientsParams = {
   search?: string;
   status?: GetClientsStatus;

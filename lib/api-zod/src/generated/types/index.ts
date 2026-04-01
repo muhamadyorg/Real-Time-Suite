@@ -16,6 +16,7 @@ export * from "./createClientRequest";
 export * from "./createOrderRequest";
 export * from "./createServiceTypeRequest";
 export * from "./createStoreRequest";
+export * from "./deleteOrder200";
 export * from "./errorResponse";
 export * from "./getClientsParams";
 export * from "./getClientsStatus";

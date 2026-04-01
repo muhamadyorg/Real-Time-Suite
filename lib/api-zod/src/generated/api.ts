@@ -324,6 +324,17 @@ export const GetOrderResponse = zod.object({
 });
 
 /**
+ * @summary Delete an order
+ */
+export const DeleteOrderParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteOrderResponse = zod.object({
+  ok: zod.boolean().optional(),
+});
+
+/**
  * @summary Update order status
  */
 export const UpdateOrderStatusParams = zod.object({

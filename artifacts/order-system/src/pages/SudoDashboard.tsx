@@ -5,8 +5,8 @@ import {
   useGetStores, useCreateStore, useDeleteStore, useUpdateStore,
   useGetAccounts, useCreateAccount, useDeleteAccount, useUpdateAccount,
   useGetServiceTypes, useCreateServiceType, useDeleteServiceType,
-  useGetClients, useApproveClient, useRejectClient,
-  useGetOrders,
+  useGetClients, useApproveClient, useRejectClient, useCreateClient, useUpdateClient, useDeleteClient,
+  useGetOrders, useCreateOrder, useDeleteOrder,
   getGetStoresQueryKey, getGetAccountsQueryKey, getGetServiceTypesQueryKey, getGetClientsQueryKey, getGetOrdersQueryKey
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -527,68 +527,180 @@ function ServiceTypesView() {
 }
 
 function ClientsView() {
-  const [status, setStatus] = useState<any>("pending");
-  const { data, isLoading } = useGetClients({ status }, { query: { queryKey: getGetClientsQueryKey({ status }) } });
+  const [status, setStatus] = useState<any>("all");
+  const { data, isLoading } = useGetClients(status !== "all" ? { status } : {}, { query: { queryKey: getGetClientsQueryKey({ status }) } });
   const approve = useApproveClient();
   const reject = useRejectClient();
+  const createClient = useCreateClient();
+  const updateClient = useUpdateClient();
+  const deleteClient = useDeleteClient();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<any>(null);
+
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [tgUserId, setTgUserId] = useState("");
+
+  const [editFirst, setEditFirst] = useState("");
+  const [editLast, setEditLast] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editTgUserId, setEditTgUserId] = useState("");
+
+  const inv = () => queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey({ status }) });
+
+  const handleCreate = () => {
+    if (!firstName || !phone) return toast({ title: "Xatolik", description: "Ism va telefon kerak", variant: "destructive" });
+    createClient.mutate({ data: { firstName, lastName: lastName || null, phone, telegramUserId: tgUserId || null } as any }, {
+      onSuccess: () => {
+        toast({ title: "Mijoz qo'shildi" }); inv();
+        setCreateOpen(false); setFirstName(""); setLastName(""); setPhone(""); setTgUserId("");
+      },
+      onError: (e: any) => toast({ title: "Xatolik", description: e.data?.error, variant: "destructive" })
+    });
+  };
+
+  const openEdit = (c: any) => {
+    setEditTarget(c); setEditFirst(c.firstName); setEditLast(c.lastName || "");
+    setEditPhone(c.phone || ""); setEditTgUserId(c.telegramUserId ? String(c.telegramUserId) : "");
+    setEditOpen(true);
+  };
+
+  const handleEdit = () => {
+    if (!editTarget) return;
+    updateClient.mutate({ id: editTarget.id, data: { firstName: editFirst, lastName: editLast || null, phone: editPhone, telegramUserId: editTgUserId || null } as any }, {
+      onSuccess: () => { toast({ title: "Yangilandi" }); inv(); setEditOpen(false); },
+      onError: (e: any) => toast({ title: "Xatolik", description: e.data?.error, variant: "destructive" })
+    });
+  };
+
+  const handleDelete = (c: any) => {
+    if (!confirm(`${c.firstName} ${c.lastName} o'chirilsinmi?`)) return;
+    deleteClient.mutate({ id: c.id }, {
+      onSuccess: () => { toast({ title: "O'chirildi" }); inv(); },
+      onError: (e: any) => toast({ title: "Xatolik", description: e.data?.error, variant: "destructive" })
+    });
+  };
+
+  const statusColor = (s: string) =>
+    s === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' :
+    s === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
+    'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300';
+
+  const statusLabel = (s: string) =>
+    s === 'approved' ? 'Tasdiqlangan' : s === 'rejected' ? 'Rad etilgan' : 'Kutilmoqda';
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <div>
           <h2 className="text-2xl font-bold">Mijozlar</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Telegram orqali ro'yxatdan o'tganlar</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{data?.length ?? 0} ta mijoz</p>
         </div>
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pending">⏳ Kutilmoqda</SelectItem>
-            <SelectItem value="approved">✅ Tasdiqlangan</SelectItem>
-            <SelectItem value="rejected">❌ Rad etilgan</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex gap-2 flex-wrap">
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Barchasi</SelectItem>
+              <SelectItem value="pending">⏳ Kutilmoqda</SelectItem>
+              <SelectItem value="approved">✅ Tasdiqlangan</SelectItem>
+              <SelectItem value="rejected">❌ Rad etilgan</SelectItem>
+            </SelectContent>
+          </Select>
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <Button className="gap-2" onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4" /> Yangi mijoz</Button>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Yangi mijoz qo'shish</DialogTitle>
+                <DialogDescription>Mijoz ma'lumotlarini kiriting</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-1.5"><Label>Ism *</Label><Input placeholder="Ism" value={firstName} onChange={e => setFirstName(e.target.value)} /></div>
+                <div className="space-y-1.5"><Label>Familiya</Label><Input placeholder="Familiya" value={lastName} onChange={e => setLastName(e.target.value)} /></div>
+                <div className="space-y-1.5"><Label>Telefon *</Label><Input placeholder="+998901234567" value={phone} onChange={e => setPhone(e.target.value)} /></div>
+                <div className="space-y-1.5"><Label>Telegram User ID</Label><Input type="tel" placeholder="123456789" value={tgUserId} onChange={e => setTgUserId(e.target.value.replace(/\D/g, ""))} /></div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateOpen(false)}>Bekor</Button>
+                <Button onClick={handleCreate} disabled={createClient.isPending}>
+                  {createClient.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Saqlash
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mijozni tahrirlash</DialogTitle>
+            <DialogDescription>Ma'lumotlarni yangilang</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5"><Label>Ism</Label><Input value={editFirst} onChange={e => setEditFirst(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Familiya</Label><Input value={editLast} onChange={e => setEditLast(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Telefon</Label><Input value={editPhone} onChange={e => setEditPhone(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Telegram User ID</Label><Input type="tel" value={editTgUserId} onChange={e => setEditTgUserId(e.target.value.replace(/\D/g, ""))} /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Bekor</Button>
+            <Button onClick={handleEdit} disabled={updateClient.isPending}>
+              {updateClient.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Saqlash
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Card>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Ism</TableHead>
               <TableHead>Telefon</TableHead>
+              <TableHead>TG ID</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Amallar</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading
-              ? <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
-              : data?.map(c => (
+              ? <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
+              : data?.map((c: any) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-semibold">{c.firstName} {c.lastName}</TableCell>
                   <TableCell className="font-mono text-sm">{c.phone}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground font-mono">{c.telegramUserId ?? "—"}</TableCell>
                   <TableCell>
-                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                      c.status === 'approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' :
-                      c.status === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
-                      'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
-                    }`}>
-                      {c.status === 'approved' ? 'Tasdiqlangan' : c.status === 'rejected' ? 'Rad etilgan' : 'Kutilmoqda'}
+                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${statusColor(c.status)}`}>
+                      {statusLabel(c.status)}
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
-                    {c.status === "pending" && (
-                      <div className="flex justify-end gap-2">
-                        <Button variant="outline" size="sm" className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 gap-1.5"
-                          onClick={() => approve.mutate({ id: c.id }, { onSuccess: () => { toast({ title: "Tasdiqlandi" }); queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey({ status }) }); } })}>
-                          <CheckCircle className="w-4 h-4" /> Tasdiqla
-                        </Button>
-                        <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50 gap-1.5"
-                          onClick={() => reject.mutate({ id: c.id }, { onSuccess: () => { toast({ title: "Rad etildi" }); queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey({ status }) }); } })}>
-                          <XCircle className="w-4 h-4" /> Rad et
-                        </Button>
-                      </div>
-                    )}
+                    <div className="flex justify-end gap-1 flex-wrap">
+                      {c.status === "pending" && (
+                        <>
+                          <Button variant="outline" size="sm" className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 gap-1"
+                            onClick={() => approve.mutate({ id: c.id }, { onSuccess: () => { toast({ title: "Tasdiqlandi" }); inv(); } })}>
+                            <CheckCircle className="w-3.5 h-3.5" /> Tasdiqla
+                          </Button>
+                          <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50 gap-1"
+                            onClick={() => reject.mutate({ id: c.id }, { onSuccess: () => { toast({ title: "Rad etildi" }); inv(); } })}>
+                            <XCircle className="w-3.5 h-3.5" /> Rad et
+                          </Button>
+                        </>
+                      )}
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(c)}>
+                        <Pencil className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(c)}>
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -601,7 +713,54 @@ function ClientsView() {
 
 function OrdersView() {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [filterStoreId, setFilterStoreId] = useState<string>("all");
   const { data, isLoading } = useGetOrders({ date }, { query: { queryKey: getGetOrdersQueryKey({ date }) } });
+  const { data: stores } = useGetStores({ query: { queryKey: getGetStoresQueryKey() } });
+  const { data: serviceTypes } = useGetServiceTypes({ query: { queryKey: getGetServiceTypesQueryKey() } });
+  const createOrder = useCreateOrder();
+  const deleteOrder = useDeleteOrder();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newStoreId, setNewStoreId] = useState<string>("none");
+  const [newServiceTypeId, setNewServiceTypeId] = useState<string>("none");
+  const [newQty, setNewQty] = useState("1");
+  const [newUnit, setNewUnit] = useState("");
+  const [newShelf, setNewShelf] = useState("");
+  const [newNotes, setNewNotes] = useState("");
+
+  const inv = () => queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
+
+  const filteredServiceTypes = serviceTypes?.filter(st =>
+    newStoreId === "none" ? true : st.storeId === null || st.storeId === Number(newStoreId)
+  );
+
+  const handleCreate = () => {
+    if (newServiceTypeId === "none" || !newQty) return toast({ title: "Xatolik", description: "Xizmat turi va miqdor kerak", variant: "destructive" });
+    createOrder.mutate({ data: {
+      serviceTypeId: Number(newServiceTypeId),
+      quantity: Number(newQty),
+      unit: newUnit || null,
+      shelf: newShelf || null,
+      notes: newNotes || null,
+    }}, {
+      onSuccess: () => {
+        toast({ title: "Zakaz qo'shildi" }); inv();
+        setCreateOpen(false); setNewStoreId("none"); setNewServiceTypeId("none");
+        setNewQty("1"); setNewUnit(""); setNewShelf(""); setNewNotes("");
+      },
+      onError: (e: any) => toast({ title: "Xatolik", description: e.data?.error, variant: "destructive" })
+    });
+  };
+
+  const handleDelete = (o: any) => {
+    if (!confirm(`${o.orderId} zakazni o'chirmoqchimisiz?`)) return;
+    deleteOrder.mutate({ id: o.id }, {
+      onSuccess: () => { toast({ title: "Zakaz o'chirildi" }); inv(); },
+      onError: (e: any) => toast({ title: "Xatolik", description: e.data?.error, variant: "destructive" })
+    });
+  };
 
   const statusColors: Record<string, string> = {
     new: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
@@ -609,14 +768,68 @@ function OrdersView() {
     ready: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
   };
 
+  const displayed = data?.filter(o => filterStoreId === "all" ? true : o.storeId === Number(filterStoreId));
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <div>
           <h2 className="text-2xl font-bold">Barcha Zakazlar</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">{data?.length ?? 0} ta zakaz</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{displayed?.length ?? 0} ta zakaz</p>
         </div>
-        <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-[160px]" />
+        <div className="flex gap-2 flex-wrap items-center">
+          <Select value={filterStoreId} onValueChange={setFilterStoreId}>
+            <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Barcha do'konlar</SelectItem>
+              {stores?.map(s => <SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-[140px]" />
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <Button className="gap-2" onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4" /> Yangi zakaz</Button>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Yangi zakaz qo'shish</DialogTitle>
+                <DialogDescription>Zakaz ma'lumotlarini kiriting</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-1.5">
+                  <Label>Do'kon</Label>
+                  <Select value={newStoreId} onValueChange={v => { setNewStoreId(v); setNewServiceTypeId("none"); }}>
+                    <SelectTrigger><SelectValue placeholder="Tanlang..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Tanlang...</SelectItem>
+                      {stores?.map(s => <SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Xizmat turi *</Label>
+                  <Select value={newServiceTypeId} onValueChange={setNewServiceTypeId}>
+                    <SelectTrigger><SelectValue placeholder="Tanlang..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Tanlang...</SelectItem>
+                      {filteredServiceTypes?.map(st => <SelectItem key={st.id} value={st.id.toString()}>{st.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5"><Label>Miqdor *</Label><Input type="number" min="1" value={newQty} onChange={e => setNewQty(e.target.value)} /></div>
+                  <div className="space-y-1.5"><Label>Birlik</Label><Input placeholder="kg, m, dona..." value={newUnit} onChange={e => setNewUnit(e.target.value)} /></div>
+                </div>
+                <div className="space-y-1.5"><Label>Qolib (shelf)</Label><Input placeholder="A-12..." value={newShelf} onChange={e => setNewShelf(e.target.value)} /></div>
+                <div className="space-y-1.5"><Label>Izoh</Label><Input placeholder="Qo'shimcha ma'lumot" value={newNotes} onChange={e => setNewNotes(e.target.value)} /></div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateOpen(false)}>Bekor</Button>
+                <Button onClick={handleCreate} disabled={createOrder.isPending}>
+                  {createOrder.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Qo'shish
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
       <Card>
         <Table>
@@ -625,24 +838,32 @@ function OrdersView() {
               <TableHead>ID</TableHead>
               <TableHead>Do'kon</TableHead>
               <TableHead>Xizmat</TableHead>
+              <TableHead>Miqdor</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Sana</TableHead>
+              <TableHead className="text-right">Amal</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading
-              ? <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
-              : data?.map(o => (
+              ? <TableRow><TableCell colSpan={7} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
+              : displayed?.map(o => (
                 <TableRow key={o.id}>
                   <TableCell className="font-mono font-bold text-primary">{o.orderId}</TableCell>
-                  <TableCell>{o.storeName}</TableCell>
-                  <TableCell>{o.serviceTypeName} × {o.quantity}</TableCell>
+                  <TableCell className="text-sm">{o.storeName}</TableCell>
+                  <TableCell className="text-sm">{o.serviceTypeName}</TableCell>
+                  <TableCell className="font-semibold">{o.quantity}{o.unit ? <span className="text-muted-foreground text-xs ml-1">{o.unit}</span> : ""}</TableCell>
                   <TableCell>
                     <span className={`text-xs font-semibold px-2 py-1 rounded-full ${statusColors[o.status] ?? ''}`}>
                       {o.status === 'new' ? 'Yangi' : o.status === 'accepted' ? 'Qabul' : 'Tayyor'}
                     </span>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{format(new Date(o.createdAt), "dd.MM.yy HH:mm")}</TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(o)}>
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
           </TableBody>
