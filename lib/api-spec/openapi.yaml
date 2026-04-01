@@ -812,6 +812,20 @@ components:
         createdAt:
           type: string
           format: date-time
+        lockPin:
+          type: string
+          nullable: true
+        isLocked:
+          type: boolean
+        createdById:
+          type: integer
+          nullable: true
+        acceptedById:
+          type: integer
+          nullable: true
+        serviceTypeId:
+          type: integer
+          nullable: true
       required: [id, orderId, status, serviceTypeName, quantity, storeId, storeName, createdByName, createdAt]
 
     CreateOrderRequest:
@@ -847,6 +861,10 @@ components:
         status:
           type: string
           enum: [new, accepted, ready]
+        lockPin:
+          type: string
+          nullable: true
+          description: Lock PIN required when accepting a locked order
       required: [status]
 
     OrdersSummary:

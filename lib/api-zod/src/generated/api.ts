@@ -268,6 +268,11 @@ export const GetOrdersResponseItem = zod.object({
   acceptedAt: zod.coerce.date().nullish(),
   readyAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
+  lockPin: zod.string().nullish(),
+  isLocked: zod.boolean().optional(),
+  createdById: zod.number().nullish(),
+  acceptedById: zod.number().nullish(),
+  serviceTypeId: zod.number().nullish(),
 });
 export const GetOrdersResponse = zod.array(GetOrdersResponseItem);
 
@@ -311,6 +316,11 @@ export const GetOrderResponse = zod.object({
   acceptedAt: zod.coerce.date().nullish(),
   readyAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
+  lockPin: zod.string().nullish(),
+  isLocked: zod.boolean().optional(),
+  createdById: zod.number().nullish(),
+  acceptedById: zod.number().nullish(),
+  serviceTypeId: zod.number().nullish(),
 });
 
 /**
@@ -322,6 +332,10 @@ export const UpdateOrderStatusParams = zod.object({
 
 export const UpdateOrderStatusBody = zod.object({
   status: zod.enum(["new", "accepted", "ready"]),
+  lockPin: zod
+    .string()
+    .nullish()
+    .describe("Lock PIN required when accepting a locked order"),
 });
 
 export const UpdateOrderStatusResponse = zod.object({
@@ -343,6 +357,11 @@ export const UpdateOrderStatusResponse = zod.object({
   acceptedAt: zod.coerce.date().nullish(),
   readyAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
+  lockPin: zod.string().nullish(),
+  isLocked: zod.boolean().optional(),
+  createdById: zod.number().nullish(),
+  acceptedById: zod.number().nullish(),
+  serviceTypeId: zod.number().nullish(),
 });
 
 /**

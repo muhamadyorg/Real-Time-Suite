@@ -9,4 +9,6 @@ import type { UpdateOrderStatusRequestStatus } from "./updateOrderStatusRequestS
 
 export interface UpdateOrderStatusRequest {
   status: UpdateOrderStatusRequestStatus;
+  /** Lock PIN required when accepting a locked order */
+  lockPin?: string | null;
 }

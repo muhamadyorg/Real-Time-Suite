@@ -47,6 +47,7 @@ function mapOrder(o: typeof ordersTable.$inferSelect, showLockPin = true) {
     acceptedAt: o.acceptedAt,
     readyAt: o.readyAt,
     lockPin: showLockPin ? o.lockPin : undefined,
+    isLocked: !!o.lockPin,
     createdAt: o.createdAt,
   };
 }

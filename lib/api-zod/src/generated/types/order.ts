@@ -26,4 +26,9 @@ export interface Order {
   acceptedAt?: Date | null;
   readyAt?: Date | null;
   createdAt: Date;
+  lockPin?: string | null;
+  isLocked?: boolean;
+  createdById?: number | null;
+  acceptedById?: number | null;
+  serviceTypeId?: number | null;
 }

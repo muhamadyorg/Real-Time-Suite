@@ -154,6 +154,11 @@ export interface Order {
   acceptedAt?: string | null;
   readyAt?: string | null;
   createdAt: string;
+  lockPin?: string | null;
+  isLocked?: boolean;
+  createdById?: number | null;
+  acceptedById?: number | null;
+  serviceTypeId?: number | null;
 }
 
 export interface CreateOrderRequest {
@@ -178,6 +183,8 @@ export const UpdateOrderStatusRequestStatus = {
 
 export interface UpdateOrderStatusRequest {
   status: UpdateOrderStatusRequestStatus;
+  /** Lock PIN required when accepting a locked order */
+  lockPin?: string | null;
 }
 
 export interface OrdersSummary {

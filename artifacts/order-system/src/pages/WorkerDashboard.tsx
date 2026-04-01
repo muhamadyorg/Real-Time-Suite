@@ -478,7 +478,7 @@ export default function WorkerDashboard() {
 
   const handleAccept = (order: any) => {
     const isCreator = order.createdById === accountId;
-    if (order.lockPin && !isCreator) {
+    if (order.isLocked && !isCreator) {
       setLockPinOrder(order);
       return;
     }
@@ -554,7 +554,7 @@ export default function WorkerDashboard() {
                 onClick={() => handleAccept(order)}
                 disabled={updateStatus.isPending}
               >
-                {order.lockPin ? <><Lock className="w-4 h-4 mr-2" />QABUL QILISH</> : "QABUL QILISH"}
+                {order.isLocked ? <><Lock className="w-4 h-4 mr-2" />QABUL QILISH</> : "QABUL QILISH"}
               </Button>
             }
           />
