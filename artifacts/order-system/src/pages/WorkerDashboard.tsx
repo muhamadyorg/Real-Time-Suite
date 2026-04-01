@@ -528,6 +528,8 @@ export default function WorkerDashboard() {
       (o.clientPhone && o.clientPhone.includes(s)) ||
       (o.notes && o.notes.toLowerCase().includes(s)) ||
       (o.shelf && o.shelf.toLowerCase().includes(s)) ||
+      (o.createdByName && o.createdByName.toLowerCase().includes(s)) ||
+      (o.acceptedByName && o.acceptedByName.toLowerCase().includes(s)) ||
       String(o.quantity).includes(s) ||
       (o.unit && o.unit.toLowerCase().includes(s)) ||
       format(new Date(o.createdAt), "HH:mm").includes(s) ||

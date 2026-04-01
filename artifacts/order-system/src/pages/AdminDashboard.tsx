@@ -468,11 +468,15 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
       o.orderId.toLowerCase().includes(s) || 
       o.serviceTypeName.toLowerCase().includes(s) || 
       (o.clientName && o.clientName.toLowerCase().includes(s)) ||
+      (o.clientPhone && o.clientPhone.includes(s)) ||
       (o.notes && o.notes.toLowerCase().includes(s)) ||
       (o.shelf && o.shelf.toLowerCase().includes(s)) ||
+      (o.createdByName && o.createdByName.toLowerCase().includes(s)) ||
+      (o.acceptedByName && o.acceptedByName.toLowerCase().includes(s)) ||
       String(o.quantity).includes(s) ||
       (o.unit && o.unit.toLowerCase().includes(s)) ||
-      format(new Date(o.createdAt), "HH:mm").includes(s)
+      format(new Date(o.createdAt), "HH:mm").includes(s) ||
+      format(new Date(o.createdAt), "dd.MM.yyyy").includes(s)
     );
   };
 
