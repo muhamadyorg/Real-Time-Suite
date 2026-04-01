@@ -75,12 +75,21 @@ router.post("/pin-login", async (req, res) => {
       return;
     }
 
-    const account = await db.query.accountsTable.findFirst({
+    // Try exact match first
+    let account = await db.query.accountsTable.findFirst({
       where: and(
         eq(accountsTable.pin, pin),
         eq(accountsTable.storeId, storeId)
       ),
     });
+
+    // If not found and entered pin is 4 chars, try matching first 4 chars of stored pin (backward compat)
+    if (!account && pin.length === 4) {
+      const allAccounts = await db.query.accountsTable.findMany({
+        where: eq(accountsTable.storeId, storeId),
+      });
+      account = allAccounts.find((a) => a.pin && a.pin.startsWith(pin) && a.pin.length > 4) ?? undefined;
+    }
 
     if (!account) {
       res.status(401).json({ error: "PIN noto'g'ri" });

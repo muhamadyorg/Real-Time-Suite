@@ -9,11 +9,12 @@ interface AuthState {
   accountId: number | null;
   accountName: string | null;
   role: string | null;
+  serviceTypeId: number | null;
 }
 
 interface AuthContextType extends AuthState {
   setStoreAuth: (token: string, storeId: number, storeUsername: string, storeName: string, role: string) => void;
-  setPinAuth: (token: string, accountId: number, accountName: string, role: string) => void;
+  setPinAuth: (token: string, accountId: number, accountName: string, role: string, serviceTypeId?: number | null) => void;
   clearPinAuth: () => void;
   clearStoreAuth: () => void;
 }
@@ -26,6 +27,7 @@ const defaultState: AuthState = {
   accountId: null,
   accountName: null,
   role: null,
+  serviceTypeId: null,
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -57,28 +59,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       storeId,
       storeUsername,
       storeName,
-      role, // typically store role might be just 'store'
+      role,
     });
   };
 
-  const setPinAuth = (token: string, accountId: number, accountName: string, role: string) => {
+  const setPinAuth = (token: string, accountId: number, accountName: string, role: string, serviceTypeId?: number | null) => {
     setState((prev) => ({
       ...prev,
       token,
       accountId,
       accountName,
       role,
+      serviceTypeId: serviceTypeId ?? null,
     }));
   };
 
   const clearPinAuth = () => {
     setState((prev) => ({
       ...prev,
-      token: localStorage.getItem('store_token') || prev.token, // If we had a separate store token, we'd revert to it.
-      // Wait, in this system, pin login gives a NEW token. We should probably keep the store token around.
       accountId: null,
       accountName: null,
-      role: 'store', // revert to just store access
+      role: 'store',
+      serviceTypeId: null,
     }));
   };
 

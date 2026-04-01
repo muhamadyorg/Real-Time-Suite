@@ -45,11 +45,18 @@ function OrderDetailModal({ order, open, onClose }: { order: any, open: boolean,
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${statusInfo.color}`}>
-            {order.status === 'new' && <Clock className="w-4 h-4" />}
-            {order.status === 'accepted' && <Package className="w-4 h-4" />}
-            {order.status === 'ready' && <CheckCircle className="w-4 h-4" />}
-            {statusInfo.label}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${statusInfo.color}`}>
+              {order.status === 'new' && <Clock className="w-4 h-4" />}
+              {order.status === 'accepted' && <Package className="w-4 h-4" />}
+              {order.status === 'ready' && <CheckCircle className="w-4 h-4" />}
+              {statusInfo.label}
+            </div>
+            {order.lockPin && order.status === 'new' && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold bg-orange-100 text-orange-700 border border-orange-300">
+                🔒 {order.lockPin}
+              </div>
+            )}
           </div>
           <div className="bg-muted/40 rounded-xl p-4 space-y-3">
             <div className="flex justify-between items-center">
@@ -94,21 +101,31 @@ function OrderDetailModal({ order, open, onClose }: { order: any, open: boolean,
             </div>
           )}
           <div className="bg-muted/40 rounded-xl p-4 space-y-2">
-            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-2">Vaqt</div>
+            <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-2">Vaqt & Xodimlar</div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Yaratdi</span>
+              <span className="font-medium">{order.createdByName}</span>
+            </div>
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Yaratildi</span>
-              <span className="font-medium">{format(new Date(order.createdAt), "dd.MM.yyyy HH:mm")}</span>
+              <span className="font-medium">{format(new Date(order.createdAt), "dd.MM HH:mm")}</span>
             </div>
             {order.acceptedAt && (
-              <div className="flex justify-between text-sm text-amber-600">
-                <span>Qabul</span>
-                <span className="font-medium">{format(new Date(order.acceptedAt), "dd.MM.yyyy HH:mm")}</span>
-              </div>
+              <>
+                <div className="flex justify-between text-sm text-amber-600 border-t border-border/50 pt-2">
+                  <span>Qabul qildi</span>
+                  <span className="font-medium">{order.acceptedByName}</span>
+                </div>
+                <div className="flex justify-between text-sm text-amber-600">
+                  <span>Qabul vaqti</span>
+                  <span className="font-medium">{format(new Date(order.acceptedAt), "dd.MM HH:mm")}</span>
+                </div>
+              </>
             )}
             {order.readyAt && (
-              <div className="flex justify-between text-sm text-green-600">
-                <span>Tayyor</span>
-                <span className="font-medium">{format(new Date(order.readyAt), "dd.MM.yyyy HH:mm")}</span>
+              <div className="flex justify-between text-sm text-green-600 border-t border-border/50 pt-2">
+                <span>Tayyor vaqti</span>
+                <span className="font-medium">{format(new Date(order.readyAt), "dd.MM HH:mm")}</span>
               </div>
             )}
           </div>
@@ -117,7 +134,6 @@ function OrderDetailModal({ order, open, onClose }: { order: any, open: boolean,
               <Building2 className="w-3.5 h-3.5" />
               <span>{order.storeName}</span>
             </div>
-            <span className="text-muted-foreground">{order.createdByName}</span>
           </div>
           <div className="flex flex-col items-center pt-2 pb-1">
             <div className="text-xs text-muted-foreground mb-3 flex items-center gap-1">

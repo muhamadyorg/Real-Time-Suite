@@ -29,6 +29,7 @@ export const ordersTable = pgTable("orders", {
   acceptedByName: text("accepted_by_name"),
   acceptedAt: timestamp("accepted_at"),
   readyAt: timestamp("ready_at"),
+  lockPin: text("lock_pin"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

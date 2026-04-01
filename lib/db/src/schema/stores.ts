@@ -7,6 +7,7 @@ export const storesTable = pgTable("stores", {
   name: text("name").notNull(),
   username: text("username").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  telegramBotToken: text("telegram_bot_token"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

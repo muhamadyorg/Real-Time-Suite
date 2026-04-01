@@ -27,10 +27,10 @@ export default function PinEntry() {
 
   const { secondsLeft } = useInactivityTimer(15, handleTimeout);
 
-  if (pin.length === 6 && storeId && !pinLogin.isPending) {
+  if (pin.length === 4 && storeId && !pinLogin.isPending) {
     pinLogin.mutate({ data: { pin, storeId } }, {
       onSuccess: (data) => {
-        setPinAuth(data.token, data.account.id, data.account.name, data.role);
+        setPinAuth(data.token, data.account.id, data.account.name, data.role, data.account.serviceTypeId ?? null);
         if (data.role === 'worker') setLocation('/worker');
         else if (data.role === 'admin') setLocation('/admin');
         else if (data.role === 'superadmin') setLocation('/superadmin');
@@ -60,7 +60,7 @@ export default function PinEntry() {
   }
 
   const handlePadClick = (num: string) => {
-    if (pin.length < 6 && !pinLogin.isPending) {
+    if (pin.length < 4 && !pinLogin.isPending) {
       setPin(prev => prev + num);
     }
   };
@@ -101,7 +101,7 @@ export default function PinEntry() {
 
       {/* PIN dots */}
       <div className="flex gap-4 mb-10 z-10">
-        {[0, 1, 2, 3, 4, 5].map((idx) => (
+        {[0, 1, 2, 3].map((idx) => (
           <div
             key={idx}
             className={`w-5 h-5 rounded-full border-2 transition-all duration-200 ${

@@ -56,10 +56,26 @@ if (telegramToken) {
   initTelegramBot(telegramToken);
 }
 
-httpServer.listen(port, (err?: Error) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
+function startServer(listenPort: number) {
+  httpServer.listen(listenPort, (err?: Error) => {
+    if (err) {
+      logger.error({ err }, "Error listening on port");
+      process.exit(1);
+    }
+    logger.info({ port: listenPort }, "Server listening");
+  });
+}
+
+httpServer.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE") {
+    const fallback = port + 1;
+    logger.warn({ port, fallback }, "Port in use, trying fallback");
+    httpServer.close();
+    startServer(fallback);
+  } else {
+    logger.error({ err }, "Server error");
     process.exit(1);
   }
-  logger.info({ port }, "Server listening");
 });
+
+startServer(port);

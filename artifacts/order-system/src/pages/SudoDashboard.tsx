@@ -53,18 +53,20 @@ function StoresView() {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [tgToken, setTgToken] = useState("");
 
   const [editName, setEditName] = useState("");
   const [editUsername, setEditUsername] = useState("");
   const [editPassword, setEditPassword] = useState("");
+  const [editTgToken, setEditTgToken] = useState("");
 
   const handleCreate = () => {
     if (!name || !username || !password) return toast({ title: "Xatolik", description: "Barcha maydonlarni to'ldiring", variant: "destructive" });
-    createStore.mutate({ data: { name, username, password } }, {
+    createStore.mutate({ data: { name, username, password, telegramBotToken: tgToken || null } as any }, {
       onSuccess: () => {
         toast({ title: "Do'kon yaratildi" });
         queryClient.invalidateQueries({ queryKey: getGetStoresQueryKey() });
-        setOpen(false); setName(""); setUsername(""); setPassword("");
+        setOpen(false); setName(""); setUsername(""); setPassword(""); setTgToken("");
       },
       onError: (err) => toast({ title: "Xatolik", description: err.data?.error, variant: "destructive" })
     });
@@ -75,15 +77,15 @@ function StoresView() {
     setEditName(store.name);
     setEditUsername(store.username);
     setEditPassword("");
+    setEditTgToken(store.telegramBotToken || "");
     setEditOpen(true);
   };
 
   const handleEdit = () => {
     if (!editTarget) return;
-    const data: any = {};
-    if (editName !== editTarget.name) data.name = editName;
-    if (editUsername !== editTarget.username) data.username = editUsername;
+    const data: any = { name: editName, username: editUsername };
     if (editPassword) data.password = editPassword;
+    data.telegramBotToken = editTgToken || null;
     updateStore.mutate({ id: editTarget.id, data }, {
       onSuccess: () => {
         toast({ title: "Do'kon yangilandi" });
@@ -125,6 +127,7 @@ function StoresView() {
               <div className="space-y-1.5"><Label>Nomi</Label><Input placeholder="Do'kon nomi" value={name} onChange={e => setName(e.target.value)} /></div>
               <div className="space-y-1.5"><Label>Login</Label><Input placeholder="do'kon_login" value={username} onChange={e => setUsername(e.target.value)} /></div>
               <div className="space-y-1.5"><Label>Parol</Label><Input placeholder="••••••••" type="password" value={password} onChange={e => setPassword(e.target.value)} /></div>
+              <div className="space-y-1.5"><Label>Telegram Bot Token (ixtiyoriy)</Label><Input placeholder="1234567890:AAF..." value={tgToken} onChange={e => setTgToken(e.target.value)} className="font-mono text-xs" /></div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpen(false)}>Bekor</Button>
@@ -147,6 +150,7 @@ function StoresView() {
             <div className="space-y-1.5"><Label>Nomi</Label><Input value={editName} onChange={e => setEditName(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>Login</Label><Input value={editUsername} onChange={e => setEditUsername(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>Yangi parol (ixtiyoriy)</Label><Input placeholder="O'zgartirmasangiz bo'sh qoldiring" type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Telegram Bot Token</Label><Input placeholder="1234567890:AAF... (bo'sh qoldirsa o'chadi)" value={editTgToken} onChange={e => setEditTgToken(e.target.value)} className="font-mono text-xs" /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>Bekor</Button>
@@ -164,18 +168,20 @@ function StoresView() {
               <TableHead className="w-12">#</TableHead>
               <TableHead>Nomi</TableHead>
               <TableHead>Login</TableHead>
+              <TableHead>TG Bot</TableHead>
               <TableHead>Yaratilgan</TableHead>
               <TableHead className="text-right">Amallar</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading
-              ? <TableRow><TableCell colSpan={5} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
-              : data?.map(store => (
+              ? <TableRow><TableCell colSpan={6} className="text-center py-10"><Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" /></TableCell></TableRow>
+              : data?.map((store: any) => (
                 <TableRow key={store.id}>
                   <TableCell className="text-muted-foreground text-sm">{store.id}</TableCell>
                   <TableCell className="font-semibold">{store.name}</TableCell>
                   <TableCell className="font-mono text-sm text-muted-foreground">{store.username}</TableCell>
+                  <TableCell>{store.telegramBotToken ? <span className="text-green-600 text-xs font-medium">✅ Ulangan</span> : <span className="text-muted-foreground text-xs">—</span>}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{format(new Date(store.createdAt), "dd.MM.yyyy")}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
@@ -307,7 +313,7 @@ function AccountsView() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5"><Label>PIN kod (6 ta raqam)</Label><Input type="tel" placeholder="123456" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} /></div>
+              <div className="space-y-1.5"><Label>PIN kod (4 ta raqam)</Label><Input type="tel" placeholder="1234" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))} maxLength={4} /></div>
               <div className="space-y-1.5">
                 <Label>Do'kon</Label>
                 <Select value={storeId} onValueChange={setStoreId}>
@@ -351,8 +357,8 @@ function AccountsView() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>PIN kod</Label>
-              <Input type="tel" placeholder="6 ta raqam" value={editPin} onChange={e => setEditPin(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} />
+              <Label>PIN kod (4 ta raqam)</Label>
+              <Input type="tel" placeholder="1234" value={editPin} onChange={e => setEditPin(e.target.value.replace(/\D/g, "").slice(0, 4))} maxLength={4} />
             </div>
             <div className="space-y-1.5">
               <Label>Do'kon</Label>
