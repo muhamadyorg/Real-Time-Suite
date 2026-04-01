@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, accountsTable, storesTable, ordersTable } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, ne } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 
 const router = Router();
@@ -70,6 +70,16 @@ router.post("/", async (req, res) => {
 
     const effectiveStoreId = payload.role === "superadmin" ? payload.storeId : storeId;
 
+    if (pin && effectiveStoreId) {
+      const existing = await db.query.accountsTable.findFirst({
+        where: and(eq(accountsTable.pin, pin), eq(accountsTable.storeId, effectiveStoreId)),
+      });
+      if (existing) {
+        res.status(409).json({ error: "Bu PIN kod allaqachon boshqa foydalanuvchiga tegishli. Iltimos, boshqa PIN kod qo'ying." });
+        return;
+      }
+    }
+
     const [account] = await db
       .insert(accountsTable)
       .values({
@@ -116,6 +126,20 @@ router.put("/:id", async (req, res) => {
     if (pin !== undefined) updates.pin = pin;
     if (storeId !== undefined && payload.role === "sudo") updates.storeId = storeId;
     if (serviceTypeId !== undefined) updates.serviceTypeId = serviceTypeId;
+
+    if (pin) {
+      const currentAccount = await db.query.accountsTable.findFirst({ where: eq(accountsTable.id, id) });
+      const targetStoreId = (storeId !== undefined && payload.role === "sudo") ? storeId : currentAccount?.storeId;
+      if (targetStoreId) {
+        const existing = await db.query.accountsTable.findFirst({
+          where: and(eq(accountsTable.pin, pin), eq(accountsTable.storeId, targetStoreId), ne(accountsTable.id, id)),
+        });
+        if (existing) {
+          res.status(409).json({ error: "Bu PIN kod allaqachon boshqa foydalanuvchiga tegishli. Iltimos, boshqa PIN kod qo'ying." });
+          return;
+        }
+      }
+    }
 
     const [account] = await db.update(accountsTable).set(updates).where(eq(accountsTable.id, id)).returning();
 

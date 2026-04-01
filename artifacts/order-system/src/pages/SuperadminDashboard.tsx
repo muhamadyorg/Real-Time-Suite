@@ -128,7 +128,7 @@ function AccountsView({ storeId }: { storeId: number }) {
               )}
               <div className="space-y-1.5">
                 <Label>PIN kod (6 raqam)</Label>
-                <Input placeholder="Masalan: 123456" value={pin} onChange={e => setPin(e.target.value)} maxLength={8} inputMode="numeric" />
+                <Input type="tel" placeholder="Masalan: 123456" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} inputMode="numeric" />
               </div>
             </div>
             <DialogFooter>

@@ -25,22 +25,28 @@ export function initTelegramBot(token: string) {
 
         if (text === "/start") {
           if (client && client.registrationStep === "done") {
-            const statusText =
-              client.status === "approved"
+            if (client.status === "rejected") {
+              await bot!.sendMessage(
+                chatId,
+                `👋 <b>Xush kelibsiz!</b>\n\n` +
+                `❌ Afsuski, so'rovingiz rad etilgan.\n\n` +
+                `Qayta ro'yxatdan o'tish uchun /reregister buyrug'ini yuboring.`,
+                { parse_mode: "HTML" }
+              );
+            } else {
+              const statusText = client.status === "approved"
                 ? "✅ <b>Tasdiqlangan mijoz</b>"
-                : client.status === "pending"
-                  ? "⏳ <b>Tasdiqlanish kutilmoqda</b>"
-                  : "❌ <b>Rad etilgan</b>";
-
-            await bot!.sendMessage(
-              chatId,
-              `👋 <b>Xush kelibsiz!</b>\n\n` +
-              `ℹ️ Siz allaqachon ro'yxatdan o'tgansiz:\n\n` +
-              `👤 Ism: <b>${client.firstName} ${client.lastName}</b>\n` +
-              `📱 Telefon: <b>${client.phone}</b>\n` +
-              `📊 Holat: ${statusText}`,
-              { parse_mode: "HTML" }
-            );
+                : "⏳ <b>Tasdiqlanish kutilmoqda</b>";
+              await bot!.sendMessage(
+                chatId,
+                `👋 <b>Xush kelibsiz!</b>\n\n` +
+                `ℹ️ Siz allaqachon ro'yxatdan o'tgansiz:\n\n` +
+                `👤 Ism: <b>${client.firstName} ${client.lastName}</b>\n` +
+                `📱 Telefon: <b>${client.phone}</b>\n` +
+                `📊 Holat: ${statusText}`,
+                { parse_mode: "HTML" }
+              );
+            }
             return;
           }
 
@@ -68,6 +74,37 @@ export function initTelegramBot(token: string) {
             "👋 <b>Xush kelibsiz!</b>\n\n🎉 Bizning do'kon botiga xush kelibsiz!\n\nRo'yxatdan o'tish uchun bir necha qadam bajarishingiz kerak.\n\n📝 <b>Ismingizni kiriting:</b>",
             { parse_mode: "HTML" }
           );
+          return;
+        }
+
+        if (text === "/reregister") {
+          if (client && client.status === "rejected") {
+            await db.update(clientsTable).set({
+              registrationStep: "first_name",
+              tempData: null,
+              status: "pending",
+              firstName: "",
+              lastName: "",
+              phone: "",
+            }).where(eq(clientsTable.id, client.id));
+            await bot!.sendMessage(
+              chatId,
+              "📝 <b>Ismingizni kiriting:</b>",
+              { parse_mode: "HTML" }
+            );
+          } else if (client && client.status !== "rejected") {
+            await bot!.sendMessage(
+              chatId,
+              "ℹ️ Bu buyruq faqat rad etilgan foydalanuvchilar uchun.",
+              { parse_mode: "HTML" }
+            );
+          } else {
+            await bot!.sendMessage(
+              chatId,
+              "❓ Ro'yxatdan o'tish uchun /start ni bosing.",
+              { parse_mode: "HTML" }
+            );
+          }
           return;
         }
 

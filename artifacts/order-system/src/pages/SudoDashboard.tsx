@@ -307,7 +307,7 @@ function AccountsView() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5"><Label>PIN kod (6 ta raqam)</Label><Input placeholder="123456" value={pin} onChange={e => setPin(e.target.value)} maxLength={6} /></div>
+              <div className="space-y-1.5"><Label>PIN kod (6 ta raqam)</Label><Input type="tel" placeholder="123456" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} /></div>
               <div className="space-y-1.5">
                 <Label>Do'kon</Label>
                 <Select value={storeId} onValueChange={setStoreId}>
@@ -352,7 +352,7 @@ function AccountsView() {
             </div>
             <div className="space-y-1.5">
               <Label>PIN kod</Label>
-              <Input placeholder="6 ta raqam" value={editPin} onChange={e => setEditPin(e.target.value)} maxLength={6} />
+              <Input type="tel" placeholder="6 ta raqam" value={editPin} onChange={e => setEditPin(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} />
             </div>
             <div className="space-y-1.5">
               <Label>Do'kon</Label>
