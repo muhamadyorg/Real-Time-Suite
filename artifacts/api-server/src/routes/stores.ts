@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, storesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { hashPassword, authenticateToken } from "../lib/auth";
+import { updateStoreBot } from "./telegram";
 
 const router = Router();
 
@@ -47,6 +48,7 @@ router.post("/", async (req, res) => {
       passwordHash,
       telegramBotToken: telegramBotToken || null,
     }).returning();
+    updateStoreBot(store.id, store.telegramBotToken ?? null);
     res.status(201).json({
       id: store.id,
       name: store.name,
@@ -78,6 +80,7 @@ router.put("/:id", async (req, res) => {
     if (password) updates.passwordHash = await hashPassword(password);
     if (telegramBotToken !== undefined) updates.telegramBotToken = telegramBotToken || null;
     const [store] = await db.update(storesTable).set(updates).where(eq(storesTable.id, id)).returning();
+    updateStoreBot(store.id, store.telegramBotToken ?? null);
     res.json({
       id: store.id,
       name: store.name,

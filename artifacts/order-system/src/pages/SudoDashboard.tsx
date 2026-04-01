@@ -551,7 +551,7 @@ function ClientsView() {
   const [editPhone, setEditPhone] = useState("");
   const [editTgUserId, setEditTgUserId] = useState("");
 
-  const inv = () => queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey({ status }) });
+  const inv = () => queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
 
   const handleCreate = () => {
     if (!firstName || !phone) return toast({ title: "Xatolik", description: "Ism va telefon kerak", variant: "destructive" });

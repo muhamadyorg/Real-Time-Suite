@@ -4,7 +4,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { setSocketIO } from "./routes/orders";
 import { verifyToken } from "./lib/auth";
-import { initTelegramBot } from "./routes/telegram";
+import { initTelegramBot, initStoreBots } from "./routes/telegram";
 import { seedSudo } from "./lib/seed";
 
 const rawPort = process.env["PORT"];
@@ -51,7 +51,10 @@ io.on("connection", (socket) => {
 // Seed SUDO account on startup
 seedSudo().catch((err) => logger.error({ err }, "Seed error"));
 
-// Init Telegram bot if token provided
+// Init store bots (per-store tokens)
+initStoreBots().catch((err) => logger.error({ err }, "Store bots init error"));
+
+// Init global Telegram bot if token provided
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
 if (telegramToken) {
   initTelegramBot(telegramToken);

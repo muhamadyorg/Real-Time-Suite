@@ -3,18 +3,61 @@ import { db, clientsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
-let bot: TelegramBot | null = null;
+let globalBot: TelegramBot | null = null;
+const storeBots = new Map<number, TelegramBot>();
 
-export function sendTelegramNotification(chatId: string, message: string): Promise<void> {
+export async function initStoreBots() {
+  try {
+    const stores = await db.query.storesTable.findMany();
+    for (const store of stores) {
+      if (store.telegramBotToken) {
+        try {
+          const bot = new TelegramBot(store.telegramBotToken, { polling: false });
+          storeBots.set(store.id, bot);
+          logger.info({ storeId: store.id, storeName: store.name }, "Store bot initialized");
+        } catch (_e) {
+          logger.warn({ storeId: store.id }, "Failed to init store bot");
+        }
+      }
+    }
+  } catch (err) {
+    logger.error({ err }, "Failed to init store bots");
+  }
+}
+
+export function updateStoreBot(storeId: number, token: string | null) {
+  if (storeBots.has(storeId)) {
+    storeBots.delete(storeId);
+  }
+  if (token) {
+    try {
+      const bot = new TelegramBot(token, { polling: false });
+      storeBots.set(storeId, bot);
+      logger.info({ storeId }, "Store bot updated");
+    } catch (_e) {
+      logger.warn({ storeId }, "Failed to update store bot");
+    }
+  }
+}
+
+export function sendTelegramNotification(chatId: string, message: string, storeId?: number): Promise<void> {
+  let bot: TelegramBot | null = null;
+  if (storeId !== undefined && storeBots.has(storeId)) {
+    bot = storeBots.get(storeId)!;
+  } else {
+    bot = globalBot;
+  }
   if (!bot) return Promise.resolve();
-  return bot.sendMessage(chatId, message, { parse_mode: "HTML" }).then(() => {});
+  return bot.sendMessage(chatId, message, { parse_mode: "HTML" }).then(() => {}).catch((err) => {
+    logger.warn({ err, chatId, storeId }, "Telegram send failed");
+  });
 }
 
 export function initTelegramBot(token: string) {
   try {
-    bot = new TelegramBot(token, { polling: true });
+    globalBot = new TelegramBot(token, { polling: true });
 
-    bot.on("message", async (msg) => {
+    globalBot.on("message", async (msg) => {
       const chatId = String(msg.chat.id);
       const text = msg.text?.trim() ?? "";
 
@@ -26,7 +69,7 @@ export function initTelegramBot(token: string) {
         if (text === "/start") {
           if (client && client.registrationStep === "done") {
             if (client.status === "rejected") {
-              await bot!.sendMessage(
+              await globalBot!.sendMessage(
                 chatId,
                 `👋 <b>Xush kelibsiz!</b>\n\n` +
                 `❌ Afsuski, so'rovingiz rad etilgan.\n\n` +
@@ -37,7 +80,7 @@ export function initTelegramBot(token: string) {
               const statusText = client.status === "approved"
                 ? "✅ <b>Tasdiqlangan mijoz</b>"
                 : "⏳ <b>Tasdiqlanish kutilmoqda</b>";
-              await bot!.sendMessage(
+              await globalBot!.sendMessage(
                 chatId,
                 `👋 <b>Xush kelibsiz!</b>\n\n` +
                 `ℹ️ Siz allaqachon ro'yxatdan o'tgansiz:\n\n` +
@@ -69,7 +112,7 @@ export function initTelegramBot(token: string) {
             client = newClient;
           }
 
-          await bot!.sendMessage(
+          await globalBot!.sendMessage(
             chatId,
             "👋 <b>Xush kelibsiz!</b>\n\n🎉 Bizning do'kon botiga xush kelibsiz!\n\nRo'yxatdan o'tish uchun bir necha qadam bajarishingiz kerak.\n\n📝 <b>Ismingizni kiriting:</b>",
             { parse_mode: "HTML" }
@@ -87,33 +130,17 @@ export function initTelegramBot(token: string) {
               lastName: "",
               phone: "",
             }).where(eq(clientsTable.id, client.id));
-            await bot!.sendMessage(
-              chatId,
-              "📝 <b>Ismingizni kiriting:</b>",
-              { parse_mode: "HTML" }
-            );
+            await globalBot!.sendMessage(chatId, "📝 <b>Ismingizni kiriting:</b>", { parse_mode: "HTML" });
           } else if (client && client.status !== "rejected") {
-            await bot!.sendMessage(
-              chatId,
-              "ℹ️ Bu buyruq faqat rad etilgan foydalanuvchilar uchun.",
-              { parse_mode: "HTML" }
-            );
+            await globalBot!.sendMessage(chatId, "ℹ️ Bu buyruq faqat rad etilgan foydalanuvchilar uchun.", { parse_mode: "HTML" });
           } else {
-            await bot!.sendMessage(
-              chatId,
-              "❓ Ro'yxatdan o'tish uchun /start ni bosing.",
-              { parse_mode: "HTML" }
-            );
+            await globalBot!.sendMessage(chatId, "❓ Ro'yxatdan o'tish uchun /start ni bosing.", { parse_mode: "HTML" });
           }
           return;
         }
 
         if (!client) {
-          await bot!.sendMessage(
-            chatId,
-            "❓ Ro'yxatdan o'tish uchun /start ni bosing.",
-            { parse_mode: "HTML" }
-          );
+          await globalBot!.sendMessage(chatId, "❓ Ro'yxatdan o'tish uchun /start ni bosing.", { parse_mode: "HTML" });
           return;
         }
 
@@ -126,12 +153,7 @@ export function initTelegramBot(token: string) {
             registrationStep: "last_name",
             tempData: JSON.stringify(tempData),
           }).where(eq(clientsTable.id, client.id));
-
-          await bot!.sendMessage(
-            chatId,
-            `✅ <b>Ism:</b> ${text}\n\n👤 Endi <b>Familiyangizni</b> kiriting:`,
-            { parse_mode: "HTML" }
-          );
+          await globalBot!.sendMessage(chatId, `✅ <b>Ism:</b> ${text}\n\n👤 Endi <b>Familiyangizni</b> kiriting:`, { parse_mode: "HTML" });
 
         } else if (step === "last_name") {
           tempData.lastName = text;
@@ -139,12 +161,7 @@ export function initTelegramBot(token: string) {
             registrationStep: "phone",
             tempData: JSON.stringify(tempData),
           }).where(eq(clientsTable.id, client.id));
-
-          await bot!.sendMessage(
-            chatId,
-            `✅ <b>Familiya:</b> ${text}\n\n📱 Endi <b>telefon raqamingizni</b> kiriting:\n\n<i>Faqat raqamlarni kiriting, masalan: 901234567</i>`,
-            { parse_mode: "HTML" }
-          );
+          await globalBot!.sendMessage(chatId, `✅ <b>Familiya:</b> ${text}\n\n📱 Endi <b>telefon raqamingizni</b> kiriting:\n\n<i>Faqat raqamlarni kiriting, masalan: 901234567</i>`, { parse_mode: "HTML" });
 
         } else if (step === "phone") {
           tempData.phone = text;
@@ -155,8 +172,7 @@ export function initTelegramBot(token: string) {
             registrationStep: "done",
             tempData: null,
           }).where(eq(clientsTable.id, client.id));
-
-          await bot!.sendMessage(
+          await globalBot!.sendMessage(
             chatId,
             `🎊 <b>Ro'yxatdan o'tdingiz!</b>\n\n` +
             `👤 Ism: <b>${tempData.firstName} ${tempData.lastName}</b>\n` +
@@ -168,23 +184,11 @@ export function initTelegramBot(token: string) {
 
         } else if (step === "done") {
           if (client.status === "approved") {
-            await bot!.sendMessage(
-              chatId,
-              "🌟 <b>Siz tasdiqlangan mijozimiz!</b>\n\n✅ Buyurtmalaringiz holati haqida xabar olasiz.\n\n💎 Bizga ishonganingiz uchun rahmat!",
-              { parse_mode: "HTML" }
-            );
+            await globalBot!.sendMessage(chatId, "🌟 <b>Siz tasdiqlangan mijozimiz!</b>\n\n✅ Buyurtmalaringiz holati haqida xabar olasiz.\n\n💎 Bizga ishonganingiz uchun rahmat!", { parse_mode: "HTML" });
           } else if (client.status === "pending") {
-            await bot!.sendMessage(
-              chatId,
-              "⏳ <b>So'rovingiz ko'rib chiqilmoqda...</b>\n\nAdmin tasdiqlashi bilanoq sizga xabar beramiz. Sabr qiling! 🙏",
-              { parse_mode: "HTML" }
-            );
+            await globalBot!.sendMessage(chatId, "⏳ <b>So'rovingiz ko'rib chiqilmoqda...</b>\n\nAdmin tasdiqlashi bilanoq sizga xabar beramiz. Sabr qiling! 🙏", { parse_mode: "HTML" });
           } else {
-            await bot!.sendMessage(
-              chatId,
-              "❌ <b>Afsuski, so'rovingiz rad etildi.</b>\n\nQayta ro'yxatdan o'tish uchun /start ni bosing.",
-              { parse_mode: "HTML" }
-            );
+            await globalBot!.sendMessage(chatId, "❌ <b>Afsuski, so'rovingiz rad etildi.</b>\n\nQayta ro'yxatdan o'tish uchun /start ni bosing.", { parse_mode: "HTML" });
           }
         }
       } catch (err) {

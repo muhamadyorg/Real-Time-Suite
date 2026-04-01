@@ -390,7 +390,8 @@ router.patch("/:id/status", async (req, res) => {
             `🛠 Xizmat: <b>${updatedOrder.serviceTypeName}</b>\n` +
             `🔢 Miqdor: <b>${qty}${updatedOrder.unit ? " " + updatedOrder.unit : ""}</b>\n\n` +
             `⏳ Buyurtmangiz tayyorlanmoqda...\n` +
-            `Tayyor bo'lishi bilanoq xabar beramiz! 🔔`
+            `Tayyor bo'lishi bilanoq xabar beramiz! 🔔`,
+            updatedOrder.storeId ?? undefined
           );
         }
       } catch (_e) { /* Telegram not configured */ }
@@ -410,7 +411,8 @@ router.patch("/:id/status", async (req, res) => {
             `🛠 Xizmat: <b>${updatedOrder.serviceTypeName}</b>\n` +
             `🔢 Miqdor: <b>${qty}${updatedOrder.unit ? " " + updatedOrder.unit : ""}</b>\n\n` +
             `🏪 Buyurtmangizni olib ketishingiz mumkin!\n` +
-            `💎 Bizga ishonganingiz uchun katta rahmat!`
+            `💎 Bizga ishonganingiz uchun katta rahmat!`,
+            updatedOrder.storeId ?? undefined
           );
         }
       } catch (_e) { /* Telegram not configured */ }
