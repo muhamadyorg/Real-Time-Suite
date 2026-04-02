@@ -388,8 +388,10 @@ router.patch("/:id/status", async (req, res) => {
             `👋 Hurmatli <b>${client.firstName} ${client.lastName}</b>,\n\n` +
             `📦 Buyurtma raqami: <b>${updatedOrder.orderId}</b>\n` +
             `🛠 Xizmat: <b>${updatedOrder.serviceTypeName}</b>\n` +
-            `🔢 Miqdor: <b>${qty}${updatedOrder.unit ? " " + updatedOrder.unit : ""}</b>\n\n` +
-            `⏳ Buyurtmangiz tayyorlanmoqda...\n` +
+            `🔢 Miqdor: <b>${qty}${updatedOrder.unit ? " " + updatedOrder.unit : ""}</b>\n` +
+            (updatedOrder.shelf ? `📍 Qolib: <b>${updatedOrder.shelf}</b>\n` : ``) +
+            (updatedOrder.notes ? `📝 Izoh: <b>${updatedOrder.notes}</b>\n` : ``) +
+            `\n⏳ Buyurtmangiz tayyorlanmoqda...\n` +
             `Tayyor bo'lishi bilanoq xabar beramiz! 🔔`,
             updatedOrder.storeId ?? undefined
           );
@@ -409,8 +411,10 @@ router.patch("/:id/status", async (req, res) => {
             `🎉 Hurmatli <b>${client.firstName} ${client.lastName}</b>,\n\n` +
             `📦 Buyurtma raqami: <b>${updatedOrder.orderId}</b>\n` +
             `🛠 Xizmat: <b>${updatedOrder.serviceTypeName}</b>\n` +
-            `🔢 Miqdor: <b>${qty}${updatedOrder.unit ? " " + updatedOrder.unit : ""}</b>\n\n` +
-            `🏪 Buyurtmangizni olib ketishingiz mumkin!\n` +
+            `🔢 Miqdor: <b>${qty}${updatedOrder.unit ? " " + updatedOrder.unit : ""}</b>\n` +
+            (updatedOrder.shelf ? `📍 Qolib: <b>${updatedOrder.shelf}</b>\n` : ``) +
+            (updatedOrder.notes ? `📝 Izoh: <b>${updatedOrder.notes}</b>\n` : ``) +
+            `\n🏪 Buyurtmangizni olib ketishingiz mumkin!\n` +
             `💎 Bizga ishonganingiz uchun katta rahmat!`,
             updatedOrder.storeId ?? undefined
           );
