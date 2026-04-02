@@ -22,7 +22,7 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 const httpServer = createServer(app);
-httpServer.setMaxListeners(20);
+httpServer.setMaxListeners(0);
 
 const io = new SocketServer(httpServer, {
   cors: { origin: "*" },

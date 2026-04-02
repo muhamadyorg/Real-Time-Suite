@@ -10,9 +10,9 @@ export function setSocketIO(socketIO: SocketServer) {
 }
 
 async function generateOrderId(): Promise<string> {
-  const result = await db.select({ count: sql<number>`count(*)` }).from(ordersTable);
-  const count = Number(result[0]?.count ?? 0);
-  return String(count + 1).padStart(5, "0");
+  const result = await db.select({ maxId: sql<string>`max(cast(order_id as integer))` }).from(ordersTable);
+  const maxId = result[0]?.maxId ? parseInt(result[0].maxId) : 0;
+  return String(maxId + 1).padStart(5, "0");
 }
 
 function generateLockPin(): string {
