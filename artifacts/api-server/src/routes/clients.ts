@@ -9,7 +9,13 @@ const router = Router();
 router.get("/", async (req, res) => {
   try {
     const payload = await authenticateToken(req.headers.authorization);
-    if (!payload || !["sudo", "superadmin", "admin"].includes(payload.role)) {
+    if (!payload) {
+      res.status(401).json({ error: "Ruxsat yo'q" });
+      return;
+    }
+
+    const isWorkerOrViewer = ["worker", "viewer"].includes(payload.role);
+    if (!["sudo", "superadmin", "admin", "worker", "viewer"].includes(payload.role)) {
       res.status(403).json({ error: "Ruxsat yo'q" });
       return;
     }
@@ -20,7 +26,10 @@ router.get("/", async (req, res) => {
       orderBy: (t, { desc }) => desc(t.createdAt),
     });
 
-    if (status && ["pending", "approved", "rejected"].includes(status)) {
+    // Workers and viewers can only see approved clients
+    if (isWorkerOrViewer) {
+      clients = clients.filter((c) => c.status === "approved");
+    } else if (status && ["pending", "approved", "rejected"].includes(status)) {
       clients = clients.filter((c) => c.status === status);
     }
 
