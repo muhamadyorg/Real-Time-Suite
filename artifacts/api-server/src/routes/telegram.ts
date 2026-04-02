@@ -57,6 +57,14 @@ export function initTelegramBot(token: string) {
   try {
     globalBot = new TelegramBot(token, { polling: true });
 
+    globalBot.on("polling_error", (err: any) => {
+      if (err?.code === "ETELEGRAM" && (err?.response?.statusCode === 401 || err?.message?.includes("401"))) {
+        logger.warn("Telegram bot token yaroqsiz (401) — polling to'xtatildi");
+        try { globalBot?.stopPolling(); } catch (_) {}
+        globalBot = null;
+      }
+    });
+
     globalBot.on("message", async (msg) => {
       const chatId = String(msg.chat.id);
       const text = msg.text?.trim() ?? "";
