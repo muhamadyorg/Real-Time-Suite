@@ -474,7 +474,7 @@ router.put("/:id", async (req, res) => {
       return;
     }
     const id = parseInt(req.params.id);
-    const { quantity, unit, shelf, notes, clientId, clientName, clientPhone, status } = req.body as {
+    const { quantity, unit, shelf, notes, clientId, clientName, clientPhone, status, serviceTypeId } = req.body as {
       quantity?: number;
       unit?: string;
       shelf?: string;
@@ -483,6 +483,7 @@ router.put("/:id", async (req, res) => {
       clientName?: string;
       clientPhone?: string;
       status?: string;
+      serviceTypeId?: number;
     };
 
     const updates: Record<string, unknown> = {};
@@ -494,6 +495,13 @@ router.put("/:id", async (req, res) => {
     if (clientName !== undefined) updates.clientName = clientName;
     if (clientPhone !== undefined) updates.clientPhone = clientPhone;
     if (status !== undefined) updates.status = status;
+    if (serviceTypeId !== undefined) {
+      const svcType = await db.query.serviceTypesTable.findFirst({ where: eq(serviceTypesTable.id, serviceTypeId) });
+      if (svcType) {
+        updates.serviceTypeId = serviceTypeId;
+        updates.serviceTypeName = svcType.name;
+      }
+    }
 
     if (clientId) {
       const client = await db.query.clientsTable.findFirst({ where: eq(clientsTable.id, clientId) });

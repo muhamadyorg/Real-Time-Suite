@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   Loader2, Plus, Trash2, CheckCircle, XCircle, Pencil,
   Store, Users, Layers, UserCheck, ShoppingBag, LayoutDashboard
@@ -721,8 +721,44 @@ function OrdersView() {
   const deleteOrder = useDeleteOrder();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { token } = useAuth();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [editOrder, setEditOrder] = useState<any>(null);
+  const [editServiceTypeId, setEditServiceTypeId] = useState<string>("");
+  const [editQty, setEditQty] = useState("1");
+  const [editUnit, setEditUnit] = useState("");
+  const [editShelf, setEditShelf] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editStatus, setEditStatus] = useState("new");
+
+  const openEdit = (o: any) => {
+    setEditOrder(o);
+    setEditServiceTypeId(o.serviceTypeId ? String(o.serviceTypeId) : "");
+    setEditQty(String(o.quantity ?? 1));
+    setEditUnit(o.unit ?? "");
+    setEditShelf(o.shelf ?? "");
+    setEditNotes(o.notes ?? "");
+    setEditStatus(o.status ?? "new");
+  };
+
+  const editMutation = useMutation({
+    mutationFn: async (body: any) => {
+      const res = await fetch(`/api/orders/${editOrder.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || "Xatolik"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
+      toast({ title: "✅ Zakaz yangilandi" });
+      setEditOrder(null);
+    },
+    onError: (e: any) => toast({ title: "Xatolik", description: e.message, variant: "destructive" }),
+  });
   const [newStoreId, setNewStoreId] = useState<string>("none");
   const [newServiceTypeId, setNewServiceTypeId] = useState<string>("none");
   const [newQty, setNewQty] = useState("1");
@@ -860,15 +896,89 @@ function OrdersView() {
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{format(new Date(o.createdAt), "dd.MM.yy HH:mm")}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(o)}>
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(o)}>
+                        <Pencil className="w-4 h-4 text-primary" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(o)}>
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
           </TableBody>
         </Table>
       </Card>
+
+      <Dialog open={!!editOrder} onOpenChange={() => setEditOrder(null)}>
+        <DialogContent className="w-full max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-primary" />
+              Zakazni tahrirlash — {editOrder?.orderId}
+            </DialogTitle>
+            <DialogDescription>Ma'lumotlarni yangilang</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Xizmat turi</Label>
+              <Select value={editServiceTypeId} onValueChange={setEditServiceTypeId}>
+                <SelectTrigger><SelectValue placeholder="Tanlang..." /></SelectTrigger>
+                <SelectContent>
+                  {serviceTypes?.map(st => <SelectItem key={st.id} value={st.id.toString()}>{st.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Miqdor</Label>
+                <Input type="number" min="0.01" step="0.01" value={editQty} onChange={e => setEditQty(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>O'lchov</Label>
+                <Input placeholder="kg, ta, m..." value={editUnit} onChange={e => setEditUnit(e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Qolib (Shelf)</Label>
+              <Input placeholder="A-12" value={editShelf} onChange={e => setEditShelf(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Izoh</Label>
+              <Input placeholder="Qo'shimcha ma'lumot..." value={editNotes} onChange={e => setEditNotes(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Holat</Label>
+              <Select value={editStatus} onValueChange={setEditStatus}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new">Yangi</SelectItem>
+                  <SelectItem value="accepted">Qabul qilindi</SelectItem>
+                  <SelectItem value="ready">Tayyor</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditOrder(null)}>Bekor qilish</Button>
+            <Button
+              disabled={editMutation.isPending}
+              onClick={() => editMutation.mutate({
+                serviceTypeId: editServiceTypeId ? Number(editServiceTypeId) : undefined,
+                quantity: Number(editQty),
+                unit: editUnit || null,
+                shelf: editShelf || null,
+                notes: editNotes || null,
+                status: editStatus,
+              })}
+            >
+              {editMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Saqlash
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

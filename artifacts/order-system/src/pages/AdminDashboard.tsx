@@ -8,16 +8,17 @@ import {
   getGetOrdersQueryKey,
   useGetServiceTypes,
   useGetClients,
-  useCreateOrder
+  useCreateOrder,
+  useDeleteOrder
 } from "@workspace/api-client-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
-import { Search, Loader2, Plus, Users, X, QrCode, Hash, Clock, Package, CheckCircle, Phone, User, FileText, Building2 } from "lucide-react";
+import { Search, Loader2, Plus, Users, X, QrCode, Hash, Clock, Package, CheckCircle, Phone, User, FileText, Building2, Pencil, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -30,7 +31,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   ready: { label: "Tayyor!", color: "text-green-600 bg-green-50 border border-green-200" },
 };
 
-function OrderDetailModal({ order, open, onClose }: { order: any, open: boolean, onClose: () => void }) {
+function OrderDetailModal({ order, open, onClose, onEdit, onDelete, canEditDelete }: { order: any, open: boolean, onClose: () => void, onEdit?: () => void, onDelete?: () => void, canEditDelete?: boolean }) {
   if (!order) return null;
   const baseUrl = window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, "");
   const qrUrl = `${baseUrl}/order/${order.orderId.replace(/^#/, "")}`;
@@ -145,6 +146,18 @@ function OrderDetailModal({ order, open, onClose }: { order: any, open: boolean,
             </div>
             <p className="text-xs text-muted-foreground mt-2 text-center break-all">{qrUrl}</p>
           </div>
+          {canEditDelete && (
+            <div className="flex gap-2 pt-2 border-t">
+              <Button variant="outline" className="flex-1 gap-2 border-blue-300 text-blue-600 hover:bg-blue-50" onClick={() => { onClose(); onEdit?.(); }}>
+                <Pencil className="w-4 h-4" />
+                Tahrirlash
+              </Button>
+              <Button variant="outline" className="flex-1 gap-2 border-red-300 text-red-600 hover:bg-red-50" onClick={() => { onClose(); onDelete?.(); }}>
+                <Trash2 className="w-4 h-4" />
+                O'chirish
+              </Button>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -251,6 +264,171 @@ function ClientSearch({ clients, value, onChange }: { clients: any[], value: str
         </div>
       )}
     </div>
+  );
+}
+
+function EditOrderModal({ order, open, onClose, storeId }: { order: any, open: boolean, onClose: () => void, storeId: number }) {
+  const { token } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: serviceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId] } });
+  const { data: clients } = useGetClients({ status: 'approved' }, { query: { queryKey: ["getClients", { status: 'approved' }] } });
+
+  const [serviceTypeId, setServiceTypeId] = useState<string>("");
+  const [quantity, setQuantity] = useState("1");
+  const [unit, setUnit] = useState("");
+  const [shelf, setShelf] = useState("");
+  const [notes, setNotes] = useState("");
+  const [status, setStatus] = useState<string>("new");
+  const [isClientManual, setIsClientManual] = useState(false);
+  const [clientId, setClientId] = useState<string>("");
+  const [clientName, setClientName] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+
+  useEffect(() => {
+    if (order && open) {
+      setServiceTypeId(order.serviceTypeId ? String(order.serviceTypeId) : "");
+      setQuantity(String(order.quantity ?? 1));
+      setUnit(order.unit ?? "");
+      setShelf(order.shelf ?? "");
+      setNotes(order.notes ?? "");
+      setStatus(order.status ?? "new");
+      if (order.clientId) {
+        setIsClientManual(false);
+        setClientId(String(order.clientId));
+        setClientName(order.clientName ?? "");
+        setClientPhone(order.clientPhone ?? "");
+      } else if (order.clientName || order.clientPhone) {
+        setIsClientManual(true);
+        setClientId("");
+        setClientName(order.clientName ?? "");
+        setClientPhone(order.clientPhone ?? "");
+      } else {
+        setIsClientManual(false);
+        setClientId("");
+        setClientName("");
+        setClientPhone("");
+      }
+    }
+  }, [order, open]);
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await fetch(`/api/orders/${order.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || "Xatolik"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["getOrders"] });
+      toast({ title: "✅ Zakaz yangilandi" });
+      onClose();
+    },
+    onError: (e: any) => toast({ title: "Xatolik", description: e.message, variant: "destructive" }),
+  });
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+    const body: any = {
+      quantity: Number(quantity),
+      unit: unit || null,
+      shelf: shelf || null,
+      notes: notes || null,
+      status,
+    };
+    if (serviceTypeId) body.serviceTypeId = Number(serviceTypeId);
+    if (clientId) { body.clientId = Number(clientId); }
+    else { body.clientName = clientName || null; body.clientPhone = clientPhone || null; body.clientId = null; }
+    updateMutation.mutate(body);
+  };
+
+  if (!order) return null;
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="w-full max-w-sm mx-4 max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+          <DialogTitle className="text-xl font-bold flex items-center gap-2">
+            <Pencil className="w-5 h-5 text-primary" />
+            Zakazni tahrirlash — {order.orderId}
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={onSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            <div className="space-y-2">
+              <Label>Xizmat turi</Label>
+              <Select value={serviceTypeId} onValueChange={setServiceTypeId}>
+                <SelectTrigger className="h-12 bg-card">
+                  <SelectValue placeholder="Xizmat turini tanlang" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(serviceTypes ?? []).filter((s: any) => s.storeId === storeId || !s.storeId).map((s: any) => (
+                    <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Miqdor</Label>
+                <Input type="number" min="0.01" step="0.01" value={quantity} onChange={e => setQuantity(e.target.value)} className="h-12 bg-card" required />
+              </div>
+              <div className="space-y-2">
+                <Label>O'lchov</Label>
+                <Input placeholder="kg, ta, m..." value={unit} onChange={e => setUnit(e.target.value)} className="h-12 bg-card" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Qolib (Shelf)</Label>
+              <Input placeholder="Qolib raqami..." value={shelf} onChange={e => setShelf(e.target.value)} className="h-12 bg-card" />
+            </div>
+            <div className="space-y-2">
+              <Label>Holat</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="h-12 bg-card">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new">Yangi</SelectItem>
+                  <SelectItem value="accepted">Qabul qilindi</SelectItem>
+                  <SelectItem value="ready">Tayyor</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="p-4 bg-muted/50 rounded-xl border space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-2"><Users className="w-4 h-4 text-primary" />Mijoz</Label>
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground cursor-pointer">Qo'lda</Label>
+                  <Switch checked={isClientManual} onCheckedChange={v => { setIsClientManual(v); setClientId(""); setClientName(""); setClientPhone(""); }} />
+                </div>
+              </div>
+              {!isClientManual ? (
+                <ClientSearch clients={clients ?? []} value={clientId} onChange={(id, name, phone) => { setClientId(id); setClientName(name); setClientPhone(phone); }} />
+              ) : (
+                <div className="space-y-3">
+                  <Input placeholder="Ism / Familiya" value={clientName} onChange={e => setClientName(e.target.value)} className="h-12 bg-card" />
+                  <Input placeholder="+998..." value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="h-12 bg-card" />
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Izoh</Label>
+              <Input placeholder="Buyurtma haqida izoh..." value={notes} onChange={e => setNotes(e.target.value)} className="h-12 bg-card" />
+            </div>
+          </div>
+          <DialogFooter className="px-6 pb-6 pt-4 border-t shrink-0">
+            <Button type="submit" size="lg" className="w-full h-14 text-lg font-bold" disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
+              SAQLASH
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -448,8 +626,24 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [editingOrder, setEditingOrder] = useState<any>(null);
+  const [deletingOrder, setDeletingOrder] = useState<any>(null);
 
   const isViewer = role === 'viewer';
+  const canEditDelete = role === 'sudo' || role === 'superadmin' || role === 'admin';
+
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const deleteOrderMutation = useDeleteOrder({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["getOrders"] });
+        toast({ title: "✅ Zakaz o'chirildi" });
+        setDeletingOrder(null);
+      },
+      onError: () => toast({ title: "Xatolik", description: "O'chirib bo'lmadi", variant: "destructive" }),
+    }
+  });
 
   useSocket(token, storeId);
 
@@ -573,7 +767,42 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         order={selectedOrder}
         open={!!selectedOrder}
         onClose={() => setSelectedOrder(null)}
+        canEditDelete={canEditDelete}
+        onEdit={() => setEditingOrder(selectedOrder)}
+        onDelete={() => setDeletingOrder(selectedOrder)}
       />
+
+      <EditOrderModal
+        order={editingOrder}
+        open={!!editingOrder}
+        onClose={() => setEditingOrder(null)}
+        storeId={storeId!}
+      />
+
+      <Dialog open={!!deletingOrder} onOpenChange={() => setDeletingOrder(null)}>
+        <DialogContent className="w-full max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="w-5 h-5" />
+              Zakazni o'chirish
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-mono font-bold">{deletingOrder?.orderId}</span> zakazini o'chirmoqchisiz. Bu amalni qaytarib bo'lmaydi.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeletingOrder(null)}>Bekor qilish</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteOrderMutation.isPending}
+              onClick={() => deletingOrder && deleteOrderMutation.mutate({ id: deletingOrder.id })}
+            >
+              {deleteOrderMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              O'chirish
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
