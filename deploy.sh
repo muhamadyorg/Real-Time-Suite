@@ -11,7 +11,7 @@ echo "=== Frontend build ==="
 PORT=3000 BASE_PATH=/ pnpm --filter @workspace/order-system run build
 
 echo "=== PM2 restart ==="
-pm2 restart api-server
+pm2 restart zakaz-api
 
 echo "=== Tayyor! ==="
 pm2 status
