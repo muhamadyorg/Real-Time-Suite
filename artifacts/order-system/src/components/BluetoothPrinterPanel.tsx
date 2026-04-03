@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { printOrderLabel } from "@/lib/printUtils";
 import { useBTPrinter, DEFAULT_LABEL_CONFIG, PRINTER_PROFILES, buildLabel, buildSimpleTest } from "@/hooks/useBTPrinter";
 import type { LabelConfig } from "@/hooks/useBTPrinter";
 import { Button } from "@/components/ui/button";
@@ -74,47 +75,7 @@ export default function BluetoothPrinterPanel() {
       createdAt: new Date().toISOString(),
     };
     const widthMm = labelConfig.widthDots >= 500 ? 80 : 58;
-    const dateStr = new Date(order.createdAt).toLocaleString("uz-UZ");
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8"/>
-<style>
-  @page {
-    size: ${widthMm}mm auto;
-    margin: 2mm;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Courier New', monospace; }
-  body { width: ${widthMm - 4}mm; font-size: 11px; }
-  .center { text-align: center; }
-  .bold { font-weight: bold; }
-  .big { font-size: 16px; font-weight: bold; }
-  .medium { font-size: 13px; font-weight: bold; }
-  .hr { border-top: 1px dashed #000; margin: 3px 0; }
-  .row { display: flex; justify-content: space-between; }
-  .label { color: #555; }
-  .barcode { font-size: 10px; margin-top: 2px; }
-</style>
-</head>
-<body>
-  <div class="center bold big">${order.storeId ?? "DO'KON"}</div>
-  <div class="center medium">№${order.id ?? "0001"}</div>
-  <div class="hr"></div>
-  <div class="row"><span class="label">Xizmat:</span><span>${order.serviceTypeName}</span></div>
-  <div class="row"><span class="label">Mahsulot:</span><span>${order.product}</span></div>
-  <div class="row"><span class="label">Miqdor:</span><span>${order.quantity} ${order.unit}</span></div>
-  <div class="row"><span class="label">Javon:</span><span class="bold">${order.shelf}</span></div>
-  <div class="hr"></div>
-  <div class="row"><span class="label">Mijoz:</span><span>${order.clientName}</span></div>
-  <div class="center barcode">${dateStr}</div>
-</body>
-</html>`;
-    const w = window.open("", "_blank", `width=400,height=600`);
-    if (!w) { alert("Pop-up bloklangan! Brauzerni ruxsat bering."); return; }
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    setTimeout(() => { w.print(); }, 400);
+    printOrderLabel(order, widthMm);
   };
 
   const labelByteCount = buildLabel(
