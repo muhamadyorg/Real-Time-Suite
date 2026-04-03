@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
+import { PrintLabelButton } from "@/components/PrintLabelButton";
 import { Search, Loader2, X, QrCode, Clock, CheckCircle, Package, Hash, User, Phone, FileText, Building2, Plus, Users, Lock, Split } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -150,6 +151,7 @@ function OrderDetailModal({ order, open, onClose }: { order: any, open: boolean,
             </div>
             <p className="text-xs text-muted-foreground mt-2 text-center break-all">{qrUrl}</p>
           </div>
+          <PrintLabelButton order={order} />
         </div>
       </DialogContent>
     </Dialog>

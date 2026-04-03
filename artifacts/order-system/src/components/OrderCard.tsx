@@ -1,5 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { format } from "date-fns";
+import { PrintLabelButton } from "./PrintLabelButton";
 
 export function HighlightText({ text, search }: { text?: string | null, search?: string }) {
   if (!text) return null;
@@ -50,8 +51,11 @@ export function OrderCard({ order, search = "", actionButton, onOrderClick }: Or
               </span>
             )}
           </div>
-          <div className="text-sm font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md shrink-0">
-            <HighlightText text={format(new Date(order.createdAt), "HH:mm")} search={search} />
+          <div className="flex items-center gap-1 shrink-0">
+            <PrintLabelButton order={order} variant="icon" />
+            <div className="text-sm font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md">
+              <HighlightText text={format(new Date(order.createdAt), "HH:mm")} search={search} />
+            </div>
           </div>
         </div>
 

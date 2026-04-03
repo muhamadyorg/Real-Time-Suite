@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
+import { PrintLabelButton } from "@/components/PrintLabelButton";
 import { Search, Loader2, Plus, Users, X, QrCode, Hash, Clock, Package, CheckCircle, Phone, User, FileText, Building2, Pencil, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -152,6 +153,7 @@ function OrderDetailModal({ order, open, onClose, onEdit, onDelete, canEditDelet
             </div>
             <p className="text-xs text-muted-foreground mt-2 text-center break-all">{qrUrl}</p>
           </div>
+          <PrintLabelButton order={order} />
           {canEditDelete && (
             <div className="flex gap-2 pt-2 border-t">
               <Button variant="outline" className="flex-1 gap-2 border-blue-300 text-blue-600 hover:bg-blue-50" onClick={() => { onClose(); onEdit?.(); }}>
