@@ -28,7 +28,7 @@ function pushStr(bytes: number[], s: string) {
   }
 }
 
-// 30x30mm: 240 dots wide, ~16 chars/line normal, ~8 double-width
+// 58x40mm: 384 dots wide, ~32 chars/line normal, ~16 double-width
 function buildLabel(order: any): Uint8Array {
   const bytes: number[] = [];
   const ESC = 0x1B;
@@ -42,30 +42,30 @@ function buildLabel(order: any): Uint8Array {
 
   push(ESC, 0x40);
 
-  // Set print width 240 dots (30mm)
-  push(GS, 0x57, 0xF0, 0x00);
+  // Set print width 384 dots (58mm @ 203dpi)
+  push(GS, 0x57, 0x80, 0x01);
 
-  // Order ID — center, bold, double-width
+  // Order ID — center, bold, double-width+height
   push(ESC, 0x61, 0x01);
   push(ESC, 0x45, 0x01);
-  push(GS, 0x21, 0x10);
+  push(GS, 0x21, 0x11);
   str(order.orderId);
   push(LF);
   push(GS, 0x21, 0x00);
   push(ESC, 0x45, 0x00);
 
   // Separator
-  line("----------------");
+  line("--------------------------------");
 
-  // Service — bold, double-height
+  // Service — center, bold, double-height
   push(GS, 0x21, 0x01);
   push(ESC, 0x45, 0x01);
-  str((order.serviceTypeName ?? "").slice(0, 14));
+  str((order.serviceTypeName ?? "").slice(0, 22));
   push(LF);
   push(GS, 0x21, 0x00);
   push(ESC, 0x45, 0x00);
 
-  // Quantity — bold, double-width
+  // Quantity — center, bold, double-width
   push(GS, 0x21, 0x10);
   push(ESC, 0x45, 0x01);
   str(`${order.quantity}${order.unit ? " " + order.unit : ""}`);
@@ -75,9 +75,9 @@ function buildLabel(order: any): Uint8Array {
 
   // Details — left
   push(ESC, 0x61, 0x00);
-  if (order.shelf)      line(`Q:${order.shelf}`);
-  if (order.product)    line(`M:${(order.product ?? "").slice(0, 15)}`);
-  if (order.clientName) line(`C:${(order.clientName ?? "").slice(0, 15)}`);
+  if (order.shelf)      line(`Qolib: ${order.shelf}`);
+  if (order.product)    line(`Mahsulot: ${(order.product ?? "").slice(0, 20)}`);
+  if (order.clientName) line(`Mijoz: ${(order.clientName ?? "").slice(0, 20)}`);
 
   // Date — center
   push(ESC, 0x61, 0x01);
@@ -87,7 +87,8 @@ function buildLabel(order: any): Uint8Array {
     .getMinutes().toString().padStart(2, "0")}`;
   line(ts);
 
-  push(ESC, 0x64, 0x02);
+  // Feed 5 lines then form-feed
+  push(ESC, 0x64, 0x05);
   push(FF);
 
   return new Uint8Array(bytes);
