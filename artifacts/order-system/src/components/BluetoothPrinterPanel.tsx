@@ -67,6 +67,56 @@ export default function BluetoothPrinterPanel() {
 
   const handleConnect = () => connect();
 
+  const printAsBrowserPdf = () => {
+    const order = {
+      ...testOrder,
+      quantity: parseFloat(testOrder.quantity) || 1,
+      createdAt: new Date().toISOString(),
+    };
+    const widthMm = labelConfig.widthDots >= 500 ? 80 : 58;
+    const dateStr = new Date(order.createdAt).toLocaleString("uz-UZ");
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>
+  @page {
+    size: ${widthMm}mm auto;
+    margin: 2mm;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Courier New', monospace; }
+  body { width: ${widthMm - 4}mm; font-size: 11px; }
+  .center { text-align: center; }
+  .bold { font-weight: bold; }
+  .big { font-size: 16px; font-weight: bold; }
+  .medium { font-size: 13px; font-weight: bold; }
+  .hr { border-top: 1px dashed #000; margin: 3px 0; }
+  .row { display: flex; justify-content: space-between; }
+  .label { color: #555; }
+  .barcode { font-size: 10px; margin-top: 2px; }
+</style>
+</head>
+<body>
+  <div class="center bold big">${order.storeId ?? "DO'KON"}</div>
+  <div class="center medium">№${order.id ?? "0001"}</div>
+  <div class="hr"></div>
+  <div class="row"><span class="label">Xizmat:</span><span>${order.serviceTypeName}</span></div>
+  <div class="row"><span class="label">Mahsulot:</span><span>${order.product}</span></div>
+  <div class="row"><span class="label">Miqdor:</span><span>${order.quantity} ${order.unit}</span></div>
+  <div class="row"><span class="label">Javon:</span><span class="bold">${order.shelf}</span></div>
+  <div class="hr"></div>
+  <div class="row"><span class="label">Mijoz:</span><span>${order.clientName}</span></div>
+  <div class="center barcode">${dateStr}</div>
+</body>
+</html>`;
+    const w = window.open("", "_blank", `width=400,height=600`);
+    if (!w) { alert("Pop-up bloklangan! Brauzerni ruxsat bering."); return; }
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => { w.print(); }, 400);
+  };
+
   const labelByteCount = buildLabel(
     { ...testOrder, quantity: parseFloat(testOrder.quantity) || 1, createdAt: new Date().toISOString() },
     labelConfig
@@ -320,7 +370,19 @@ export default function BluetoothPrinterPanel() {
           </div>
           {field("Mijoz ismi", "clientName", "Alisher Karimov")}
 
-          {/* Simple test — plain text, no ESC/POS styling */}
+          {/* Browser PDF print — no BLE, no ESC/POS */}
+          <Button
+            className="w-full h-12 text-base font-bold bg-green-600 hover:bg-green-700 text-white"
+            onClick={printAsBrowserPdf}
+          >
+            <Printer className="w-5 h-5 mr-2" />
+            Browser orqali chop et (PDF usuli — BLE shart emas)
+          </Button>
+          <p className="text-xs text-muted-foreground text-center -mt-1">
+            Yangi oyna ochiladi → printer XP-365B ni tanlang → Print
+          </p>
+
+          {/* Simple ESC/POS raw test */}
           <Button
             className="w-full h-10 text-sm"
             variant="outline"
@@ -328,10 +390,10 @@ export default function BluetoothPrinterPanel() {
             disabled={isBusy}
           >
             <Zap className="w-4 h-4 mr-2" />
-            Oddiy test (ESC/POS yo'q) — birinchi shu ni sinab ko'ring
+            ESC/POS raw test (BLE Bluetooth)
           </Button>
 
-          {/* Full label print */}
+          {/* Full label print ESC/POS */}
           <Button
             className="w-full h-12 text-base font-bold"
             onClick={handlePrint}
