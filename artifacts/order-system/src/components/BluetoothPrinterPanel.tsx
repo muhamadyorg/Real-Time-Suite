@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useBTPrinter, DEFAULT_LABEL_CONFIG, PRINTER_PROFILES, buildLabel } from "@/hooks/useBTPrinter";
+import { useBTPrinter, DEFAULT_LABEL_CONFIG, PRINTER_PROFILES, buildLabel, buildSimpleTest } from "@/hooks/useBTPrinter";
 import type { LabelConfig } from "@/hooks/useBTPrinter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +29,7 @@ const PAPER_PRESETS = [
 
 export default function BluetoothPrinterPanel() {
   const {
-    print, connect, disconnect,
+    print, printRaw, connect, disconnect,
     status, errorMsg,
     printerName, profileName, serviceUuid, charUuid,
     allServices, isConnected, isSupported,
@@ -320,6 +320,18 @@ export default function BluetoothPrinterPanel() {
           </div>
           {field("Mijoz ismi", "clientName", "Alisher Karimov")}
 
+          {/* Simple test — plain text, no ESC/POS styling */}
+          <Button
+            className="w-full h-10 text-sm"
+            variant="outline"
+            onClick={() => printRaw(buildSimpleTest(), "Oddiy matn test")}
+            disabled={isBusy}
+          >
+            <Zap className="w-4 h-4 mr-2" />
+            Oddiy test (ESC/POS yo'q) — birinchi shu ni sinab ko'ring
+          </Button>
+
+          {/* Full label print */}
           <Button
             className="w-full h-12 text-base font-bold"
             onClick={handlePrint}
@@ -329,7 +341,7 @@ export default function BluetoothPrinterPanel() {
               ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Chop etmoqda... ({labelBytes} bayt)</>
               : status === "done"
               ? <><CheckCircle2 className="w-5 h-5 mr-2" /> Muvaffaqiyatli chop etildi!</>
-              : <><Printer className="w-5 h-5 mr-2" /> Test chop etish</>
+              : <><Printer className="w-5 h-5 mr-2" /> To'liq yorliq chop etish</>
             }
           </Button>
 

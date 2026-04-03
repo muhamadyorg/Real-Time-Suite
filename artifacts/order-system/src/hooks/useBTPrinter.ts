@@ -2,8 +2,9 @@ import { useState, useCallback, useEffect } from "react";
 
 // Known XPrinter / thermal BLE printer service+characteristic pairs (priority order)
 export const PRINTER_PROFILES = [
-  { svc: "0000ff00-0000-1000-8000-00805f9b34fb", char: "0000ff02-0000-1000-8000-00805f9b34fb", name: "XPrinter-FF02" },
+  // XPrinter: FF01 = TX (chop etish), FF02 = RX (status) — FF01 birinchi!
   { svc: "0000ff00-0000-1000-8000-00805f9b34fb", char: "0000ff01-0000-1000-8000-00805f9b34fb", name: "XPrinter-FF01" },
+  { svc: "0000ff00-0000-1000-8000-00805f9b34fb", char: "0000ff02-0000-1000-8000-00805f9b34fb", name: "XPrinter-FF02" },
   { svc: "6e400001-b5a3-f393-e0a9-e50e24dcca9e", char: "6e400002-b5a3-f393-e0a9-e50e24dcca9e", name: "NUS (Nordic UART)" },
   { svc: "49535343-fe7d-4ae5-8fa9-9fafd205e455", char: "49535343-1e4d-4bd9-ba61-23c647249616", name: "Isotemp" },
   { svc: "000018f0-0000-1000-8000-00805f9b34fb", char: "000018f1-0000-1000-8000-00805f9b34fb", name: "Peripage" },
@@ -62,21 +63,37 @@ function pushStr(bytes: number[], s: string) {
   }
 }
 
+// Minimal test: just plain text + line feeds (no ESC/POS styling)
+export function buildSimpleTest(): Uint8Array {
+  const bytes: number[] = [];
+  const ESC = 0x1B;
+  const LF  = 0x0A;
+  const push = (...b: number[]) => bytes.push(...b);
+  const line = (s: string) => { for (const c of s) push(c.charCodeAt(0) < 128 ? c.charCodeAt(0) : 63); push(LF); };
+
+  push(ESC, 0x40);           // Initialize
+  line("================================");
+  line("   BT PRINTER TEST - OK!");
+  line("================================");
+  line("XP-365B ulangan");
+  line("FF01 kanal ishlayapti");
+  line("--------------------------------");
+  push(ESC, 0x64, 0x05);    // Feed 5 lines
+  return new Uint8Array(bytes);
+}
+
 export function buildLabel(order: any, config: LabelConfig = DEFAULT_LABEL_CONFIG): Uint8Array {
   const bytes: number[] = [];
   const ESC = 0x1B;
   const GS  = 0x1D;
   const LF  = 0x0A;
-  const FF  = 0x0C;
 
   const push = (...b: number[]) => bytes.push(...b);
   const str  = (s: string) => pushStr(bytes, s);
   const line = (s: string) => { str(s); push(LF); };
 
+  // Initialize printer
   push(ESC, 0x40);
-
-  // Set print width
-  push(GS, 0x57, config.paperDots & 0xFF, (config.paperDots >> 8) & 0xFF);
 
   // Order ID — center, bold, double-width+height
   push(ESC, 0x61, 0x01);
@@ -87,6 +104,7 @@ export function buildLabel(order: any, config: LabelConfig = DEFAULT_LABEL_CONFI
   push(GS, 0x21, 0x00);
   push(ESC, 0x45, 0x00);
 
+  // Separator
   line("-".repeat(config.separatorLen));
 
   // Service — center, bold, double-height
@@ -107,11 +125,13 @@ export function buildLabel(order: any, config: LabelConfig = DEFAULT_LABEL_CONFI
   push(GS, 0x21, 0x00);
   push(ESC, 0x45, 0x00);
 
+  // Details — left align
   push(ESC, 0x61, 0x00);
   if (order.shelf)      line(`Qolib: ${order.shelf}`);
   if (order.product)    line(`Mahsulot: ${(order.product ?? "").slice(0, 20)}`);
   if (order.clientName) line(`Mijoz: ${(order.clientName ?? "").slice(0, 20)}`);
 
+  // Date — center
   push(ESC, 0x61, 0x01);
   const d  = new Date(order.createdAt ?? Date.now());
   const ts = `${d.getDate().toString().padStart(2, "0")}.${(d.getMonth() + 1)
@@ -119,8 +139,8 @@ export function buildLabel(order: any, config: LabelConfig = DEFAULT_LABEL_CONFI
     .getMinutes().toString().padStart(2, "0")}`;
   line(ts);
 
-  push(ESC, 0x64, config.feedLines);
-  push(FF);
+  // Feed N lines (no FF — more compatible)
+  push(ESC, 0x64, Math.max(1, config.feedLines));
 
   return new Uint8Array(bytes);
 }
@@ -256,6 +276,7 @@ export interface PrintLogEntry {
 
 export interface BTPrinterState {
   print: (order: any, config?: LabelConfig) => Promise<void>;
+  printRaw: (data: Uint8Array, label?: string) => Promise<void>;
   connect: () => Promise<void>;
   disconnect: () => void;
   status: PrintStatus;
@@ -382,6 +403,40 @@ export function useBTPrinter(): BTPrinterState {
     }
   }, [isSupported]);
 
+  const printRaw = useCallback(async (data: Uint8Array, label = "Raw") => {
+    if (!isSupported) return;
+    const t0 = Date.now();
+    try {
+      setStatus("connecting");
+      setErrorMsg(null);
+      const char = await connectDevice();
+      if (_device?.name) setPrinterName(_device.name);
+      setProfileName(_lastProfileName);
+      setServiceUuid(_lastServiceUuid);
+      setCharUuid(_lastCharUuid);
+      setAllServices([..._allServices]);
+      setIsConnected(true);
+      setStatus("printing");
+      setLabelBytes(data.length);
+      console.log(`[BTPrinter] RAW ${data.length} bytes via ${_lastProfileName}...`);
+      await sendChunked(char, data);
+      console.log("[BTPrinter] ✅ Raw done!");
+      setStatus("done");
+      addLog({ time: new Date().toLocaleTimeString("uz-UZ"), status: "done", msg: `${label} | ${data.length} bayt | ${_lastProfileName}`, ms: Date.now() - t0 });
+      setTimeout(() => setStatus("idle"), 3000);
+    } catch (err: any) {
+      const msg: string = err?.message ?? "Noma'lum xatolik";
+      const cancelled = msg.includes("cancelled") || msg.includes("chosen") || err?.code === 8;
+      setStatus("error");
+      const displayMsg = cancelled ? "Qurilma tanlanmadi (bekor qilindi)" : msg;
+      setErrorMsg(displayMsg);
+      _char = null;
+      setIsConnected(false);
+      addLog({ time: new Date().toLocaleTimeString("uz-UZ"), status: "error", msg: displayMsg, ms: Date.now() - t0 });
+      setTimeout(() => setStatus("idle"), 8000);
+    }
+  }, [isSupported]);
+
   const disconnect = useCallback(() => {
     if (_device?.gatt?.connected) _device.gatt.disconnect();
     _device = null;
@@ -401,7 +456,7 @@ export function useBTPrinter(): BTPrinterState {
   }, []);
 
   return {
-    print, connect, disconnect,
+    print, printRaw, connect, disconnect,
     status, errorMsg,
     printerName, profileName,
     serviceUuid, charUuid,
