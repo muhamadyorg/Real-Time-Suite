@@ -67,6 +67,13 @@ export function OrderCard({ order, search = "", actionButton, onOrderClick }: Or
               <span className="font-semibold font-mono text-foreground"><HighlightText text={order.shelf} search={search} /></span>
             </div>
           )}
+
+          {order.product && (
+            <div className="flex justify-between items-center pb-1 border-b border-border/50">
+              <span className="text-muted-foreground">Mahsulot:</span>
+              <span className="font-semibold text-foreground"><HighlightText text={order.product} search={search} /></span>
+            </div>
+          )}
           
           {order.clientName && (
             <div className="flex justify-between items-center pb-1 border-b border-border/50">

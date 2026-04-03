@@ -21,8 +21,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   Loader2, Plus, Trash2, CheckCircle, XCircle, Pencil,
-  Store, Users, Layers, UserCheck, ShoppingBag, LayoutDashboard
+  Store, Users, Layers, UserCheck, ShoppingBag, LayoutDashboard, Package
 } from "lucide-react";
+import ProductsView from "@/components/ProductsView";
 import { format } from "date-fns";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -987,6 +988,7 @@ const NAV_ITEMS = [
   { key: "stores", label: "Do'konlar", icon: Store },
   { key: "accounts", label: "Hisoblar", icon: Users },
   { key: "services", label: "Xizmatlar", icon: Layers },
+  { key: "products", label: "Mahsulotlar", icon: Package },
   { key: "clients", label: "Mijozlar", icon: UserCheck },
   { key: "orders", label: "Zakazlar", icon: ShoppingBag },
 ];
@@ -999,6 +1001,7 @@ export default function SudoDashboard() {
     stores: <StoresView />,
     accounts: <AccountsView />,
     services: <ServiceTypesView />,
+    products: <div className="p-5 max-w-4xl mx-auto"><ProductsView /></div>,
     clients: <ClientsView />,
     orders: <OrdersView />
   };

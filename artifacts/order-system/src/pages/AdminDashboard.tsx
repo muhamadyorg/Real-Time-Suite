@@ -74,6 +74,12 @@ function OrderDetailModal({ order, open, onClose, onEdit, onDelete, canEditDelet
                 <span className="font-mono font-semibold">{order.shelf}</span>
               </div>
             )}
+            {order.product && (
+              <div className="flex justify-between items-center border-t border-border/50 pt-2">
+                <span className="text-sm text-muted-foreground">Mahsulot</span>
+                <span className="font-semibold text-primary">{order.product}</span>
+              </div>
+            )}
           </div>
           {(order.clientName || order.clientPhone) && (
             <div className="bg-muted/40 rounded-xl p-4 space-y-2">
@@ -278,6 +284,7 @@ function EditOrderModal({ order, open, onClose, storeId }: { order: any, open: b
   const [quantity, setQuantity] = useState("1");
   const [unit, setUnit] = useState("");
   const [shelf, setShelf] = useState("");
+  const [product, setProduct] = useState("");
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<string>("new");
   const [isClientManual, setIsClientManual] = useState(false);
@@ -291,6 +298,7 @@ function EditOrderModal({ order, open, onClose, storeId }: { order: any, open: b
       setQuantity(String(order.quantity ?? 1));
       setUnit(order.unit ?? "");
       setShelf(order.shelf ?? "");
+      setProduct(order.product ?? "");
       setNotes(order.notes ?? "");
       setStatus(order.status ?? "new");
       if (order.clientId) {
@@ -337,6 +345,7 @@ function EditOrderModal({ order, open, onClose, storeId }: { order: any, open: b
       quantity: Number(quantity),
       unit: unit || null,
       shelf: shelf || null,
+      product: product || null,
       notes: notes || null,
       status,
     };
@@ -386,6 +395,10 @@ function EditOrderModal({ order, open, onClose, storeId }: { order: any, open: b
               <Input placeholder="Qolib raqami..." value={shelf} onChange={e => setShelf(e.target.value)} className="h-12 bg-card" />
             </div>
             <div className="space-y-2">
+              <Label>Mahsulot</Label>
+              <Input placeholder="Mahsulot nomi..." value={product} onChange={e => setProduct(e.target.value)} className="h-12 bg-card" />
+            </div>
+            <div className="space-y-2">
               <Label>Holat</Label>
               <Select value={status} onValueChange={setStatus}>
                 <SelectTrigger className="h-12 bg-card">
@@ -433,16 +446,19 @@ function EditOrderModal({ order, open, onClose, storeId }: { order: any, open: b
 }
 
 function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, open: boolean, onOpenChange: (v: boolean) => void }) {
+  const { token } = useAuth();
   const [serviceTypeId, setServiceTypeId] = useState<string>("");
   const [quantity, setQuantity] = useState("1");
   const [unit, setUnit] = useState("");
   const [shelf, setShelf] = useState("");
+  const [product, setProduct] = useState("");
   const [notes, setNotes] = useState("");
   
   const [isClientManual, setIsClientManual] = useState(false);
   const [clientId, setClientId] = useState<string>("");
   const [clientName, setClientName] = useState("");
   const [clientPhone, setClientPhone] = useState("");
+  const [products, setProducts] = useState<any[]>([]);
 
   const { data: serviceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId] } });
   const { data: clients } = useGetClients({ status: 'approved' }, { query: { queryKey: ["getClients", { status: 'approved' }] } });
@@ -451,16 +467,26 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  useEffect(() => {
+    setProduct("");
+    if (!serviceTypeId || !token) { setProducts([]); return; }
+    fetch(`/api/products?serviceTypeId=${serviceTypeId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }).then(r => r.json()).then(data => setProducts(Array.isArray(data) ? data.filter((p: any) => p.active) : [])).catch(() => setProducts([]));
+  }, [serviceTypeId, token]);
+
   const resetForm = () => {
     setServiceTypeId("");
     setQuantity("1");
     setUnit("");
     setShelf("");
+    setProduct("");
     setNotes("");
     setIsClientManual(false);
     setClientId("");
     setClientName("");
     setClientPhone("");
+    setProducts([]);
   };
 
   const onSubmit = (e: React.FormEvent) => {
@@ -477,6 +503,7 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
           quantity: Number(quantity),
           unit: unit || null,
           shelf: shelf || null,
+          product: product || null,
           notes: notes || null,
           clientId: !isClientManual && clientId ? Number(clientId) : null,
           clientName: isClientManual ? clientName : null,
@@ -557,6 +584,34 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
                   className="h-12 bg-card font-mono"
                 />
               </div>
+
+              {products.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Package className="w-4 h-4 text-primary" />
+                    Mahsulot
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    {products.map((p: any) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setProduct(product === p.name ? "" : p.name)}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
+                          product === p.name
+                            ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                            : "bg-card border-muted-foreground/20 hover:border-primary/50 hover:bg-muted/50"
+                        }`}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                  {product && (
+                    <div className="text-xs text-muted-foreground">Tanlangan: <span className="font-semibold text-primary">{product}</span></div>
+                  )}
+                </div>
+              )}
 
               <div className="p-4 bg-muted/50 rounded-xl border space-y-3">
                 <div className="flex items-center justify-between">

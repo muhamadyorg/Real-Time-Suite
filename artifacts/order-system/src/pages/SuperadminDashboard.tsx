@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench } from "lucide-react";
 import AdminDashboard from "./AdminDashboard";
+import ProductsView from "@/components/ProductsView";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 
@@ -358,10 +359,11 @@ export default function SuperadminDashboard() {
       
       <Tabs defaultValue="orders" className="w-full">
         <div className="bg-background border-b sticky top-[56px] z-20 px-4 py-3">
-          <TabsList className="grid grid-cols-4 w-full max-w-lg mx-auto h-11">
+          <TabsList className="grid grid-cols-5 w-full max-w-2xl mx-auto h-11">
             <TabsTrigger value="orders" className="text-xs sm:text-sm">Zakazlar</TabsTrigger>
             <TabsTrigger value="accounts" className="text-xs sm:text-sm">Ishchilar</TabsTrigger>
             <TabsTrigger value="services" className="text-xs sm:text-sm">Xizmatlar</TabsTrigger>
+            <TabsTrigger value="products" className="text-xs sm:text-sm">Mahsulot</TabsTrigger>
             <TabsTrigger value="clients" className="text-xs sm:text-sm">Mijozlar</TabsTrigger>
           </TabsList>
         </div>
@@ -376,6 +378,10 @@ export default function SuperadminDashboard() {
         
         <TabsContent value="services" className="p-5 max-w-4xl mx-auto focus-visible:outline-none">
           <ServiceTypesView storeId={storeId} />
+        </TabsContent>
+
+        <TabsContent value="products" className="p-5 max-w-4xl mx-auto focus-visible:outline-none">
+          <ProductsView storeId={storeId} />
         </TabsContent>
 
         <TabsContent value="clients" className="p-5 max-w-4xl mx-auto focus-visible:outline-none">

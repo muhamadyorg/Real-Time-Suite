@@ -17,6 +17,7 @@ export const ordersTable = pgTable("orders", {
   quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull(),
   unit: text("unit"),
   shelf: text("shelf"),
+  product: text("product"),
   notes: text("notes"),
   storeId: integer("store_id").notNull().references(() => storesTable.id),
   storeName: text("store_name").notNull(),

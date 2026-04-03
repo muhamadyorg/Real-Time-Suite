@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, ordersTable, serviceTypesTable, clientsTable, storesTable, accountsTable } from "@workspace/db";
-import { eq, and, asc, sql, isNull, lt } from "drizzle-orm";
+import { eq, and, asc, desc, sql, isNull, lt } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 import type { Server as SocketServer } from "socket.io";
 
@@ -34,6 +34,7 @@ function mapOrder(o: typeof ordersTable.$inferSelect, showLockPin = true) {
     quantity: parseFloat(o.quantity),
     unit: o.unit,
     shelf: o.shelf,
+    product: o.product,
     notes: o.notes,
     storeId: o.storeId,
     storeName: o.storeName,
@@ -168,9 +169,10 @@ router.get("/", async (req, res) => {
       conditions.push(eq(ordersTable.status, status as "new" | "accepted" | "ready"));
     }
 
+    const isReady = status === "ready";
     let orders = await db.query.ordersTable.findMany({
       where: conditions.length > 0 ? and(...conditions) : undefined,
-      orderBy: [asc(ordersTable.createdAt)],
+      orderBy: isReady ? [desc(ordersTable.readyAt), desc(ordersTable.createdAt)] : [asc(ordersTable.createdAt)],
     });
 
     if (date) {
@@ -205,11 +207,12 @@ router.post("/", async (req, res) => {
       return;
     }
 
-    const { serviceTypeId, quantity, unit, shelf, notes, clientId, clientName, clientPhone } = req.body as {
+    const { serviceTypeId, quantity, unit, shelf, product, notes, clientId, clientName, clientPhone } = req.body as {
       serviceTypeId: number;
       quantity: number;
       unit?: string;
       shelf?: string;
+      product?: string;
       notes?: string;
       clientId?: number;
       clientName?: string;
@@ -268,6 +271,7 @@ router.post("/", async (req, res) => {
         quantity: String(quantity),
         unit: unit ?? null,
         shelf: shelf ?? null,
+        product: product ?? null,
         notes: notes ?? null,
         storeId,
         storeName: store?.name ?? "Do'kon",
@@ -474,10 +478,11 @@ router.put("/:id", async (req, res) => {
       return;
     }
     const id = parseInt(req.params.id);
-    const { quantity, unit, shelf, notes, clientId, clientName, clientPhone, status, serviceTypeId } = req.body as {
+    const { quantity, unit, shelf, product, notes, clientId, clientName, clientPhone, status, serviceTypeId } = req.body as {
       quantity?: number;
       unit?: string;
       shelf?: string;
+      product?: string;
       notes?: string;
       clientId?: number;
       clientName?: string;
@@ -490,6 +495,7 @@ router.put("/:id", async (req, res) => {
     if (quantity !== undefined) updates.quantity = String(quantity);
     if (unit !== undefined) updates.unit = unit;
     if (shelf !== undefined) updates.shelf = shelf;
+    if (product !== undefined) updates.product = product;
     if (notes !== undefined) updates.notes = notes;
     if (clientId !== undefined) updates.clientId = clientId;
     if (clientName !== undefined) updates.clientName = clientName;
