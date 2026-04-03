@@ -31,6 +31,8 @@ export const ordersTable = pgTable("orders", {
   acceptedAt: timestamp("accepted_at"),
   readyAt: timestamp("ready_at"),
   lockPin: text("lock_pin"),
+  splitGroup: text("split_group"),
+  splitPart: integer("split_part"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

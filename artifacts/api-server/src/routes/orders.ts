@@ -10,7 +10,8 @@ export function setSocketIO(socketIO: SocketServer) {
 }
 
 async function generateOrderId(): Promise<string> {
-  const result = await db.select({ maxId: sql<string>`max(cast(order_id as integer))` }).from(ordersTable);
+  // Only count base orders (no dash = not a split part)
+  const result = await db.select({ maxId: sql<string>`max(cast(order_id as integer)) filter (where order_id ~ '^[0-9]+$')` }).from(ordersTable);
   const maxId = result[0]?.maxId ? parseInt(result[0].maxId) : 0;
   return String(maxId + 1).padStart(5, "0");
 }
@@ -49,6 +50,8 @@ function mapOrder(o: typeof ordersTable.$inferSelect, showLockPin = true) {
     readyAt: o.readyAt,
     lockPin: showLockPin ? o.lockPin : undefined,
     isLocked: !!o.lockPin,
+    splitGroup: o.splitGroup,
+    splitPart: o.splitPart,
     createdAt: o.createdAt,
   };
 }
@@ -376,8 +379,52 @@ router.patch("/:id/status", async (req, res) => {
       }
     }
 
-    const response = mapOrder(updatedOrder, true);
-    io?.to(`store:${updatedOrder.storeId}`).emit("order:updated", response);
+    // Auto-merge: if this order is a split part and all parts in the group are now "ready", merge them
+    let mergedOrder: typeof updatedOrder | null = null;
+    if (status === "ready" && updatedOrder.splitGroup) {
+      const allParts = await db.query.ordersTable.findMany({
+        where: eq(ordersTable.splitGroup, updatedOrder.splitGroup),
+      });
+      // Also find the part 1 (the original, which has orderId = splitGroup)
+      const part1 = await db.query.ordersTable.findFirst({
+        where: eq(ordersTable.orderId, updatedOrder.splitGroup),
+      });
+      const allOrdersInGroup = part1 ? [part1, ...allParts.filter(p => p.id !== part1.id)] : allParts;
+      const allReady = allOrdersInGroup.every(p => p.status === "ready" || p.id === updatedOrder.id);
+
+      if (allReady && allOrdersInGroup.length > 0) {
+        const totalQty = allOrdersInGroup.reduce((sum, p) => sum + parseFloat(p.quantity), 0);
+        const latestReadyAt = allOrdersInGroup.reduce((latest, p) => {
+          const t = p.id === updatedOrder.id ? (updatedOrder.readyAt ?? new Date()) : p.readyAt;
+          return t && (!latest || t > latest) ? t : latest;
+        }, null as Date | null);
+
+        // Update part 1 (original) with combined quantity, remove split info
+        const mainOrder = allOrdersInGroup.find(p => p.orderId === updatedOrder.splitGroup) ?? allOrdersInGroup[0];
+        const [merged] = await db.update(ordersTable).set({
+          quantity: String(totalQty),
+          readyAt: latestReadyAt ?? new Date(),
+          splitGroup: null,
+          splitPart: null,
+        }).where(eq(ordersTable.id, mainOrder.id)).returning();
+
+        // Delete all other parts
+        for (const part of allOrdersInGroup) {
+          if (part.id !== mainOrder.id) {
+            await db.delete(ordersTable).where(eq(ordersTable.id, part.id));
+            io?.to(`store:${mainOrder.storeId}`).emit("order:deleted", { id: part.id });
+          }
+        }
+
+        io?.to(`store:${mainOrder.storeId}`).emit("order:updated", mapOrder(merged, true));
+        mergedOrder = merged;
+      }
+    }
+
+    const response = mergedOrder ? mapOrder(mergedOrder, true) : mapOrder(updatedOrder, true);
+    if (!mergedOrder) {
+      io?.to(`store:${updatedOrder.storeId}`).emit("order:updated", response);
+    }
 
     // Telegram notification for client
     if (updatedOrder.clientId && updatedOrder.status === "accepted") {
@@ -508,8 +555,21 @@ router.post("/:id/split", async (req, res) => {
       }
     }
 
+    // Determine split group (base orderId without suffix)
+    const baseId = order.splitGroup ?? order.orderId;
+
+    // Count existing parts in this group to find next part number
+    const existingParts = await db.query.ordersTable.findMany({
+      where: eq(ordersTable.splitGroup, baseId),
+    });
+    // Parts: original (part 1 or without splitGroup) + any others
+    const highestPart = existingParts.reduce((max, p) => Math.max(max, p.splitPart ?? 1), order.splitGroup ? 0 : 1);
+    const nextPartNum = highestPart + 1;
+
+    // New remaining order gets ID = "baseId-N"
+    const newOrderId = `${baseId}-${nextPartNum}`;
+
     // Create remaining order as new
-    const newOrderId = await generateOrderId();
     const [remainingOrder] = await db.insert(ordersTable).values({
       orderId: newOrderId,
       status: "new",
@@ -528,17 +588,25 @@ router.post("/:id/split", async (req, res) => {
       createdById: order.createdById,
       createdByName: order.createdByName,
       lockPin: null,
+      splitGroup: baseId,
+      splitPart: nextPartNum,
     }).returning();
 
-    // Accept the original order with taken quantity
-    const [acceptedOrder] = await db.update(ordersTable).set({
+    // Accept the original order with taken quantity, mark as part 1 if first split
+    const acceptUpdates: any = {
       quantity: String(takeQty),
       status: "accepted",
       acceptedById: payload.accountId ?? null,
       acceptedByName: payload.name ?? null,
       acceptedAt: new Date(),
       lockPin: null,
-    }).where(eq(ordersTable.id, id)).returning();
+    };
+    if (!order.splitGroup) {
+      acceptUpdates.splitGroup = baseId;
+      acceptUpdates.splitPart = 1;
+    }
+    const [acceptedOrder] = await db.update(ordersTable).set(acceptUpdates)
+      .where(eq(ordersTable.id, id)).returning();
 
     io?.to(`store:${order.storeId}`).emit("order:updated", mapOrder(acceptedOrder, true));
     io?.to(`store:${order.storeId}`).emit("order:created", mapOrder(remainingOrder, true));

@@ -35,15 +35,22 @@ export function OrderCard({ order, search = "", actionButton, onOrderClick }: Or
     <Card className={`shadow-sm border-l-4 transition-all hover:shadow-md ${STATUS_COLORS[order.status] ?? "border-l-primary"}`}>
       <CardContent className="p-4 flex flex-col gap-3">
         <div className="flex justify-between items-start">
-          <button
-            type="button"
-            onClick={onOrderClick}
-            className={`font-bold text-lg tracking-wider font-mono ${onOrderClick ? 'text-primary hover:underline cursor-pointer' : 'cursor-default'}`}
-            disabled={!onOrderClick}
-          >
-            <HighlightText text={order.orderId} search={search} />
-          </button>
-          <div className="text-sm font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={onOrderClick}
+              className={`font-bold text-lg tracking-wider font-mono ${onOrderClick ? 'text-primary hover:underline cursor-pointer' : 'cursor-default'}`}
+              disabled={!onOrderClick}
+            >
+              <HighlightText text={order.orderId} search={search} />
+            </button>
+            {order.splitGroup && order.splitPart != null && (
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 border border-violet-200 dark:border-violet-700 shrink-0">
+                Part {order.splitPart}
+              </span>
+            )}
+          </div>
+          <div className="text-sm font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md shrink-0">
             <HighlightText text={format(new Date(order.createdAt), "HH:mm")} search={search} />
           </div>
         </div>
