@@ -28,43 +28,48 @@ function pushStr(bytes: number[], s: string) {
   }
 }
 
+// 30x30mm label layout
+// 30mm × 8 dots/mm = 240 dots wide
+// Standard font: ~20 chars/line | Double-width: ~10 chars | Double-H+W: ~10 chars
 function buildLabel(order: any): Uint8Array {
   const bytes: number[] = [];
   const ESC = 0x1B;
-  const GS = 0x1D;
-  const LF = 0x0A;
-  const FF = 0x0C;
+  const GS  = 0x1D;
+  const LF  = 0x0A;
+  const FF  = 0x0C;
 
   const push = (...b: number[]) => bytes.push(...b);
-  const str = (s: string) => pushStr(bytes, s);
+  const str  = (s: string) => pushStr(bytes, s);
   const line = (s: string) => { str(s); push(LF); };
 
-  // Initialize
+  // --- Init ---
   push(ESC, 0x40);
 
-  // Center align
-  push(ESC, 0x61, 0x01);
+  // Set print width to 240 dots (30mm @ 203dpi) — supported on most label printers
+  // GS W nL nH  (240 = 0xF0, 0x00)
+  push(GS, 0x57, 0xF0, 0x00);
 
-  // Order ID — double width + height, bold
-  push(ESC, 0x45, 0x01);
-  push(GS, 0x21, 0x11);
+  // --- Order ID: centered, bold, double-width only ---
+  push(ESC, 0x61, 0x01);           // center
+  push(ESC, 0x45, 0x01);           // bold on
+  push(GS, 0x21, 0x10);            // double-width
   str(order.orderId);
   push(LF);
   push(GS, 0x21, 0x00);
   push(ESC, 0x45, 0x00);
 
-  // Separator
-  line("--------------------------------");
+  // --- Separator (16 chars fits 30mm) ---
+  line("----------------");
 
-  // Service type — double height, bold
-  push(GS, 0x21, 0x01);
+  // --- Service type: centered, bold, double-height ---
+  push(GS, 0x21, 0x01);            // double-height
   push(ESC, 0x45, 0x01);
-  str((order.serviceTypeName ?? "").slice(0, 22));
+  str((order.serviceTypeName ?? "").slice(0, 14));
   push(LF);
   push(GS, 0x21, 0x00);
   push(ESC, 0x45, 0x00);
 
-  // Quantity — double width, bold
+  // --- Quantity: centered, bold, double-width ---
   push(GS, 0x21, 0x10);
   push(ESC, 0x45, 0x01);
   str(`${order.quantity}${order.unit ? " " + order.unit : ""}`);
@@ -72,22 +77,22 @@ function buildLabel(order: any): Uint8Array {
   push(GS, 0x21, 0x00);
   push(ESC, 0x45, 0x00);
 
-  // Left-aligned details
-  push(ESC, 0x61, 0x00);
-  if (order.shelf) line(`Qolib: ${order.shelf}`);
-  if (order.product) line(`Mahsulot: ${(order.product ?? "").slice(0, 20)}`);
-  if (order.clientName) line(`Mijoz: ${(order.clientName ?? "").slice(0, 20)}`);
+  // --- Details: left-aligned, normal ---
+  push(ESC, 0x61, 0x00);           // left
+  if (order.shelf)      line(`Q:${order.shelf}`);
+  if (order.product)    line(`M:${(order.product ?? "").slice(0, 15)}`);
+  if (order.clientName) line(`C:${(order.clientName ?? "").slice(0, 15)}`);
 
-  // Date — centered
+  // --- Date: centered ---
   push(ESC, 0x61, 0x01);
-  const d = new Date(order.createdAt);
-  const ts = `${d.getDate().toString().padStart(2, "0")}.${(d.getMonth() + 1)
-    .toString().padStart(2, "0")} ${d.getHours().toString().padStart(2, "0")}:${d
-    .getMinutes().toString().padStart(2, "0")}`;
+  const d  = new Date(order.createdAt);
+  const ts = `${d.getDate().toString().padStart(2,"0")}.${(d.getMonth()+1)
+    .toString().padStart(2,"0")} ${d.getHours().toString().padStart(2,"0")}:${d
+    .getMinutes().toString().padStart(2,"0")}`;
   line(ts);
 
-  // Feed + form feed to next label
-  push(ESC, 0x64, 0x05);
+  // --- Feed 2 lines then form-feed to next label ---
+  push(ESC, 0x64, 0x02);
   push(FF);
 
   return new Uint8Array(bytes);
