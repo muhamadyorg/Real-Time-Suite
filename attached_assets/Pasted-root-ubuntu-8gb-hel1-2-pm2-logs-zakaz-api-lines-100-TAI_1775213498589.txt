@@ -1,0 +1,205 @@
+root@ubuntu-8gb-hel1-2:~# pm2 logs zakaz-api --lines 100
+[TAILING] Tailing last 100 lines for [zakaz-api] process (change the value with --lines option)
+/root/.pm2/logs/zakaz-api-error.log last 100 lines:
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+0|zakaz-ap | error: [polling_error] {"code":"ETELEGRAM","message":"ETELEGRAM: 401 Unauthorized"}
+
+/root/.pm2/logs/zakaz-api-out.log last 100 lines:
+0|zakaz-ap | [10:44:41.608] INFO (3086110): request completed
+0|zakaz-ap |     req: {
+0|zakaz-ap |       "id": 68,
+0|zakaz-ap |       "method": "GET",
+0|zakaz-ap |       "url": "/api/orders"
+0|zakaz-ap |     }
+0|zakaz-ap |     res: {
+0|zakaz-ap |       "statusCode": 200
+0|zakaz-ap |     }
+0|zakaz-ap |     responseTime: 25
+0|zakaz-ap | [10:44:42.064] INFO (3086110): request completed
+0|zakaz-ap |     req: {
+0|zakaz-ap |       "id": 72,
+0|zakaz-ap |       "method": "GET",
+0|zakaz-ap |       "url": "/api/orders"
+0|zakaz-ap |     }
+0|zakaz-ap |     res: {
+0|zakaz-ap |       "statusCode": 200
+0|zakaz-ap |     }
+0|zakaz-ap |     responseTime: 5
+0|zakaz-ap | [10:44:42.066] INFO (3086110): request completed
+0|zakaz-ap |     req: {
+0|zakaz-ap |       "id": 73,
+0|zakaz-ap |       "method": "GET",
+0|zakaz-ap |       "url": "/api/orders"
+0|zakaz-ap |     }
+0|zakaz-ap |     res: {
+0|zakaz-ap |       "statusCode": 200
+0|zakaz-ap |     }
+0|zakaz-ap |     responseTime: 4
+0|zakaz-ap | [10:44:42.076] INFO (3086110): request completed
+0|zakaz-ap |     req: {
+0|zakaz-ap |       "id": 74,
+0|zakaz-ap |       "method": "GET",
+0|zakaz-ap |       "url": "/api/orders"
+0|zakaz-ap |     }
+0|zakaz-ap |     res: {
+0|zakaz-ap |       "statusCode": 200
+0|zakaz-ap |     }
+0|zakaz-ap |     responseTime: 9
+0|zakaz-ap | [10:44:42.081] INFO (3086110): request completed
+0|zakaz-ap |     req: {
+0|zakaz-ap |       "id": 75,
+0|zakaz-ap |       "method": "GET",
+0|zakaz-ap |       "url": "/api/orders"
+0|zakaz-ap |     }
+0|zakaz-ap |     res: {
+0|zakaz-ap |       "statusCode": 200
+0|zakaz-ap |     }
+0|zakaz-ap |     responseTime: 11
+0|zakaz-ap | [10:44:42.083] INFO (3086110): request completed
+0|zakaz-ap |     req: {
+0|zakaz-ap |       "id": 76,
+0|zakaz-ap |       "method": "GET",
+0|zakaz-ap |       "url": "/api/orders/summary"
+0|zakaz-ap |     }
+0|zakaz-ap |     res: {
+0|zakaz-ap |       "statusCode": 200
+0|zakaz-ap |     }
+0|zakaz-ap |     responseTime: 6
+0|zakaz-ap | [10:44:42.555] INFO (3086110): request completed
+0|zakaz-ap |     req: {
+0|zakaz-ap |       "id": 77,
+0|zakaz-ap |       "method": "GET",
+0|zakaz-ap |       "url": "/api/products"
+0|zakaz-ap |     }
+0|zakaz-ap |     res: {
+0|zakaz-ap |       "statusCode": 404
+0|zakaz-ap |     }
+0|zakaz-ap |     responseTime: 2
+0|zakaz-ap | [10:44:42.557] INFO (3086110): request completed
+0|zakaz-ap |     req: {
+0|zakaz-ap |       "id": 78,
+0|zakaz-ap |       "method": "GET",
+0|zakaz-ap |       "url": "/api/products"
+0|zakaz-ap |     }
+0|zakaz-ap |     res: {
+0|zakaz-ap |       "statusCode": 404
+0|zakaz-ap |     }
+0|zakaz-ap |     responseTime: 1
+0|zakaz-ap | [10:44:42.567] INFO (3086110): request completed
+0|zakaz-ap |     req: {
+0|zakaz-ap |       "id": 79,
+0|zakaz-ap |       "method": "GET",
+0|zakaz-ap |       "url": "/api/service-types"
+0|zakaz-ap |     }
+0|zakaz-ap |     res: {
+0|zakaz-ap |       "statusCode": 200
+0|zakaz-ap |     }
+0|zakaz-ap |     responseTime: 3
+0|zakaz-ap | [10:44:48.300] INFO (3086110): request completed
+0|zakaz-ap |     req: {
+0|zakaz-ap |       "id": 80,
+0|zakaz-ap |       "method": "POST",
+0|zakaz-ap |       "url": "/api/products"
+0|zakaz-ap |     }
+0|zakaz-ap |     res: {
+0|zakaz-ap |       "statusCode": 404
+0|zakaz-ap |     }
+0|zakaz-ap |     responseTime: 0
