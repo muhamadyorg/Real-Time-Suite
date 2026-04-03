@@ -469,6 +469,87 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+// POST /orders/:id/split — worker bolib qabul qilish
+router.post("/:id/split", async (req, res) => {
+  try {
+    const payload = await authenticateToken(req.headers.authorization);
+    if (!payload || !["sudo", "superadmin", "admin", "worker"].includes(payload.role)) {
+      res.status(403).json({ error: "Ruxsat yo'q" });
+      return;
+    }
+
+    const id = parseInt(req.params.id);
+    const { quantity: takeQty } = req.body as { quantity: number };
+
+    if (!takeQty || takeQty <= 0) {
+      res.status(400).json({ error: "Olinadigan miqdor 0 dan katta bo'lishi kerak" });
+      return;
+    }
+
+    const order = await db.query.ordersTable.findFirst({ where: eq(ordersTable.id, id) });
+    if (!order) { res.status(404).json({ error: "Zakaz topilmadi" }); return; }
+    if (order.status !== "new") { res.status(400).json({ error: "Faqat yangi zakazlarni bo'lish mumkin" }); return; }
+
+    const totalQty = parseFloat(order.quantity);
+    if (takeQty >= totalQty) {
+      res.status(400).json({ error: `Olinadigan miqdor (${takeQty}) umumiy miqdordan (${totalQty}) kam bo'lishi kerak` });
+      return;
+    }
+
+    const remainQty = totalQty - takeQty;
+
+    // Check lock PIN
+    const isCreator = payload.accountId && order.createdById === payload.accountId;
+    if (order.lockPin && !isCreator) {
+      const { lockPin: providedPin } = req.body as any;
+      if (!providedPin || providedPin !== order.lockPin) {
+        res.status(403).json({ error: "Qulf PIN kodi noto'g'ri" });
+        return;
+      }
+    }
+
+    // Create remaining order as new
+    const newOrderId = await generateOrderId();
+    const [remainingOrder] = await db.insert(ordersTable).values({
+      orderId: newOrderId,
+      status: "new",
+      serviceTypeId: order.serviceTypeId,
+      serviceTypeName: order.serviceTypeName,
+      quantity: String(remainQty),
+      unit: order.unit,
+      shelf: order.shelf,
+      product: order.product,
+      notes: order.notes,
+      storeId: order.storeId,
+      storeName: order.storeName,
+      clientId: order.clientId,
+      clientName: order.clientName,
+      clientPhone: order.clientPhone,
+      createdById: order.createdById,
+      createdByName: order.createdByName,
+      lockPin: null,
+    }).returning();
+
+    // Accept the original order with taken quantity
+    const [acceptedOrder] = await db.update(ordersTable).set({
+      quantity: String(takeQty),
+      status: "accepted",
+      acceptedById: payload.accountId ?? null,
+      acceptedByName: payload.name ?? null,
+      acceptedAt: new Date(),
+      lockPin: null,
+    }).where(eq(ordersTable.id, id)).returning();
+
+    io?.to(`store:${order.storeId}`).emit("order:updated", mapOrder(acceptedOrder, true));
+    io?.to(`store:${order.storeId}`).emit("order:created", mapOrder(remainingOrder, true));
+
+    res.json({ accepted: mapOrder(acceptedOrder, true), remaining: mapOrder(remainingOrder, true) });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server xatosi" });
+  }
+});
+
 // PUT /orders/:id (edit)
 router.put("/:id", async (req, res) => {
   try {

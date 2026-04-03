@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
-import { Search, Loader2, X, QrCode, Clock, CheckCircle, Package, Hash, User, Phone, FileText, Building2, Plus, Users, Lock } from "lucide-react";
+import { Search, Loader2, X, QrCode, Clock, CheckCircle, Package, Hash, User, Phone, FileText, Building2, Plus, Users, Lock, Split } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -65,6 +65,12 @@ function OrderDetailModal({ order, open, onClose }: { order: any, open: boolean,
               <div className="flex justify-between items-center border-t border-border/50 pt-2">
                 <span className="text-sm text-muted-foreground">Qolib</span>
                 <span className="font-mono font-semibold">{order.shelf}</span>
+              </div>
+            )}
+            {order.product && (
+              <div className="flex justify-between items-center border-t border-border/50 pt-2">
+                <span className="text-sm text-muted-foreground">Mahsulot</span>
+                <span className="font-semibold text-primary">{order.product}</span>
               </div>
             )}
           </div>
@@ -242,15 +248,18 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const { token } = useAuth();
   const [serviceTypeId, setServiceTypeId] = useState<string>(workerServiceTypeId ? String(workerServiceTypeId) : "");
   const [quantity, setQuantity] = useState("1");
   const [unit, setUnit] = useState("");
   const [shelf, setShelf] = useState("");
+  const [product, setProduct] = useState("");
   const [notes, setNotes] = useState("");
   const [isClientManual, setIsClientManual] = useState(false);
   const [clientId, setClientId] = useState<string>("");
   const [clientName, setClientName] = useState("");
   const [clientPhone, setClientPhone] = useState("");
+  const [products, setProducts] = useState<any[]>([]);
 
   const { data: serviceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId] } });
   const { data: clients } = useGetClients({ status: 'approved' }, { query: { queryKey: ["getClients", { status: 'approved' }] } });
@@ -260,10 +269,21 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
 
   const workerServiceType = serviceTypes?.find(st => st.id === workerServiceTypeId);
 
+  const activeServiceTypeId = workerServiceTypeId ? String(workerServiceTypeId) : serviceTypeId;
+
+  useEffect(() => {
+    setProduct("");
+    if (!activeServiceTypeId || !token) { setProducts([]); return; }
+    fetch(`/api/products?serviceTypeId=${activeServiceTypeId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }).then(r => r.json()).then(data => setProducts(Array.isArray(data) ? data.filter((p: any) => p.active) : [])).catch(() => setProducts([]));
+  }, [activeServiceTypeId, token]);
+
   const resetForm = () => {
     setServiceTypeId(workerServiceTypeId ? String(workerServiceTypeId) : "");
-    setQuantity("1"); setUnit(""); setShelf(""); setNotes("");
+    setQuantity("1"); setUnit(""); setShelf(""); setProduct(""); setNotes("");
     setIsClientManual(false); setClientId(""); setClientName(""); setClientPhone("");
+    setProducts([]);
   };
 
   const onSubmit = (e: React.FormEvent) => {
@@ -280,6 +300,7 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
           quantity: Number(quantity),
           unit: unit || null,
           shelf: shelf || null,
+          product: product || null,
           notes: notes || null,
           clientId: !isClientManual && clientId ? Number(clientId) : null,
           clientName: isClientManual ? clientName : null,
@@ -348,6 +369,34 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
                 <Label>Qolib (joylashuv)</Label>
                 <Input placeholder="Masalan: A-12" value={shelf} onChange={e => setShelf(e.target.value)} className="h-12 bg-card font-mono" />
               </div>
+
+              {products.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Package className="w-4 h-4 text-primary" />
+                    Mahsulot
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    {products.map((p: any) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setProduct(product === p.name ? "" : p.name)}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
+                          product === p.name
+                            ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                            : "bg-card border-muted-foreground/20 hover:border-primary/50 hover:bg-muted/50"
+                        }`}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                  {product && (
+                    <div className="text-xs text-muted-foreground">Tanlangan: <span className="font-semibold text-primary">{product}</span></div>
+                  )}
+                </div>
+              )}
 
               <div className="p-4 bg-muted/50 rounded-xl border space-y-3">
                 <div className="flex items-center justify-between">
@@ -457,6 +506,10 @@ export default function WorkerDashboard() {
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [lockPinOrder, setLockPinOrder] = useState<any>(null);
+  const [splitOrder, setSplitOrder] = useState<any>(null);
+  const [splitQty, setSplitQty] = useState("");
+  const [splitLockPin, setSplitLockPin] = useState("");
+  const [splitPending, setSplitPending] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -515,6 +568,55 @@ export default function WorkerDashboard() {
     );
   };
 
+  const openSplit = (order: any) => {
+    setSplitOrder(order);
+    setSplitQty("");
+    setSplitLockPin("");
+  };
+
+  const doSplit = async () => {
+    if (!splitOrder) return;
+    const qty = parseFloat(splitQty);
+    if (!qty || qty <= 0) {
+      toast({ title: "Miqdor noto'g'ri", variant: "destructive" });
+      return;
+    }
+    if (qty >= parseFloat(splitOrder.quantity)) {
+      toast({ title: "Miqdor umumiy miqdordan kam bo'lishi kerak", variant: "destructive" });
+      return;
+    }
+    setSplitPending(true);
+    try {
+      const body: any = { quantity: qty };
+      const isCreator = splitOrder.createdById === accountId;
+      if (splitOrder.isLocked && !isCreator) {
+        if (!splitLockPin || splitLockPin.length !== 4) {
+          toast({ title: "4 ta raqamli qulf PIN kiriting", variant: "destructive" });
+          setSplitPending(false);
+          return;
+        }
+        body.lockPin = splitLockPin;
+      }
+      const res = await fetch(`/api/orders/${splitOrder.id}/split`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Xatolik", description: data.error || "Xatolik", variant: "destructive" });
+        return;
+      }
+      toast({ title: "Bo'lib qabul qilindi!", description: `Siz: ${qty}, Qoldi: ${parseFloat(splitOrder.quantity) - qty} ${splitOrder.unit || ""}` });
+      queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
+      setSplitOrder(null);
+    } catch {
+      toast({ title: "Tarmoq xatosi", variant: "destructive" });
+    } finally {
+      setSplitPending(false);
+    }
+  };
+
   const myAcceptedOrders = acceptedOrders?.filter(o => o.acceptedById === accountId) || [];
 
   const filterBySearch = (orders: any[] | undefined) => {
@@ -550,14 +652,25 @@ export default function WorkerDashboard() {
             search={search}
             onOrderClick={() => setSelectedOrder(order)}
             actionButton={
-              <Button
-                className="w-full h-12 text-lg font-bold"
-                variant="default"
-                onClick={() => handleAccept(order)}
-                disabled={updateStatus.isPending}
-              >
-                {order.isLocked ? <><Lock className="w-4 h-4 mr-2" />QABUL QILISH</> : "QABUL QILISH"}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1 h-12 text-base font-bold"
+                  variant="default"
+                  onClick={() => handleAccept(order)}
+                  disabled={updateStatus.isPending}
+                >
+                  {order.isLocked ? <><Lock className="w-4 h-4 mr-1.5" />QABUL</> : "QABUL QILISH"}
+                </Button>
+                <Button
+                  className="h-12 px-3 font-semibold text-xs border-dashed"
+                  variant="outline"
+                  onClick={() => openSplit(order)}
+                  disabled={updateStatus.isPending}
+                  title="Bo'lib qabul qilish"
+                >
+                  <Split className="w-4 h-4" />
+                </Button>
+              </div>
             }
           />
         ))}
@@ -668,7 +781,7 @@ export default function WorkerDashboard() {
       <div className="w-full max-w-[1600px] mx-auto">
         {activeTab === "new" && renderNewOrders(newOrders, isNewLoading)}
         {activeTab === "accepted" && renderAcceptedOrders(myAcceptedOrders, isAcceptedLoading)}
-        {activeTab === "ready" && renderList(readyOrders ? [...readyOrders].reverse() : readyOrders, isReadyLoading)}
+        {activeTab === "ready" && renderList(readyOrders, isReadyLoading)}
         {activeTab === "history" && renderList(historyOrders, isHistoryLoading)}
       </div>
 
@@ -700,6 +813,83 @@ export default function WorkerDashboard() {
         onConfirm={(pin) => doAccept(lockPinOrder.id, pin)}
         isPending={updateStatus.isPending}
       />
+
+      {/* Bo'lib qabul qilish dialog */}
+      <Dialog open={!!splitOrder} onOpenChange={(v) => { if (!v) setSplitOrder(null); }}>
+        <DialogContent className="w-full max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Split className="w-5 h-5 text-primary" />
+              Bo'lib qabul qilish
+            </DialogTitle>
+            <DialogDescription>
+              Zakazning bir qismini qabul qiling. Qolgan qismi yangi zakaz sifatida qoladi.
+            </DialogDescription>
+          </DialogHeader>
+          {splitOrder && (
+            <div className="space-y-4 py-1">
+              <div className="bg-muted/50 rounded-lg p-3 space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Zakaz</span>
+                  <span className="font-mono font-bold">{splitOrder.orderId}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Umumiy miqdor</span>
+                  <span className="font-bold text-lg">{splitOrder.quantity}{splitOrder.unit ? ` ${splitOrder.unit}` : ""}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Siz qabul qiladigan miqdor</Label>
+                <Input
+                  type="number"
+                  min="0.1"
+                  step="any"
+                  placeholder={`1 dan ${parseFloat(splitOrder.quantity) - 0.01} gacha`}
+                  value={splitQty}
+                  onChange={e => setSplitQty(e.target.value)}
+                  className="h-12 text-xl font-bold text-center"
+                  autoFocus
+                />
+                {splitQty && parseFloat(splitQty) > 0 && parseFloat(splitQty) < parseFloat(splitOrder.quantity) && (
+                  <div className="text-xs text-muted-foreground flex justify-between px-1">
+                    <span>Siz: <span className="font-semibold text-primary">{splitQty} {splitOrder.unit || ""}</span></span>
+                    <span>Qoladi: <span className="font-semibold text-amber-600">{(parseFloat(splitOrder.quantity) - parseFloat(splitQty)).toFixed(2).replace(/\.?0+$/, "")} {splitOrder.unit || ""}</span></span>
+                  </div>
+                )}
+              </div>
+
+              {splitOrder.isLocked && splitOrder.createdById !== accountId && (
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-orange-500" />
+                    Qulf PIN kodi
+                  </Label>
+                  <Input
+                    type="tel"
+                    placeholder="4 ta raqam"
+                    value={splitLockPin}
+                    onChange={e => setSplitLockPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    maxLength={4}
+                    className="h-12 text-center text-2xl font-mono tracking-widest"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSplitOrder(null)}>Bekor</Button>
+            <Button
+              onClick={doSplit}
+              disabled={splitPending || !splitQty || parseFloat(splitQty) <= 0}
+              className="gap-2"
+            >
+              {splitPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Split className="w-4 h-4" />}
+              Bo'lib ol
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
