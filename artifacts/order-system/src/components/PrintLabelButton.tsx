@@ -10,7 +10,7 @@ interface PrintLabelButtonProps {
 }
 
 export function PrintLabelButton({ order, variant = "full", className }: PrintLabelButtonProps) {
-  const { print, status, errorMsg, printerName, isSupported } = useBTPrinter();
+  const { print, status, errorMsg, printerName, profileName, isSupported } = useBTPrinter();
 
   if (!isSupported) return null;
 
@@ -27,14 +27,14 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
         disabled={status === "connecting" || status === "printing"}
         title={
           status === "connecting" ? "Ulanmoqda..." :
-          status === "printing" ? "Chop etilmoqda..." :
-          status === "done" ? "Chop etildi!" :
-          status === "error" ? (errorMsg ?? "Xatolik") :
+          status === "printing"   ? "Chop etilmoqda..." :
+          status === "done"       ? "Chop etildi!" :
+          status === "error"      ? (errorMsg ?? "Xatolik — qayta bosing") :
           `Nakleyka chop etish${printerName ? ` (${printerName})` : ""}`
         }
         className={cn(
           "p-1.5 rounded-lg transition-all",
-          status === "done" ? "text-green-600" :
+          status === "done"  ? "text-green-600" :
           status === "error" ? "text-destructive" :
           "text-muted-foreground hover:text-primary hover:bg-muted",
           className
@@ -53,13 +53,17 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       <Button
         type="button"
         variant="outline"
         onClick={handleClick}
         disabled={status === "connecting" || status === "printing"}
-        className={cn("w-full gap-2", className)}
+        className={cn(
+          "w-full gap-2",
+          status === "error" && "border-destructive text-destructive hover:bg-destructive/5",
+          className
+        )}
       >
         {status === "connecting" ? (
           <><Loader2 className="w-4 h-4 animate-spin" />Ulanmoqda...</>
@@ -68,20 +72,33 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
         ) : status === "done" ? (
           <><CheckCircle2 className="w-4 h-4 text-green-600" />Chop etildi!</>
         ) : status === "error" ? (
-          <><AlertCircle className="w-4 h-4 text-destructive" />Qayta urinish</>
+          <><AlertCircle className="w-4 h-4" />Qayta urinish</>
         ) : (
-          <><Printer className="w-4 h-4" />Nakleyka chop etish{printerName && <span className="text-xs text-muted-foreground ml-1">({printerName})</span>}</>
+          <>
+            <Printer className="w-4 h-4" />
+            Nakleyka chop etish
+            {printerName && (
+              <span className="text-xs text-muted-foreground ml-1 truncate">({printerName})</span>
+            )}
+          </>
         )}
       </Button>
 
-      {status === "error" && errorMsg && errorMsg !== "Bekor qilindi" && (
-        <p className="text-xs text-destructive text-center">{errorMsg}</p>
+      {/* Error message */}
+      {status === "error" && errorMsg && (
+        <p className="text-xs text-destructive text-center leading-tight px-1">{errorMsg}</p>
       )}
 
-      {status === "idle" && (
+      {/* Connected + profile info */}
+      {status === "done" && profileName && (
+        <p className="text-xs text-muted-foreground text-center">{profileName}</p>
+      )}
+
+      {/* Idle hint */}
+      {(status === "idle" || !status) && (
         <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1">
           <Bluetooth className="w-3 h-3" />
-          XPrinter X-365B • 58×40mm
+          Bluetooth • 30×30mm
         </p>
       )}
     </div>
