@@ -15,9 +15,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth } from "lucide-react";
 import AdminDashboard from "./AdminDashboard";
 import ProductsView from "@/components/ProductsView";
+import BluetoothPrinterPanel from "@/components/BluetoothPrinterPanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 
@@ -359,12 +360,15 @@ export default function SuperadminDashboard() {
       
       <Tabs defaultValue="orders" className="w-full">
         <div className="bg-background border-b sticky top-[56px] z-20 px-4 py-3">
-          <TabsList className="grid grid-cols-5 w-full max-w-2xl mx-auto h-11">
+          <TabsList className="grid grid-cols-6 w-full max-w-3xl mx-auto h-11">
             <TabsTrigger value="orders" className="text-xs sm:text-sm">Zakazlar</TabsTrigger>
             <TabsTrigger value="accounts" className="text-xs sm:text-sm">Ishchilar</TabsTrigger>
             <TabsTrigger value="services" className="text-xs sm:text-sm">Xizmatlar</TabsTrigger>
             <TabsTrigger value="products" className="text-xs sm:text-sm">Mahsulot</TabsTrigger>
             <TabsTrigger value="clients" className="text-xs sm:text-sm">Mijozlar</TabsTrigger>
+            <TabsTrigger value="printer" className="text-xs sm:text-sm flex items-center gap-1">
+              <Bluetooth className="w-3 h-3 hidden sm:block" />Printer
+            </TabsTrigger>
           </TabsList>
         </div>
         
@@ -386,6 +390,10 @@ export default function SuperadminDashboard() {
 
         <TabsContent value="clients" className="p-5 max-w-4xl mx-auto focus-visible:outline-none">
           <ClientsView />
+        </TabsContent>
+
+        <TabsContent value="printer" className="p-5 focus-visible:outline-none">
+          <BluetoothPrinterPanel />
         </TabsContent>
       </Tabs>
     </div>

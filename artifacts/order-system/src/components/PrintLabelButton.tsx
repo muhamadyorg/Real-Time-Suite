@@ -98,7 +98,7 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
       {(status === "idle" || !status) && (
         <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1">
           <Bluetooth className="w-3 h-3" />
-          Bluetooth • 30×30mm
+          Bluetooth • 58×40mm
         </p>
       )}
     </div>
