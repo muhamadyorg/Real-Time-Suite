@@ -8,7 +8,6 @@ export const PRINTER_PROFILES = [
   { svc: "49535343-fe7d-4ae5-8fa9-9fafd205e455", char: "49535343-1e4d-4bd9-ba61-23c647249616", name: "Isotemp" },
   { svc: "000018f0-0000-1000-8000-00805f9b34fb", char: "000018f1-0000-1000-8000-00805f9b34fb", name: "Peripage" },
   { svc: "0000ae00-0000-1000-8000-00805f9b34fb", char: "0000ae01-0000-1000-8000-00805f9b34fb", name: "AE" },
-  { svc: "000049535343-fe7d-4ae5-8fa9-9fafd205e455", char: "49535343-8841-43f4-a8d4-ecbe34729bb3", name: "Isotemp-2" },
 ];
 
 const ALL_SVC_UUIDS = [...new Set(PRINTER_PROFILES.map(p => p.svc))];
