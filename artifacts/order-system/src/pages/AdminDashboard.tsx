@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useStoreSettings } from "@/hooks/useStoreSettings";
+import { useMyPermissions } from "@/hooks/useMyPermissions";
 import { Header } from "@/components/Header";
 import { useSocket } from "@/hooks/useSocket";
 import { 
@@ -715,15 +715,15 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
   const [deliveringOrder, setDeliveringOrder] = useState<any>(null);
   const [historySubTab, setHistorySubTab] = useState<"pending" | "delivered">("pending");
 
-  const settings = useStoreSettings();
+  const { has } = useMyPermissions(token, role);
   const isViewer = role === 'viewer';
   const isSuperUser = role === 'sudo' || role === 'superadmin';
-  const canEdit   = isSuperUser || (role === 'admin' && settings.canAdminEditOrders);
-  const canDelete = isSuperUser || (role === 'admin' && settings.canAdminDeleteOrders);
-  const canPrint  = isSuperUser || settings.canAdminPrint;
-  const showPins  = isSuperUser || settings.showPinsToAdmins;
-  const showAnalytics = isSuperUser || settings.canAdminAnalyze;
-  const canMarkDelivered = isSuperUser || (role === 'admin' && settings.canAdminMarkDelivered);
+  const canEdit   = has('can_edit_orders');
+  const canDelete = has('can_delete_orders');
+  const canPrint  = has('can_print');
+  const showPins  = has('show_pins');
+  const showAnalytics = has('can_analyze');
+  const canMarkDelivered = has('can_mark_delivered');
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -788,7 +788,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
         {filtered.map(order => (
-          <OrderCard key={order.id} order={order} search={search} onOrderClick={() => setSelectedOrder(order)} canPrint={canPrint} />
+          <OrderCard key={order.id} order={order} search={search} onOrderClick={() => setSelectedOrder(order)} canPrint={canPrint} canMarkDelivered={canMarkDelivered} onDeliver={() => setDeliveringOrder(order)} />
         ))}
       </div>
     );
