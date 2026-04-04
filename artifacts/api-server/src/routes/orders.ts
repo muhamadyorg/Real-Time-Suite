@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, ordersTable, serviceTypesTable, clientsTable, storesTable, accountsTable } from "@workspace/db";
+import { db, ordersTable, serviceTypesTable, clientsTable, storesTable, accountsTable, accountPermissionsTable } from "@workspace/db";
 import { eq, and, asc, desc, sql, isNull, lt } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 import type { Server as SocketServer } from "socket.io";
@@ -342,13 +342,15 @@ router.patch("/:id/status", async (req, res) => {
     // "topshirildi" uchun ruxsat tekshiruvi
     if (status === "topshirildi") {
       if (!["sudo", "superadmin"].includes(payload.role)) {
-        if (payload.role !== "admin") {
-          res.status(403).json({ error: "Ruxsat yo'q" }); return;
-        }
-        const store = await db.query.storesTable.findFirst({ where: eq(storesTable.id, order.storeId) });
-        if (!store?.canAdminMarkDelivered) {
-          res.status(403).json({ error: "Adminlarga olib ketildi belgilash ruxsati berilmagan" }); return;
-        }
+        if (!payload.accountId) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
+        const perm = await db.query.accountPermissionsTable.findFirst({
+          where: and(
+            eq(accountPermissionsTable.accountId, payload.accountId),
+            eq(accountPermissionsTable.permissionKey, "can_mark_delivered"),
+            eq(accountPermissionsTable.storeId, order.storeId)
+          )
+        });
+        if (!perm) { res.status(403).json({ error: "Sizga 'Topshirildi' belgilash ruxsati berilmagan" }); return; }
       }
     }
 
