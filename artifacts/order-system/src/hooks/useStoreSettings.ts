@@ -7,6 +7,7 @@ export interface StoreSettings {
   canAdminDeleteOrders: boolean;
   canAdminPrint: boolean;
   canAdminEditOrders: boolean;
+  canAdminMarkDelivered: boolean;
 }
 
 const DEFAULT_SETTINGS: StoreSettings = {
@@ -15,6 +16,7 @@ const DEFAULT_SETTINGS: StoreSettings = {
   canAdminDeleteOrders: true,
   canAdminPrint: true,
   canAdminEditOrders: true,
+  canAdminMarkDelivered: false,
 };
 
 const StoreSettingsContext = createContext<StoreSettings>(DEFAULT_SETTINGS);
