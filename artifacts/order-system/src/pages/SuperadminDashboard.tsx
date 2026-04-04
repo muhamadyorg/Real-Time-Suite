@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Header } from "@/components/Header";
 import { 
@@ -15,8 +15,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import AdminDashboard from "./AdminDashboard";
+import type { StoreSettings } from "@/hooks/useStoreSettings";
 import ProductsView from "@/components/ProductsView";
 import BluetoothPrinterPanel from "@/components/BluetoothPrinterPanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -149,13 +151,14 @@ function AccountsView({ storeId }: { storeId: number }) {
             <TableRow>
               <TableHead>Ism</TableHead>
               <TableHead>Rol</TableHead>
+              <TableHead className="text-center"><KeyRound className="w-4 h-4 inline text-muted-foreground" /></TableHead>
               <TableHead>Xizmat</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={4} className="text-center py-8">
+              <TableRow><TableCell colSpan={5} className="text-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin mx-auto" />
               </TableCell></TableRow>
             ) : storeAccounts?.map(acc => {
@@ -165,6 +168,11 @@ function AccountsView({ storeId }: { storeId: number }) {
                   <TableCell className="font-medium">{acc.name}</TableCell>
                   <TableCell>
                     <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{roleLabels[acc.role] ?? acc.role}</span>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {(acc as any).pin ? (
+                      <span className="font-mono text-sm font-bold bg-orange-100 text-orange-700 px-2 py-0.5 rounded-md border border-orange-200">{(acc as any).pin}</span>
+                    ) : <span className="text-muted-foreground text-xs">—</span>}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {svc ? <span className="text-primary font-medium">{svc.name}</span> : "—"}
@@ -349,8 +357,95 @@ function ClientsView() {
   );
 }
 
+function SettingsView({ token }: { token: string | null }) {
+  const { toast } = useToast();
+  const [settings, setSettings] = useState<StoreSettings>({
+    showPinsToAdmins: true,
+    canAdminAnalyze: true,
+    canAdminDeleteOrders: true,
+    canAdminPrint: true,
+    canAdminEditOrders: true,
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    fetch("/api/settings", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setSettings(s => ({ ...s, ...data })); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  const toggle = async (key: keyof StoreSettings) => {
+    const newVal = !settings[key];
+    setSettings(s => ({ ...s, [key]: newVal }));
+    setSaving(key);
+    try {
+      const r = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ [key]: newVal }),
+      });
+      if (!r.ok) throw new Error();
+      const data = await r.json();
+      setSettings(s => ({ ...s, ...data }));
+      toast({ title: "Sozlama saqlandi" });
+    } catch {
+      setSettings(s => ({ ...s, [key]: !newVal }));
+      toast({ title: "Xatolik yuz berdi", variant: "destructive" });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const settingItems: { key: keyof StoreSettings; label: string; desc: string }[] = [
+    { key: "showPinsToAdmins",    label: "PIN-kodni adminlarga ko'rsatish",  desc: "Yangi zakazlardagi PIN-kod adminlarga ko'rinadi" },
+    { key: "canAdminAnalyze",     label: "Adminlar statistikani ko'ra oladi", desc: "Yangi/Qabul/Tayyor/Bugun kartochkalarini ko'rish" },
+    { key: "canAdminEditOrders",  label: "Adminlar zakazni tahrirlaydi",      desc: "Admin rolidagi foydalanuvchilar zakazni o'zgartira oladi" },
+    { key: "canAdminDeleteOrders",label: "Adminlar zakazni o'chiradi",        desc: "Admin rolidagi foydalanuvchilar zakazni o'chira oladi" },
+    { key: "canAdminPrint",       label: "Adminlar chop etadi",              desc: "Admin va kuzatuvchilar chop etish tugmasini ko'radi" },
+  ];
+
+  if (loading) {
+    return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  }
+
+  return (
+    <div className="space-y-4 max-w-2xl mx-auto">
+      <div className="flex items-center gap-2 mb-6">
+        <Settings className="w-5 h-5 text-primary" />
+        <h2 className="text-lg font-bold">Do'kon sozlamalari</h2>
+      </div>
+
+      <div className="space-y-3">
+        {settingItems.map(({ key, label, desc }) => (
+          <Card key={key}>
+            <CardContent className="p-4 flex items-center justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm">{label}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{desc}</div>
+              </div>
+              <Switch
+                checked={settings[key]}
+                onCheckedChange={() => toggle(key)}
+                disabled={saving === key}
+              />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <p className="text-xs text-muted-foreground text-center pt-2">
+        O'zgarishlar real vaqtda barcha qurilmalarga qo'llaniladi
+      </p>
+    </div>
+  );
+}
+
 export default function SuperadminDashboard() {
-  const { accountName, storeId } = useAuth();
+  const { accountName, storeId, token } = useAuth();
   
   if (!storeId) return null;
 
@@ -359,15 +454,18 @@ export default function SuperadminDashboard() {
       <Header title={`Superadmin: ${accountName}`} showLogout={true} />
       
       <Tabs defaultValue="orders" className="w-full">
-        <div className="bg-background border-b sticky top-[56px] z-20 px-4 py-3">
-          <TabsList className="grid grid-cols-6 w-full max-w-3xl mx-auto h-11">
-            <TabsTrigger value="orders" className="text-xs sm:text-sm">Zakazlar</TabsTrigger>
-            <TabsTrigger value="accounts" className="text-xs sm:text-sm">Ishchilar</TabsTrigger>
-            <TabsTrigger value="services" className="text-xs sm:text-sm">Xizmatlar</TabsTrigger>
-            <TabsTrigger value="products" className="text-xs sm:text-sm">Mahsulot</TabsTrigger>
-            <TabsTrigger value="clients" className="text-xs sm:text-sm">Mijozlar</TabsTrigger>
-            <TabsTrigger value="printer" className="text-xs sm:text-sm flex items-center gap-1">
+        <div className="bg-background border-b sticky top-[56px] z-20 px-2 py-2.5 overflow-x-auto scrollbar-none">
+          <TabsList className="flex w-max min-w-full h-10 gap-0.5">
+            <TabsTrigger value="orders"   className="text-xs sm:text-sm px-3 shrink-0">Zakazlar</TabsTrigger>
+            <TabsTrigger value="accounts" className="text-xs sm:text-sm px-3 shrink-0">Ishchilar</TabsTrigger>
+            <TabsTrigger value="services" className="text-xs sm:text-sm px-3 shrink-0">Xizmatlar</TabsTrigger>
+            <TabsTrigger value="products" className="text-xs sm:text-sm px-3 shrink-0">Mahsulot</TabsTrigger>
+            <TabsTrigger value="clients"  className="text-xs sm:text-sm px-3 shrink-0">Mijozlar</TabsTrigger>
+            <TabsTrigger value="printer"  className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
               <Bluetooth className="w-3 h-3 hidden sm:block" />Printer
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
+              <Settings className="w-3 h-3" />Sozlamalar
             </TabsTrigger>
           </TabsList>
         </div>
@@ -394,6 +492,10 @@ export default function SuperadminDashboard() {
 
         <TabsContent value="printer" className="p-5 focus-visible:outline-none">
           <BluetoothPrinterPanel />
+        </TabsContent>
+
+        <TabsContent value="settings" className="p-5 focus-visible:outline-none">
+          <SettingsView token={token} />
         </TabsContent>
       </Tabs>
     </div>
