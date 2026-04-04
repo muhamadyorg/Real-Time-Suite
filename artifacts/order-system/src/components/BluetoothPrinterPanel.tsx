@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { printOrderLabel } from "@/lib/printUtils";
-import { useBTPrinter, DEFAULT_LABEL_CONFIG, PRINTER_PROFILES, buildLabel, buildSimpleTest } from "@/hooks/useBTPrinter";
+import { useBTPrinterContext, DEFAULT_LABEL_CONFIG, PRINTER_PROFILES, buildLabel, buildSimpleTest } from "@/hooks/useBTPrinter";
 import type { LabelConfig } from "@/hooks/useBTPrinter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +35,7 @@ export default function BluetoothPrinterPanel() {
     printerName, profileName, serviceUuid, charUuid,
     allServices, isConnected, isSupported,
     printLog, labelBytes,
-  } = useBTPrinter();
+  } = useBTPrinterContext();
 
   const [labelConfig, setLabelConfig] = useState<LabelConfig>(DEFAULT_LABEL_CONFIG);
   const [showServices, setShowServices] = useState(false);
@@ -74,7 +74,7 @@ export default function BluetoothPrinterPanel() {
       quantity: parseFloat(testOrder.quantity) || 1,
       createdAt: new Date().toISOString(),
     };
-    const widthMm = labelConfig.widthDots >= 500 ? 80 : 58;
+    const widthMm = labelConfig.paperDots >= 500 ? 80 : labelConfig.paperDots >= 450 ? 72 : 58;
     printOrderLabel(order, widthMm);
   };
 
