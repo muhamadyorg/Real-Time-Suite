@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useStoreSettings } from "@/hooks/useStoreSettings";
 import { Header } from "@/components/Header";
 import { useSocket } from "@/hooks/useSocket";
 import { 
@@ -32,7 +33,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   ready: { label: "Tayyor!", color: "text-green-600 bg-green-50 border border-green-200" },
 };
 
-function OrderDetailModal({ order, open, onClose, onEdit, onDelete, canEditDelete }: { order: any, open: boolean, onClose: () => void, onEdit?: () => void, onDelete?: () => void, canEditDelete?: boolean }) {
+function OrderDetailModal({ order, open, onClose, onEdit, onDelete, canEdit, canDelete, canPrint, showPins }: { order: any, open: boolean, onClose: () => void, onEdit?: () => void, onDelete?: () => void, canEdit?: boolean, canDelete?: boolean, canPrint?: boolean, showPins?: boolean }) {
   if (!order) return null;
   const baseUrl = window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, "");
   const qrUrl = `${baseUrl}/order/${order.orderId.replace(/^#/, "")}`;
@@ -54,7 +55,7 @@ function OrderDetailModal({ order, open, onClose, onEdit, onDelete, canEditDelet
               {order.status === 'ready' && <CheckCircle className="w-4 h-4" />}
               {statusInfo.label}
             </div>
-            {order.lockPin && order.status === 'new' && (
+            {order.lockPin && order.status === 'new' && showPins !== false && (
               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold bg-orange-100 text-orange-700 border border-orange-300">
                 🔒 {order.lockPin}
               </div>
@@ -153,17 +154,21 @@ function OrderDetailModal({ order, open, onClose, onEdit, onDelete, canEditDelet
             </div>
             <p className="text-xs text-muted-foreground mt-2 text-center break-all">{qrUrl}</p>
           </div>
-          <PrintLabelButton order={order} />
-          {canEditDelete && (
+          {canPrint !== false && <PrintLabelButton order={order} />}
+          {(canEdit || canDelete) && (
             <div className="flex gap-2 pt-2 border-t">
-              <Button variant="outline" className="flex-1 gap-2 border-blue-300 text-blue-600 hover:bg-blue-50" onClick={() => { onClose(); onEdit?.(); }}>
-                <Pencil className="w-4 h-4" />
-                Tahrirlash
-              </Button>
-              <Button variant="outline" className="flex-1 gap-2 border-red-300 text-red-600 hover:bg-red-50" onClick={() => { onClose(); onDelete?.(); }}>
-                <Trash2 className="w-4 h-4" />
-                O'chirish
-              </Button>
+              {canEdit && (
+                <Button variant="outline" className="flex-1 gap-2 border-blue-300 text-blue-600 hover:bg-blue-50" onClick={() => { onClose(); onEdit?.(); }}>
+                  <Pencil className="w-4 h-4" />
+                  Tahrirlash
+                </Button>
+              )}
+              {canDelete && (
+                <Button variant="outline" className="flex-1 gap-2 border-red-300 text-red-600 hover:bg-red-50" onClick={() => { onClose(); onDelete?.(); }}>
+                  <Trash2 className="w-4 h-4" />
+                  O'chirish
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -686,8 +691,14 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
   const [editingOrder, setEditingOrder] = useState<any>(null);
   const [deletingOrder, setDeletingOrder] = useState<any>(null);
 
+  const settings = useStoreSettings();
   const isViewer = role === 'viewer';
-  const canEditDelete = role === 'sudo' || role === 'superadmin' || role === 'admin';
+  const isSuperUser = role === 'sudo' || role === 'superadmin';
+  const canEdit   = isSuperUser || (role === 'admin' && settings.canAdminEditOrders);
+  const canDelete = isSuperUser || (role === 'admin' && settings.canAdminDeleteOrders);
+  const canPrint  = isSuperUser || settings.canAdminPrint;
+  const showPins  = isSuperUser || settings.showPinsToAdmins;
+  const showAnalytics = isSuperUser || settings.canAdminAnalyze;
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -739,7 +750,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
         {filtered.map(order => (
-          <OrderCard key={order.id} order={order} search={search} onOrderClick={() => setSelectedOrder(order)} />
+          <OrderCard key={order.id} order={order} search={search} onOrderClick={() => setSelectedOrder(order)} canPrint={canPrint} />
         ))}
       </div>
     );
@@ -749,7 +760,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
     <div className="min-h-screen bg-muted/20 pb-24">
       {!hideHeader && <Header title={`${isViewer ? 'Kuzatuvchi' : 'Admin'}: ${accountName}`} showLogout={true} />}
       
-      {summary && (
+      {summary && showAnalytics && (
         <div className="grid grid-cols-4 gap-2 p-4 pb-3">
           <div className="bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl p-3 text-center border border-blue-500/20 shadow-sm">
             <div className="text-2xl font-bold">{summary.new}</div>
@@ -824,7 +835,10 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         order={selectedOrder}
         open={!!selectedOrder}
         onClose={() => setSelectedOrder(null)}
-        canEditDelete={canEditDelete}
+        canEdit={canEdit}
+        canDelete={canDelete}
+        canPrint={canPrint}
+        showPins={showPins}
         onEdit={() => setEditingOrder(selectedOrder)}
         onDelete={() => setDeletingOrder(selectedOrder)}
       />
