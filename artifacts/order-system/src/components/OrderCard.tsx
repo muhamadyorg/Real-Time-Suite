@@ -23,6 +23,7 @@ interface OrderCardProps {
   search?: string;
   actionButton?: React.ReactNode;
   onOrderClick?: () => void;
+  canPrint?: boolean;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -52,7 +53,7 @@ export function OrderCard({ order, search = "", actionButton, onOrderClick }: Or
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <PrintLabelButton order={order} variant="icon" />
+            {(canPrint !== false) && <PrintLabelButton order={order} variant="icon" />}
             <div className="text-sm font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md">
               <HighlightText text={format(new Date(order.createdAt), "HH:mm")} search={search} />
             </div>
