@@ -29,6 +29,7 @@ router.get("/", async (req, res) => {
       canAdminDeleteOrders: store.canAdminDeleteOrders,
       canAdminPrint: store.canAdminPrint,
       canAdminEditOrders: store.canAdminEditOrders,
+      canAdminMarkDelivered: store.canAdminMarkDelivered,
     });
   } catch (err) {
     req.log.error(err);
@@ -48,14 +49,15 @@ router.put("/", async (req, res) => {
     const storeId = payload.storeId;
     if (!storeId) { res.status(403).json({ error: "Do'kon aniqlanmadi" }); return; }
 
-    const { showPinsToAdmins, canAdminAnalyze, canAdminDeleteOrders, canAdminPrint, canAdminEditOrders } = req.body as Record<string, boolean>;
+    const { showPinsToAdmins, canAdminAnalyze, canAdminDeleteOrders, canAdminPrint, canAdminEditOrders, canAdminMarkDelivered } = req.body as Record<string, boolean>;
 
     const updates: Record<string, boolean> = {};
-    if (typeof showPinsToAdmins === "boolean")    updates.showPinsToAdmins    = showPinsToAdmins;
-    if (typeof canAdminAnalyze === "boolean")     updates.canAdminAnalyze     = canAdminAnalyze;
-    if (typeof canAdminDeleteOrders === "boolean") updates.canAdminDeleteOrders = canAdminDeleteOrders;
-    if (typeof canAdminPrint === "boolean")       updates.canAdminPrint       = canAdminPrint;
-    if (typeof canAdminEditOrders === "boolean")  updates.canAdminEditOrders  = canAdminEditOrders;
+    if (typeof showPinsToAdmins === "boolean")     updates.showPinsToAdmins     = showPinsToAdmins;
+    if (typeof canAdminAnalyze === "boolean")      updates.canAdminAnalyze      = canAdminAnalyze;
+    if (typeof canAdminDeleteOrders === "boolean") updates.canAdminDeleteOrders  = canAdminDeleteOrders;
+    if (typeof canAdminPrint === "boolean")        updates.canAdminPrint        = canAdminPrint;
+    if (typeof canAdminEditOrders === "boolean")   updates.canAdminEditOrders   = canAdminEditOrders;
+    if (typeof canAdminMarkDelivered === "boolean") updates.canAdminMarkDelivered = canAdminMarkDelivered;
 
     const [store] = await db.update(storesTable).set(updates).where(eq(storesTable.id, storeId)).returning();
 
@@ -65,6 +67,7 @@ router.put("/", async (req, res) => {
       canAdminDeleteOrders: store.canAdminDeleteOrders,
       canAdminPrint: store.canAdminPrint,
       canAdminEditOrders: store.canAdminEditOrders,
+      canAdminMarkDelivered: store.canAdminMarkDelivered,
     };
 
     // Real-time — do'konga ulangan barcha clientlarga jo'natamiz
