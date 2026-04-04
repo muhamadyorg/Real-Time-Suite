@@ -8,6 +8,7 @@ import ordersRouter from "./orders";
 import clientsRouter from "./clients";
 import productsRouter from "./products";
 import settingsRouter from "./settings";
+import permissionsRouter from "./permissions";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use("/orders", ordersRouter);
 router.use("/clients", clientsRouter);
 router.use("/products", productsRouter);
 router.use("/settings", settingsRouter);
+router.use("/permissions", permissionsRouter);
 
 export default router;
