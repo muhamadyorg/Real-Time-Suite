@@ -365,6 +365,7 @@ function SettingsView({ token }: { token: string | null }) {
     canAdminDeleteOrders: true,
     canAdminPrint: true,
     canAdminEditOrders: true,
+    canAdminMarkDelivered: false,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -401,11 +402,12 @@ function SettingsView({ token }: { token: string | null }) {
   };
 
   const settingItems: { key: keyof StoreSettings; label: string; desc: string }[] = [
-    { key: "showPinsToAdmins",    label: "PIN-kodni adminlarga ko'rsatish",  desc: "Yangi zakazlardagi PIN-kod adminlarga ko'rinadi" },
-    { key: "canAdminAnalyze",     label: "Adminlar statistikani ko'ra oladi", desc: "Yangi/Qabul/Tayyor/Bugun kartochkalarini ko'rish" },
-    { key: "canAdminEditOrders",  label: "Adminlar zakazni tahrirlaydi",      desc: "Admin rolidagi foydalanuvchilar zakazni o'zgartira oladi" },
-    { key: "canAdminDeleteOrders",label: "Adminlar zakazni o'chiradi",        desc: "Admin rolidagi foydalanuvchilar zakazni o'chira oladi" },
-    { key: "canAdminPrint",       label: "Adminlar chop etadi",              desc: "Admin va kuzatuvchilar chop etish tugmasini ko'radi" },
+    { key: "showPinsToAdmins",       label: "PIN-kodni adminlarga ko'rsatish",     desc: "Yangi zakazlardagi PIN-kod adminlarga ko'rinadi" },
+    { key: "canAdminAnalyze",        label: "Adminlar statistikani ko'ra oladi",   desc: "Yangi/Qabul/Tayyor/Bugun kartochkalarini ko'rish" },
+    { key: "canAdminEditOrders",     label: "Adminlar zakazni tahrirlaydi",         desc: "Admin rolidagi foydalanuvchilar zakazni o'zgartira oladi" },
+    { key: "canAdminDeleteOrders",   label: "Adminlar zakazni o'chiradi",           desc: "Admin rolidagi foydalanuvchilar zakazni o'chira oladi" },
+    { key: "canAdminPrint",          label: "Adminlar chop etadi",                 desc: "Admin va kuzatuvchilar chop etish tugmasini ko'radi" },
+    { key: "canAdminMarkDelivered",  label: "Adminlar 'Topshirildi' belgilaydi",   desc: "Admin rolidagi foydalanuvchilar zakazni 'topshirildi' deb belgilay oladi" },
   ];
 
   if (loading) {
