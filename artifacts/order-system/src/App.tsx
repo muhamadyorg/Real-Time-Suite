@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { BTPrinterProvider } from "@/hooks/useBTPrinter";
+import { StoreSettingsProvider } from "@/hooks/useStoreSettings";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import NotFound from "@/pages/not-found";
 
@@ -64,10 +65,13 @@ function Router() {
 }
 
 function AppContent() {
+  const { token } = useAuth();
   return (
-    <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-      <Router />
-    </WouterRouter>
+    <StoreSettingsProvider token={token}>
+      <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+        <Router />
+      </WouterRouter>
+    </StoreSettingsProvider>
   );
 }
 
