@@ -3,6 +3,7 @@ import { Server as SocketServer } from "socket.io";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { setSocketIO } from "./routes/orders";
+import { setSettingsSocketIO } from "./routes/settings";
 import { verifyToken } from "./lib/auth";
 import { initTelegramBot, initStoreBots } from "./routes/telegram";
 import { seedSudo } from "./lib/seed";
@@ -30,6 +31,7 @@ const io = new SocketServer(httpServer, {
 });
 
 setSocketIO(io);
+setSettingsSocketIO(io);
 
 io.on("connection", (socket) => {
   const token = socket.handshake.auth?.token as string | undefined;
