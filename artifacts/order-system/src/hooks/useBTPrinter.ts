@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, createContext, useContext, createElement, type ReactNode } from "react";
 
 // Known XPrinter / thermal BLE printer service+characteristic pairs (priority order)
 export const PRINTER_PROFILES = [
@@ -56,10 +56,54 @@ let _lastCharUuid = "";
 let _allServices: ScannedService[] = [];
 let _onConnectionChange: (() => void) | null = null;
 
+// Fix 3 — CP1251 encoding for Cyrillic / Uzbek characters
+function toCP1251(char: string): number {
+  const code = char.charCodeAt(0);
+  // ASCII — pass through as-is
+  if (code < 0x80) return code;
+  // А–Я (U+0410–U+042F) → 0xC0–0xDF
+  if (code >= 0x0410 && code <= 0x042F) return code - 0x0410 + 0xC0;
+  // а–я (U+0430–U+044F) → 0xE0–0xFF
+  if (code >= 0x0430 && code <= 0x044F) return code - 0x0430 + 0xE0;
+  // Alohida belgilar
+  const map: Record<number, number> = {
+    0x0401: 0xA8, // Ё
+    0x0451: 0xB8, // ё
+    0x040E: 0xA1, // Ў
+    0x045E: 0xA2, // ў
+    0x0490: 0xA5, // Ґ
+    0x0491: 0xB4, // ґ
+    0x0404: 0xAA, // Є
+    0x0454: 0xBA, // є
+    0x0407: 0xAF, // Ї
+    0x0457: 0xBF, // ї
+    0x0406: 0xB2, // І
+    0x0456: 0xB3, // і
+    0x0402: 0x80, // Ђ
+    0x0452: 0x90, // ђ
+    0x0403: 0x81, // Ѓ
+    0x0453: 0x83, // ѓ
+    0x0409: 0x8A, // Љ
+    0x0459: 0x9A, // љ
+    0x040A: 0x8C, // Њ
+    0x045A: 0x9C, // њ
+    0x040B: 0x8D, // Ћ
+    0x045B: 0x9D, // ћ
+    0x040C: 0x8E, // Ќ
+    0x045C: 0x9E, // ќ
+    0x040F: 0x8F, // Џ
+    0x045F: 0x9F, // џ
+    0x0408: 0xA3, // Ј
+    0x0458: 0xBC, // ј
+    0x0405: 0xBD, // Ѕ
+    0x0455: 0xBE, // ѕ
+  };
+  return map[code] ?? 0x3F; // '?' — noma'lum belgi
+}
+
 function pushStr(bytes: number[], s: string) {
   for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    bytes.push(c < 128 ? c : 63);
+    bytes.push(toCP1251(s[i]));
   }
 }
 
@@ -94,6 +138,8 @@ export function buildLabel(order: any, config: LabelConfig = DEFAULT_LABEL_CONFI
 
   // Initialize printer
   push(ESC, 0x40);
+  // Fix 3 — CP1251 kod sahifasini tanlash (Kirill harflari to'g'ri chiqishi uchun)
+  push(ESC, 0x74, 0x11);
 
   // Order ID — center, bold, double-width+height
   push(ESC, 0x61, 0x01);
@@ -292,6 +338,17 @@ export interface BTPrinterState {
   labelBytes: number;
 }
 
+// Fix 6 — ishonchli "bekor qilindi" aniqlash
+function isCancelled(err: unknown): boolean {
+  const e = err as any;
+  return (
+    e?.name === "NotFoundError" ||
+    (e?.message ?? "").includes("cancelled") ||
+    (e?.message ?? "").includes("chosen") ||
+    (e?.message ?? "").includes("no device selected")
+  );
+}
+
 export function useBTPrinter(): BTPrinterState {
   const [status, setStatus] = useState<PrintStatus>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -342,11 +399,11 @@ export function useBTPrinter(): BTPrinterState {
       setAllServices([..._allServices]);
       setIsConnected(true);
       setStatus("idle");
-    } catch (err: any) {
-      const msg: string = err?.message ?? "Noma'lum xatolik";
-      const cancelled = msg.includes("cancelled") || msg.includes("chosen") || err?.code === 8;
+    } catch (err: unknown) {
+      const msg: string = (err as any)?.message ?? "Noma'lum xatolik";
+      // Fix 6
       setStatus("error");
-      setErrorMsg(cancelled ? "Qurilma tanlanmadi (bekor qilindi)" : msg);
+      setErrorMsg(isCancelled(err) ? "Qurilma tanlanmadi (bekor qilindi)" : msg);
       setTimeout(() => { setStatus("idle"); }, 5000);
     }
   }, [isSupported]);
@@ -384,12 +441,12 @@ export function useBTPrinter(): BTPrinterState {
         ms: Date.now() - t0,
       });
       setTimeout(() => setStatus("idle"), 3000);
-    } catch (err: any) {
-      const msg: string = err?.message ?? "Noma'lum xatolik";
+    } catch (err: unknown) {
+      const msg: string = (err as any)?.message ?? "Noma'lum xatolik";
       console.error("[BTPrinter] ❌", err);
-      const cancelled = msg.includes("cancelled") || msg.includes("chosen") || err?.code === 8;
+      // Fix 6
+      const displayMsg = isCancelled(err) ? "Qurilma tanlanmadi (bekor qilindi)" : msg;
       setStatus("error");
-      const displayMsg = cancelled ? "Qurilma tanlanmadi (bekor qilindi)" : msg;
       setErrorMsg(displayMsg);
       _char = null;
       setIsConnected(false);
@@ -424,11 +481,11 @@ export function useBTPrinter(): BTPrinterState {
       setStatus("done");
       addLog({ time: new Date().toLocaleTimeString("uz-UZ"), status: "done", msg: `${label} | ${data.length} bayt | ${_lastProfileName}`, ms: Date.now() - t0 });
       setTimeout(() => setStatus("idle"), 3000);
-    } catch (err: any) {
-      const msg: string = err?.message ?? "Noma'lum xatolik";
-      const cancelled = msg.includes("cancelled") || msg.includes("chosen") || err?.code === 8;
+    } catch (err: unknown) {
+      const msg: string = (err as any)?.message ?? "Noma'lum xatolik";
+      // Fix 6
+      const displayMsg = isCancelled(err) ? "Qurilma tanlanmadi (bekor qilindi)" : msg;
       setStatus("error");
-      const displayMsg = cancelled ? "Qurilma tanlanmadi (bekor qilindi)" : msg;
       setErrorMsg(displayMsg);
       _char = null;
       setIsConnected(false);
@@ -463,4 +520,19 @@ export function useBTPrinter(): BTPrinterState {
     allServices, isConnected,
     isSupported, printLog, labelBytes,
   };
+}
+
+// ─── Fix 2 — BTPrinterContext: bitta instance, barcha komponentlar ushlarni ishlatadi ───
+
+const BTPrinterContext = createContext<BTPrinterState | null>(null);
+
+export function BTPrinterProvider({ children }: { children: ReactNode }) {
+  const value = useBTPrinter();
+  return createElement(BTPrinterContext.Provider, { value }, children);
+}
+
+export function useBTPrinterContext(): BTPrinterState {
+  const ctx = useContext(BTPrinterContext);
+  if (!ctx) throw new Error("useBTPrinterContext must be used inside <BTPrinterProvider>");
+  return ctx;
 }
