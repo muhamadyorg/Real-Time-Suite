@@ -136,10 +136,11 @@ router.get("/", async (req, res) => {
       return;
     }
 
-    const { status, storeId, date, search } = req.query as {
+    const { status, storeId, date, deliveredDate, search } = req.query as {
       status?: string;
       storeId?: string;
       date?: string;
+      deliveredDate?: string;
       search?: string;
     };
 
@@ -185,6 +186,13 @@ router.get("/", async (req, res) => {
       const next = new Date(d);
       next.setDate(next.getDate() + 1);
       orders = orders.filter((o) => o.createdAt >= d && o.createdAt < next);
+    }
+
+    if (deliveredDate) {
+      const d = new Date(deliveredDate);
+      const next = new Date(d);
+      next.setDate(next.getDate() + 1);
+      orders = orders.filter((o) => o.deliveredAt && o.deliveredAt >= d && o.deliveredAt < next);
     }
 
     if (search) {
