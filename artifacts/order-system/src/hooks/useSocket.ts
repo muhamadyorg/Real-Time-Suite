@@ -6,6 +6,15 @@ import { getGetOrdersQueryKey, getGetOrdersSummaryQueryKey } from '@workspace/ap
 let socket: Socket | null = null;
 let currentToken: string | null = null;
 
+// settings:updated hodisasini eshituvchilar
+type SettingsCb = (s: Record<string, boolean>) => void;
+const _settingsCbs = new Set<SettingsCb>();
+
+export function subscribeToSettingsUpdated(cb: SettingsCb): () => void {
+  _settingsCbs.add(cb);
+  return () => _settingsCbs.delete(cb);
+}
+
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     socket?.disconnect();
@@ -74,11 +83,16 @@ export function useSocket(token: string | null = null, storeId: number | null = 
       invalidateOrders();
     };
 
+    const handleSettingsUpdated = (data: Record<string, boolean>) => {
+      _settingsCbs.forEach(cb => cb(data));
+    };
+
     s.on('connect', handleConnect);
     s.on('reconnect', handleReconnect);
     s.on('order:created', invalidateOrders);
     s.on('order:updated', invalidateOrders);
     s.on('order:deleted', invalidateOrders);
+    s.on('settings:updated', handleSettingsUpdated);
 
     if (s.connected && storeId) {
       joinStore();
@@ -103,6 +117,7 @@ export function useSocket(token: string | null = null, storeId: number | null = 
       s.off('order:created', invalidateOrders);
       s.off('order:updated', invalidateOrders);
       s.off('order:deleted', invalidateOrders);
+      s.off('settings:updated', handleSettingsUpdated);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [queryClient, token, storeId]);
