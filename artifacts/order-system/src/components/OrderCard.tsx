@@ -32,7 +32,7 @@ const STATUS_COLORS: Record<string, string> = {
   ready: "border-l-green-500",
 };
 
-export function OrderCard({ order, search = "", actionButton, onOrderClick }: OrderCardProps) {
+export function OrderCard({ order, search = "", actionButton, onOrderClick, canPrint }: OrderCardProps) {
   return (
     <Card className={`shadow-sm border-l-4 transition-all hover:shadow-md ${STATUS_COLORS[order.status] ?? "border-l-primary"}`}>
       <CardContent className="p-4 flex flex-col gap-3">
