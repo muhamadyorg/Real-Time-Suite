@@ -764,21 +764,59 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
   const filterBySearch = (orders: any[] | undefined) => {
     if (!orders) return [];
     if (!search) return orders;
-    const s = search.toLowerCase();
-    return orders.filter(o => 
-      o.orderId.toLowerCase().includes(s) || 
-      o.serviceTypeName.toLowerCase().includes(s) || 
-      (o.clientName && o.clientName.toLowerCase().includes(s)) ||
-      (o.clientPhone && o.clientPhone.includes(s)) ||
-      (o.notes && o.notes.toLowerCase().includes(s)) ||
-      (o.shelf && o.shelf.toLowerCase().includes(s)) ||
-      (o.createdByName && o.createdByName.toLowerCase().includes(s)) ||
-      (o.acceptedByName && o.acceptedByName.toLowerCase().includes(s)) ||
-      String(o.quantity).includes(s) ||
-      (o.unit && o.unit.toLowerCase().includes(s)) ||
-      format(new Date(o.createdAt), "HH:mm").includes(s) ||
-      format(new Date(o.createdAt), "dd.MM.yyyy").includes(s)
-    );
+    const s = search.toLowerCase().trim();
+    if (!s) return orders;
+
+    const baseUrl = window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, "");
+
+    const fmtDate = (d: any) => {
+      try {
+        const dt = new Date(d);
+        return [
+          format(dt, "dd.MM.yyyy"),
+          format(dt, "dd/MM/yyyy"),
+          format(dt, "yyyy-MM-dd"),
+          format(dt, "HH:mm"),
+          format(dt, "HH:mm:ss"),
+          format(dt, "dd.MM.yyyy HH:mm"),
+        ];
+      } catch { return []; }
+    };
+
+    return orders.filter(o => {
+      const rawId = (o.orderId ?? "").replace(/^#/, "");
+      const qrUrl = `${baseUrl}/order/${rawId}`.toLowerCase();
+
+      const fields: (string | null | undefined)[] = [
+        o.orderId,
+        rawId,
+        qrUrl,
+        o.serviceTypeName,
+        o.serviceTypeId != null ? String(o.serviceTypeId) : null,
+        o.clientName,
+        o.clientPhone,
+        o.notes,
+        o.shelf,
+        o.product,
+        o.unit,
+        o.createdByName,
+        o.acceptedByName,
+        o.deliveredByName,
+        o.storeName,
+        o.status,
+        o.splitGroup,
+        o.splitPart != null ? String(o.splitPart) : null,
+        o.lockPin,
+        String(o.quantity),
+        String(parseFloat(o.quantity ?? "0")),
+        ...fmtDate(o.createdAt),
+        ...(o.acceptedAt ? fmtDate(o.acceptedAt) : []),
+        ...(o.readyAt ? fmtDate(o.readyAt) : []),
+        ...(o.deliveredAt ? fmtDate(o.deliveredAt) : []),
+      ];
+
+      return fields.some(f => f && f.toLowerCase().includes(s));
+    });
   };
 
   const renderList = (orders: any[] | undefined, isLoading: boolean) => {
