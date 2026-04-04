@@ -369,9 +369,12 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Admin", worker: "Ishchi", viewer: "Kuzatuvchi", superadmin: "Superadmin", sudo: "SUDO"
 };
 
+type PermMode = "none" | "some" | "all";
+
 function PermissionsView({ token, storeId }: { token: string | null; storeId: number }) {
   const { toast } = useToast();
-  const [permissions, setPermissions] = useState<{ accountId: number; permissionKey: string }[]>([]);
+  const [perms, setPerms] = useState<{ accountId: number; permissionKey: string }[]>([]);
+  const [modes, setModes] = useState<Record<string, PermMode>>({});
   const [accounts, setAccounts] = useState<{ id: number; name: string; role: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -385,7 +388,13 @@ function PermissionsView({ token, storeId }: { token: string | null; storeId: nu
         fetch(`/api/permissions?storeId=${storeId}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`/api/accounts`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
-      if (pRes.ok) setPermissions(await pRes.json());
+      if (pRes.ok) {
+        const data = await pRes.json();
+        setPerms(data.perms ?? []);
+        const m: Record<string, PermMode> = {};
+        for (const { permissionKey, mode } of (data.modes ?? [])) m[permissionKey] = mode as PermMode;
+        setModes(m);
+      }
       if (aRes.ok) {
         const all = await aRes.json();
         setAccounts((all as any[]).filter(a => a.storeId === storeId && !["sudo","superadmin"].includes(a.role)));
@@ -397,7 +406,26 @@ function PermissionsView({ token, storeId }: { token: string | null; storeId: nu
 
   useEffect(() => { load(); }, [load]);
 
-  const grant = async (permissionKey: string, accountId: number) => {
+  const setMode = async (permissionKey: string, mode: PermMode) => {
+    setBusy(`mode-${permissionKey}`);
+    try {
+      const r = await fetch("/api/permissions/mode", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ permissionKey, mode, storeId }),
+      });
+      if (!r.ok) throw new Error();
+      setModes(prev => ({ ...prev, [permissionKey]: mode }));
+      const modeLabels = { none: "Hech kimga", some: "Ba'zilariga", all: "Xammaga" };
+      toast({ title: `✅ Rejim: ${modeLabels[mode]}` });
+    } catch {
+      toast({ title: "Xatolik", variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const addEntry = async (permissionKey: string, accountId: number) => {
     setBusy(`${permissionKey}-${accountId}`);
     try {
       const r = await fetch("/api/permissions", {
@@ -406,9 +434,10 @@ function PermissionsView({ token, storeId }: { token: string | null; storeId: nu
         body: JSON.stringify({ accountId, permissionKey, storeId }),
       });
       if (!r.ok) throw new Error();
-      setPermissions(p => [...p, { accountId, permissionKey }]);
+      setPerms(p => [...p, { accountId, permissionKey }]);
       setAddingTo(null);
-      toast({ title: "✅ Ruxsat berildi" });
+      const mode = modes[permissionKey] ?? "some";
+      toast({ title: mode === "all" ? "✅ Istisno qo'shildi" : "✅ Ruxsat berildi" });
     } catch {
       toast({ title: "Xatolik", variant: "destructive" });
     } finally {
@@ -416,7 +445,7 @@ function PermissionsView({ token, storeId }: { token: string | null; storeId: nu
     }
   };
 
-  const revoke = async (permissionKey: string, accountId: number) => {
+  const removeEntry = async (permissionKey: string, accountId: number) => {
     setBusy(`${permissionKey}-${accountId}`);
     try {
       const r = await fetch(`/api/permissions/${accountId}/${permissionKey}?storeId=${storeId}`, {
@@ -424,8 +453,9 @@ function PermissionsView({ token, storeId }: { token: string | null; storeId: nu
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!r.ok) throw new Error();
-      setPermissions(p => p.filter(x => !(x.accountId === accountId && x.permissionKey === permissionKey)));
-      toast({ title: "Ruxsat olindi" });
+      setPerms(p => p.filter(x => !(x.accountId === accountId && x.permissionKey === permissionKey)));
+      const mode = modes[permissionKey] ?? "some";
+      toast({ title: mode === "all" ? "Istisno olib tashlandi" : "Ruxsat bekor qilindi" });
     } catch {
       toast({ title: "Xatolik", variant: "destructive" });
     } finally {
@@ -444,15 +474,23 @@ function PermissionsView({ token, storeId }: { token: string | null; storeId: nu
         <h2 className="text-lg font-bold">Ruxsatlar boshqaruvi</h2>
       </div>
       <p className="text-xs text-muted-foreground mb-4">
-        Har bir funksiya uchun aniq foydalanuvchilarni tanlang. Rol muhim emas — istalgan foydalanuvchiga ruxsat berish yoki bermaslik mumkin.
+        Har bir funksiya uchun rejim tanlang: Hech kimga, Ba'zilariga (whitelist), yoki Xammaga (blacklist istisnolar bilan).
       </p>
 
       <div className="space-y-4">
         {PERM_ITEMS.map(({ key, label, desc, color }) => {
-          const granted = permissions.filter(p => p.permissionKey === key);
-          const grantedIds = new Set(granted.map(p => p.accountId));
-          const available = accounts.filter(a => !grantedIds.has(a.id));
+          const mode: PermMode = modes[key] ?? "some";
+          const entries = perms.filter(p => p.permissionKey === key);
+          const entryIds = new Set(entries.map(p => p.accountId));
+          const notInList = accounts.filter(a => !entryIds.has(a.id));
           const isAdding = addingTo === key;
+          const isModeBusy = busy === `mode-${key}`;
+
+          const listLabel = mode === "all" ? "Istisnolar (bu foydalanuvchilar bundan mustasno)" : "Ruxsat berilganlar";
+          const addLabel  = mode === "all" ? "Istisno qo'shish" : "Foydalanuvchi qo'shish";
+          const emptyLabel = mode === "all"
+            ? "Istisno yo'q — barcha foydalanuvchilar kirishi mumkin"
+            : "Hech kimga ruxsat berilmagan";
 
           return (
             <Card key={key} className="overflow-hidden">
@@ -460,67 +498,96 @@ function PermissionsView({ token, storeId }: { token: string | null; storeId: nu
                 <div className="font-semibold text-sm">{label}</div>
                 <div className="text-xs opacity-75 mt-0.5">{desc}</div>
               </div>
-              <CardContent className="p-4">
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {granted.length === 0 && (
-                    <span className="text-xs text-muted-foreground italic">Hech kimga ruxsat berilmagan</span>
-                  )}
-                  {granted.map(({ accountId }) => {
-                    const acc = accounts.find(a => a.id === accountId);
-                    if (!acc) return null;
-                    const isBusy = busy === `${key}-${accountId}`;
+              <CardContent className="p-4 space-y-3">
+
+                {/* Mode selector */}
+                <div className="flex gap-1.5">
+                  {(["none", "some", "all"] as PermMode[]).map(m => {
+                    const mLabels = { none: "Hech kimga", some: "Ba'zilariga", all: "Xammaga" };
+                    const active = mode === m;
+                    const mColors = {
+                      none: active ? "bg-red-500 text-white border-red-500" : "border-red-200 text-red-700 hover:bg-red-50",
+                      some: active ? "bg-blue-500 text-white border-blue-500" : "border-blue-200 text-blue-700 hover:bg-blue-50",
+                      all:  active ? "bg-green-500 text-white border-green-500" : "border-green-200 text-green-700 hover:bg-green-50",
+                    };
                     return (
-                      <span key={accountId} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${color}`}>
-                        <span>{acc.name}</span>
-                        <span className="opacity-60">({ROLE_LABELS[acc.role] ?? acc.role})</span>
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => revoke(key, accountId)}
-                          className="ml-0.5 hover:opacity-70 disabled:opacity-40"
-                        >
-                          {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
-                        </button>
-                      </span>
+                      <button
+                        key={m}
+                        type="button"
+                        disabled={isModeBusy}
+                        onClick={() => { if (!active) setMode(key, m); }}
+                        className={`flex-1 text-[11px] font-semibold py-1 rounded-lg border transition-all disabled:opacity-50 ${mColors[m]}`}
+                      >
+                        {isModeBusy && active ? <Loader2 className="w-3 h-3 animate-spin inline" /> : mLabels[m]}
+                      </button>
                     );
                   })}
                 </div>
 
-                {!isAdding && available.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setAddingTo(key)}
-                    className="flex items-center gap-1.5 text-xs text-primary hover:underline"
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    Foydalanuvchi qo'shish
-                  </button>
+                {/* User list (shown only for "some" and "all") */}
+                {mode !== "none" && (
+                  <>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{listLabel}</div>
+                    <div className="flex flex-wrap gap-2">
+                      {entries.length === 0 && (
+                        <span className="text-xs text-muted-foreground italic">{emptyLabel}</span>
+                      )}
+                      {entries.map(({ accountId }) => {
+                        const acc = accounts.find(a => a.id === accountId);
+                        if (!acc) return null;
+                        const isBusy = busy === `${key}-${accountId}`;
+                        return (
+                          <span key={accountId} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${color}`}>
+                            <span>{acc.name}</span>
+                            <span className="opacity-60">({ROLE_LABELS[acc.role] ?? acc.role})</span>
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => removeEntry(key, accountId)}
+                              className="ml-0.5 hover:opacity-70 disabled:opacity-40"
+                            >
+                              {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    {!isAdding && notInList.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setAddingTo(key)}
+                        className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        {addLabel}
+                      </button>
+                    )}
+
+                    {isAdding && (
+                      <div className="flex gap-2 mt-1">
+                        <Select onValueChange={(val) => { if (val) addEntry(key, parseInt(val)); }}>
+                          <SelectTrigger className="h-8 text-xs flex-1">
+                            <SelectValue placeholder="Foydalanuvchini tanlang..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {notInList.map(acc => (
+                              <SelectItem key={acc.id} value={String(acc.id)}>
+                                {acc.name} <span className="text-muted-foreground ml-1">({ROLE_LABELS[acc.role] ?? acc.role})</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <button type="button" onClick={() => setAddingTo(null)} className="text-muted-foreground hover:text-foreground">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
 
-                {isAdding && (
-                  <div className="flex gap-2 mt-1">
-                    <Select
-                      onValueChange={(val) => { if (val) grant(key, parseInt(val)); }}
-                    >
-                      <SelectTrigger className="h-8 text-xs flex-1">
-                        <SelectValue placeholder="Foydalanuvchini tanlang..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {available.map(acc => (
-                          <SelectItem key={acc.id} value={String(acc.id)}>
-                            {acc.name} <span className="text-muted-foreground ml-1">({ROLE_LABELS[acc.role] ?? acc.role})</span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <button type="button" onClick={() => setAddingTo(null)} className="text-muted-foreground hover:text-foreground">
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
-
-                {!isAdding && available.length === 0 && granted.length > 0 && (
-                  <span className="text-xs text-muted-foreground italic">Barcha foydalanuvchilarga ruxsat berilgan</span>
+                {mode === "none" && (
+                  <p className="text-xs text-muted-foreground italic">Bu funksiya hech kimga ko'rinmaydi (sudo/superadmin bundan mustasno)</p>
                 )}
               </CardContent>
             </Card>
