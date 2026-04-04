@@ -196,10 +196,40 @@ router.get("/", async (req, res) => {
     }
 
     if (search) {
-      const q = search.toLowerCase();
+      const q = search.toLowerCase().trim();
+      const fmtDate = (d: Date | null) => {
+        if (!d) return [];
+        const dt = new Date(d);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const day = pad(dt.getDate()), mon = pad(dt.getMonth() + 1), yr = String(dt.getFullYear());
+        const h = pad(dt.getHours()), m = pad(dt.getMinutes());
+        return [`${day}.${mon}.${yr}`, `${yr}-${mon}-${day}`, `${h}:${m}`];
+      };
       orders = orders.filter((o) =>
-        [o.orderId, o.serviceTypeName, o.clientName, o.clientPhone, o.shelf, o.notes, o.createdByName, o.acceptedByName, String(parseFloat(o.quantity))]
-          .some((v) => v && v.toLowerCase().includes(q))
+        [
+          "#" + o.orderId,
+          o.orderId,
+          o.serviceTypeName,
+          o.serviceTypeId != null ? String(o.serviceTypeId) : null,
+          o.clientName,
+          o.clientPhone,
+          o.shelf,
+          o.product,
+          o.notes,
+          o.unit,
+          o.createdByName,
+          o.acceptedByName,
+          o.deliveredByName,
+          o.storeName,
+          o.status,
+          o.splitGroup,
+          o.splitPart != null ? String(o.splitPart) : null,
+          String(parseFloat(o.quantity)),
+          ...fmtDate(o.createdAt),
+          ...fmtDate(o.acceptedAt),
+          ...fmtDate(o.readyAt),
+          ...fmtDate(o.deliveredAt),
+        ].some((v) => v && v.toLowerCase().includes(q))
       );
     }
 
