@@ -48,6 +48,8 @@ function mapOrder(o: typeof ordersTable.$inferSelect, showLockPin = true) {
     acceptedByName: o.acceptedByName,
     acceptedAt: o.acceptedAt,
     readyAt: o.readyAt,
+    deliveredAt: o.deliveredAt,
+    deliveredByName: o.deliveredByName,
     lockPin: showLockPin ? o.lockPin : undefined,
     isLocked: !!o.lockPin,
     splitGroup: o.splitGroup,
@@ -168,8 +170,8 @@ router.get("/", async (req, res) => {
       conditions.push(eq(ordersTable.serviceTypeId, workerServiceTypeId));
     }
 
-    if (status && ["new", "accepted", "ready"].includes(status)) {
-      conditions.push(eq(ordersTable.status, status as "new" | "accepted" | "ready"));
+    if (status && ["new", "accepted", "ready", "topshirildi"].includes(status)) {
+      conditions.push(eq(ordersTable.status, status as "new" | "accepted" | "ready" | "topshirildi"));
     }
 
     const isReady = status === "ready";
@@ -329,12 +331,25 @@ router.patch("/:id/status", async (req, res) => {
     }
 
     const id = parseInt(req.params.id);
-    const { status, lockPin: providedLockPin } = req.body as { status: "new" | "accepted" | "ready"; lockPin?: string };
+    const { status, lockPin: providedLockPin } = req.body as { status: "new" | "accepted" | "ready" | "topshirildi"; lockPin?: string };
 
     const order = await db.query.ordersTable.findFirst({ where: eq(ordersTable.id, id) });
     if (!order) {
       res.status(404).json({ error: "Zakaz topilmadi" });
       return;
+    }
+
+    // "topshirildi" uchun ruxsat tekshiruvi
+    if (status === "topshirildi") {
+      if (!["sudo", "superadmin"].includes(payload.role)) {
+        if (payload.role !== "admin") {
+          res.status(403).json({ error: "Ruxsat yo'q" }); return;
+        }
+        const store = await db.query.storesTable.findFirst({ where: eq(storesTable.id, order.storeId) });
+        if (!store?.canAdminMarkDelivered) {
+          res.status(403).json({ error: "Adminlarga olib ketildi belgilash ruxsati berilmagan" }); return;
+        }
+      }
     }
 
     // Check lock PIN when accepting a locked order
@@ -356,6 +371,9 @@ router.patch("/:id/status", async (req, res) => {
       updates.acceptedAt = new Date();
     } else if (status === "ready") {
       updates.readyAt = new Date();
+    } else if (status === "topshirildi") {
+      updates.deliveredAt = new Date();
+      updates.deliveredByName = payload.name ?? null;
     }
 
     const [updatedOrder] = await db
