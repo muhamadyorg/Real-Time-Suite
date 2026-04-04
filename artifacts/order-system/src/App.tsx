@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { BTPrinterProvider } from "@/hooks/useBTPrinter";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import NotFound from "@/pages/not-found";
 
@@ -83,7 +84,9 @@ function App() {
       <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
         <AuthProvider>
           <TooltipProvider>
-            <AppContent />
+            <BTPrinterProvider>
+              <AppContent />
+            </BTPrinterProvider>
             <Toaster />
           </TooltipProvider>
         </AuthProvider>
