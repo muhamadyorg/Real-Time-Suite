@@ -10,6 +10,18 @@ export const accountPermissionsTable = pgTable("account_permissions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [unique().on(t.accountId, t.permissionKey, t.storeId)]);
 
+// Mode for each permission per store:
+// "none" = hech kimga (nobody, except sudo/superadmin)
+// "some" = faqat tanlanganlarga (only listed users — whitelist, default)
+// "all"  = xammaga, istisnolar bundan mustasno (everyone except listed — blacklist)
+export const storePermissionModesTable = pgTable("store_permission_modes", {
+  id: serial("id").primaryKey(),
+  storeId: integer("store_id").notNull().references(() => storesTable.id, { onDelete: "cascade" }),
+  permissionKey: varchar("permission_key", { length: 64 }).notNull(),
+  mode: varchar("mode", { length: 16 }).notNull().default("some"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [unique().on(t.storeId, t.permissionKey)]);
+
 export const PERMISSION_KEYS = [
   "show_pins",
   "can_analyze",
@@ -20,3 +32,4 @@ export const PERMISSION_KEYS = [
 ] as const;
 
 export type PermissionKey = typeof PERMISSION_KEYS[number];
+export type PermissionMode = "none" | "some" | "all";
