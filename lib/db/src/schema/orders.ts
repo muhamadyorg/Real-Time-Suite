@@ -6,7 +6,7 @@ import { accountsTable } from "./accounts";
 import { serviceTypesTable } from "./service_types";
 import { clientsTable } from "./clients";
 
-export const orderStatusEnum = pgEnum("order_status", ["new", "accepted", "ready"]);
+export const orderStatusEnum = pgEnum("order_status", ["new", "accepted", "ready", "topshirildi"]);
 
 export const ordersTable = pgTable("orders", {
   id: serial("id").primaryKey(),
@@ -33,6 +33,8 @@ export const ordersTable = pgTable("orders", {
   lockPin: text("lock_pin"),
   splitGroup: text("split_group"),
   splitPart: integer("split_part"),
+  deliveredAt: timestamp("delivered_at"),
+  deliveredByName: text("delivered_by_name"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
