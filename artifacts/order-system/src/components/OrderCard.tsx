@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { format } from "date-fns";
 import { PrintLabelButton } from "./PrintLabelButton";
+import { Truck } from "lucide-react";
 
 export function HighlightText({ text, search }: { text?: string | null, search?: string }) {
   if (!text) return null;
@@ -24,15 +25,18 @@ interface OrderCardProps {
   actionButton?: React.ReactNode;
   onOrderClick?: () => void;
   canPrint?: boolean;
+  canMarkDelivered?: boolean;
+  onDeliver?: () => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
   new: "border-l-blue-500",
   accepted: "border-l-amber-500",
   ready: "border-l-green-500",
+  topshirildi: "border-l-purple-500",
 };
 
-export function OrderCard({ order, search = "", actionButton, onOrderClick, canPrint }: OrderCardProps) {
+export function OrderCard({ order, search = "", actionButton, onOrderClick, canPrint, canMarkDelivered, onDeliver }: OrderCardProps) {
   return (
     <Card className={`shadow-sm border-l-4 transition-all hover:shadow-md ${STATUS_COLORS[order.status] ?? "border-l-primary"}`}>
       <CardContent className="p-4 flex flex-col gap-3">
@@ -115,6 +119,16 @@ export function OrderCard({ order, search = "", actionButton, onOrderClick, canP
           )}
         </div>
         
+        {canMarkDelivered && order.status === "ready" && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onDeliver?.(); }}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white font-bold text-sm transition-all shadow-md"
+          >
+            <Truck className="w-5 h-5" />
+            Olib ketildi
+          </button>
+        )}
         {actionButton && (
           <div className="mt-1">
             {actionButton}
