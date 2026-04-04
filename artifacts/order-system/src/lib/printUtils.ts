@@ -1,7 +1,18 @@
+// Fix 4 — XSS himoyasi: barcha order maydonlari HTML-escaped bo'lishi kerak
+function escHtml(s: unknown): string {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 export function buildLabelHtml(order: any, widthMm = 58): string {
   const dateStr = order.createdAt
     ? new Date(order.createdAt).toLocaleString("uz-UZ")
     : new Date().toLocaleString("uz-UZ");
+
+  // Fix 4 — barcha maydonlarga escHtml qo'llaymiz
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -21,51 +32,42 @@ export function buildLabelHtml(order: any, widthMm = 58): string {
 </style>
 </head>
 <body>
-  <div class="center big">№${order.id ?? "----"}</div>
+  <div class="center big">&#8470;${escHtml(order.id ?? "----")}</div>
   <hr class="hr"/>
-  <div class="row"><span class="lbl">Xizmat:</span><span class="val">${order.serviceTypeName ?? ""}</span></div>
-  <div class="row"><span class="lbl">Mahsulot:</span><span class="val">${order.product ?? ""}</span></div>
-  <div class="row"><span class="lbl">Miqdor:</span><span class="val bold">${order.quantity ?? ""} ${order.unit ?? ""}</span></div>
-  <div class="row"><span class="lbl">Javon:</span><span class="val bold">${order.shelf ?? ""}</span></div>
+  <div class="row"><span class="lbl">Xizmat:</span><span class="val">${escHtml(order.serviceTypeName)}</span></div>
+  <div class="row"><span class="lbl">Mahsulot:</span><span class="val">${escHtml(order.product)}</span></div>
+  <div class="row"><span class="lbl">Miqdor:</span><span class="val bold">${escHtml(order.quantity)} ${escHtml(order.unit)}</span></div>
+  <div class="row"><span class="lbl">Javon:</span><span class="val bold">${escHtml(order.shelf)}</span></div>
   <hr class="hr"/>
-  <div class="row"><span class="lbl">Mijoz:</span><span class="val">${order.clientName ?? ""}</span></div>
-  <div class="center" style="font-size:9px;margin-top:3px;color:#666">${dateStr}</div>
+  <div class="row"><span class="lbl">Mijoz:</span><span class="val">${escHtml(order.clientName)}</span></div>
+  <div class="center" style="font-size:9px;margin-top:3px;color:#666">${escHtml(dateStr)}</div>
 </body>
 </html>`;
 }
 
 /**
- * Prints via a hidden <iframe> — works inside Replit iframe, no popup blocker issues.
+ * Fix 5 — Blob URL usuli: document.write() o'rniga ishlatiladi.
+ * iframe ichida ham ishlaydi, popup bloker muammosi yo'q.
  */
 export function printOrderLabel(order: any, widthMm = 58): void {
   const html = buildLabelHtml(order, widthMm);
 
+  // Fix 5 — Blob URL orqali iframe yuklash
+  const blob = new Blob([html], { type: "text/html; charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
   const iframe = document.createElement("iframe");
   iframe.style.cssText =
     "position:fixed;right:0;bottom:0;width:1px;height:1px;border:none;opacity:0;pointer-events:none;";
+
+  iframe.onload = () => {
+    try { iframe.contentWindow?.print(); } catch { /* ignore */ }
+    setTimeout(() => {
+      try { document.body.removeChild(iframe); } catch { /* ignore */ }
+      URL.revokeObjectURL(url);
+    }, 3000);
+  };
+
+  iframe.src = url;
   document.body.appendChild(iframe);
-
-  const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
-  if (!doc) {
-    document.body.removeChild(iframe);
-    alert("Chop etish imkonsiz — brauzer iframe-ni qo'llab-quvvatlamaydi.");
-    return;
-  }
-
-  doc.open();
-  doc.write(html);
-  doc.close();
-
-  iframe.contentWindow?.focus();
-
-  // Small delay so the browser renders the iframe content before printing
-  setTimeout(() => {
-    try {
-      iframe.contentWindow?.print();
-    } finally {
-      setTimeout(() => {
-        try { document.body.removeChild(iframe); } catch { /* ignore */ }
-      }, 3000);
-    }
-  }, 350);
 }
