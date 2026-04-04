@@ -759,6 +759,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
   const { data: acceptedOrders, isLoading: isAcceptedLoading } = useGetOrders({ status: "accepted", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "accepted", storeId: storeId! }), refetchInterval: 30000 } });
   const { data: readyOrders, isLoading: isReadyLoading } = useGetOrders({ status: "ready", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "ready", storeId: storeId! }), refetchInterval: 30000 } });
   const { data: historyOrders, isLoading: isHistoryLoading } = useGetOrders({ storeId: storeId!, date }, { query: { queryKey: getGetOrdersQueryKey({ storeId: storeId!, date }), refetchInterval: 30000 } });
+  const { data: deliveredOrders, isLoading: isDeliveredLoading } = useGetOrders({ storeId: storeId!, deliveredDate: date } as any, { query: { queryKey: [...getGetOrdersQueryKey({ storeId: storeId! }), "delivered", date], refetchInterval: 30000 } });
 
   const filterBySearch = (orders: any[] | undefined) => {
     if (!orders) return [];
@@ -875,9 +876,9 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         {activeTab === "ready" && renderList(readyOrders, isReadyLoading)}
         {activeTab === "history" && renderList(
           historySubTab === "delivered"
-            ? (historyOrders ?? []).filter((o: any) => o.status === "topshirildi")
+            ? (deliveredOrders ?? [])
             : (historyOrders ?? []).filter((o: any) => o.status !== "topshirildi"),
-          isHistoryLoading
+          historySubTab === "delivered" ? isDeliveredLoading : isHistoryLoading
         )}
       </div>
 
