@@ -10,14 +10,15 @@ import {
   useGetServiceTypes,
   useGetClients,
   useCreateOrder,
-  useDeleteOrder
+  useDeleteOrder,
+  useUpdateOrderStatus,
 } from "@workspace/api-client-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
 import { PrintLabelButton } from "@/components/PrintLabelButton";
-import { Search, Loader2, Plus, Users, X, QrCode, Hash, Clock, Package, CheckCircle, Phone, User, FileText, Building2, Pencil, Trash2 } from "lucide-react";
+import { Search, Loader2, Plus, Users, X, QrCode, Hash, Clock, Package, CheckCircle, Phone, User, FileText, Building2, Pencil, Trash2, Truck } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -28,12 +29,13 @@ import { Switch } from "@/components/ui/switch";
 import { QRCodeSVG } from "qrcode.react";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  new: { label: "Yangi", color: "text-blue-600 bg-blue-50 border border-blue-200" },
-  accepted: { label: "Qabul qilindi", color: "text-amber-600 bg-amber-50 border border-amber-200" },
-  ready: { label: "Tayyor!", color: "text-green-600 bg-green-50 border border-green-200" },
+  new:          { label: "Yangi",          color: "text-blue-600 bg-blue-50 border border-blue-200" },
+  accepted:     { label: "Qabul qilindi",  color: "text-amber-600 bg-amber-50 border border-amber-200" },
+  ready:        { label: "Tayyor!",        color: "text-green-600 bg-green-50 border border-green-200" },
+  topshirildi:  { label: "Topshirildi",   color: "text-purple-600 bg-purple-50 border border-purple-200" },
 };
 
-function OrderDetailModal({ order, open, onClose, onEdit, onDelete, canEdit, canDelete, canPrint, showPins }: { order: any, open: boolean, onClose: () => void, onEdit?: () => void, onDelete?: () => void, canEdit?: boolean, canDelete?: boolean, canPrint?: boolean, showPins?: boolean }) {
+function OrderDetailModal({ order, open, onClose, onEdit, onDelete, canEdit, canDelete, canPrint, showPins, canMarkDelivered, onDeliver }: { order: any, open: boolean, onClose: () => void, onEdit?: () => void, onDelete?: () => void, canEdit?: boolean, canDelete?: boolean, canPrint?: boolean, showPins?: boolean, canMarkDelivered?: boolean, onDeliver?: () => void }) {
   if (!order) return null;
   const baseUrl = window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, "");
   const qrUrl = `${baseUrl}/order/${order.orderId.replace(/^#/, "")}`;
@@ -137,6 +139,20 @@ function OrderDetailModal({ order, open, onClose, onEdit, onDelete, canEdit, can
                 <span className="font-medium">{format(new Date(order.readyAt), "dd.MM HH:mm")}</span>
               </div>
             )}
+            {order.deliveredAt && (
+              <>
+                <div className="flex justify-between text-sm text-purple-600 border-t border-border/50 pt-2">
+                  <span>Topshirildi vaqti</span>
+                  <span className="font-medium">{format(new Date(order.deliveredAt), "dd.MM HH:mm")}</span>
+                </div>
+                {order.deliveredByName && (
+                  <div className="flex justify-between text-sm text-purple-600">
+                    <span>Topshirdi</span>
+                    <span className="font-medium">{order.deliveredByName}</span>
+                  </div>
+                )}
+              </>
+            )}
           </div>
           <div className="flex justify-between text-sm">
             <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -154,6 +170,12 @@ function OrderDetailModal({ order, open, onClose, onEdit, onDelete, canEdit, can
             </div>
             <p className="text-xs text-muted-foreground mt-2 text-center break-all">{qrUrl}</p>
           </div>
+          {canMarkDelivered && order.status === "ready" && (
+            <Button className="w-full gap-2 bg-purple-600 hover:bg-purple-700 text-white" onClick={() => { onDeliver?.(); }}>
+              <Truck className="w-4 h-4" />
+              Olib ketildi
+            </Button>
+          )}
           {canPrint !== false && <PrintLabelButton order={order} />}
           {(canEdit || canDelete) && (
             <div className="flex gap-2 pt-2 border-t">
@@ -690,6 +712,8 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [editingOrder, setEditingOrder] = useState<any>(null);
   const [deletingOrder, setDeletingOrder] = useState<any>(null);
+  const [deliveringOrder, setDeliveringOrder] = useState<any>(null);
+  const [historySubTab, setHistorySubTab] = useState<"pending" | "delivered">("pending");
 
   const settings = useStoreSettings();
   const isViewer = role === 'viewer';
@@ -699,9 +723,23 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
   const canPrint  = isSuperUser || settings.canAdminPrint;
   const showPins  = isSuperUser || settings.showPinsToAdmins;
   const showAnalytics = isSuperUser || settings.canAdminAnalyze;
+  const canMarkDelivered = isSuperUser || (role === 'admin' && settings.canAdminMarkDelivered);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const deliverOrderMutation = useUpdateOrderStatus({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["getOrders"] });
+        toast({ title: "✅ Zakaz topshirildi deb belgilandi" });
+        setDeliveringOrder(null);
+        setSelectedOrder(null);
+      },
+      onError: () => toast({ title: "Xatolik", description: "Topshirib bo'lmadi", variant: "destructive" }),
+    }
+  });
+
   const deleteOrderMutation = useDeleteOrder({
     mutation: {
       onSuccess: () => {
@@ -812,11 +850,35 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         </div>
       </div>
 
+      {activeTab === "history" && (
+        <div className="w-full max-w-[1600px] mx-auto px-3 pb-2">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setHistorySubTab("pending")}
+              className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-all ${historySubTab === "pending" ? "bg-amber-50 border-amber-300 text-amber-700" : "bg-card border-border text-muted-foreground"}`}
+            >
+              Olib ketilmaganlar
+            </button>
+            <button
+              onClick={() => setHistorySubTab("delivered")}
+              className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-all ${historySubTab === "delivered" ? "bg-purple-50 border-purple-300 text-purple-700" : "bg-card border-border text-muted-foreground"}`}
+            >
+              Olib ketilganlar
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="w-full max-w-[1600px] mx-auto">
         {activeTab === "new" && renderList(newOrders, isNewLoading)}
         {activeTab === "accepted" && renderList(acceptedOrders, isAcceptedLoading)}
         {activeTab === "ready" && renderList(readyOrders, isReadyLoading)}
-        {activeTab === "history" && renderList(historyOrders, isHistoryLoading)}
+        {activeTab === "history" && renderList(
+          historySubTab === "delivered"
+            ? (historyOrders ?? []).filter((o: any) => o.status === "topshirildi")
+            : (historyOrders ?? []).filter((o: any) => o.status !== "topshirildi"),
+          isHistoryLoading
+        )}
       </div>
 
       {!isViewer && (
@@ -839,8 +901,10 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         canDelete={canDelete}
         canPrint={canPrint}
         showPins={showPins}
+        canMarkDelivered={canMarkDelivered}
         onEdit={() => setEditingOrder(selectedOrder)}
         onDelete={() => setDeletingOrder(selectedOrder)}
+        onDeliver={() => setDeliveringOrder(selectedOrder)}
       />
 
       <EditOrderModal
@@ -870,6 +934,31 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
             >
               {deleteOrderMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               O'chirish
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deliveringOrder} onOpenChange={() => setDeliveringOrder(null)}>
+        <DialogContent className="w-full max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-purple-600">
+              <Truck className="w-5 h-5" />
+              Topshirildi deb belgilash
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-mono font-bold">{deliveringOrder?.orderId}</span> zakazi mijozga topshirildimi?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeliveringOrder(null)}>Bekor qilish</Button>
+            <Button
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+              disabled={deliverOrderMutation.isPending}
+              onClick={() => deliveringOrder && deliverOrderMutation.mutate({ id: deliveringOrder.id, data: { status: "topshirildi" } })}
+            >
+              {deliverOrderMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Ha, topshirildi
             </Button>
           </DialogFooter>
         </DialogContent>
