@@ -1,6 +1,6 @@
 import { Printer, Loader2, CheckCircle2, AlertCircle, Bluetooth, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useBTPrinter } from "@/hooks/useBTPrinter";
+import { useBTPrinterContext } from "@/hooks/useBTPrinter";
 import { printOrderLabel } from "@/lib/printUtils";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +11,7 @@ interface PrintLabelButtonProps {
 }
 
 export function PrintLabelButton({ order, variant = "full", className }: PrintLabelButtonProps) {
-  const { print, status, errorMsg, printerName, profileName, isSupported } = useBTPrinter();
+  const { print, status, errorMsg, printerName, profileName, isSupported } = useBTPrinterContext();
 
   const handleBTClick = (e: React.MouseEvent) => {
     e.stopPropagation();
