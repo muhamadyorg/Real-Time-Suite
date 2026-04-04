@@ -15,6 +15,7 @@ export const storesTable = pgTable("stores", {
   canAdminDeleteOrders: boolean("can_admin_delete_orders").notNull().default(true),
   canAdminPrint: boolean("can_admin_print").notNull().default(true),
   canAdminEditOrders: boolean("can_admin_edit_orders").notNull().default(true),
+  canAdminMarkDelivered: boolean("can_admin_mark_delivered").notNull().default(false),
 });
 
 export const insertStoreSchema = createInsertSchema(storesTable).omit({ id: true, createdAt: true });
@@ -27,4 +28,5 @@ export interface StoreSettings {
   canAdminDeleteOrders: boolean;
   canAdminPrint: boolean;
   canAdminEditOrders: boolean;
+  canAdminMarkDelivered: boolean;
 }
