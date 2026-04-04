@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Header } from "@/components/Header";
 import { 
@@ -15,10 +15,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import AdminDashboard from "./AdminDashboard";
-import type { StoreSettings } from "@/hooks/useStoreSettings";
 import ProductsView from "@/components/ProductsView";
 import BluetoothPrinterPanel from "@/components/BluetoothPrinterPanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -357,58 +356,82 @@ function ClientsView() {
   );
 }
 
-function SettingsView({ token }: { token: string | null }) {
+const PERM_ITEMS = [
+  { key: "show_pins",         label: "PIN-kodni ko'rish",         desc: "Yangi zakazlardagi PIN-kodni ko'rish huquqi",                 color: "bg-blue-100 text-blue-800 border-blue-200" },
+  { key: "can_analyze",       label: "Statistikani ko'rish",       desc: "Yangi/Qabul/Tayyor/Bugun statistika kartochkalarini ko'rish", color: "bg-amber-100 text-amber-800 border-amber-200" },
+  { key: "can_edit_orders",   label: "Zakazni tahrirlash",         desc: "Zakazni o'zgartirish va yangilash huquqi",                   color: "bg-violet-100 text-violet-800 border-violet-200" },
+  { key: "can_delete_orders", label: "Zakazni o'chirish",          desc: "Zakazni o'chirish huquqi",                                   color: "bg-red-100 text-red-800 border-red-200" },
+  { key: "can_print",         label: "Chop etish",                 desc: "Label chop etish tugmasini ko'rish va ishlatish huquqi",     color: "bg-green-100 text-green-800 border-green-200" },
+  { key: "can_mark_delivered",label: "'Topshirildi' belgilash",    desc: "Zakazni 'olib ketildi' deb belgilash huquqi",               color: "bg-purple-100 text-purple-800 border-purple-200" },
+] as const;
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Admin", worker: "Ishchi", viewer: "Kuzatuvchi", superadmin: "Superadmin", sudo: "SUDO"
+};
+
+function PermissionsView({ token, storeId }: { token: string | null; storeId: number }) {
   const { toast } = useToast();
-  const [settings, setSettings] = useState<StoreSettings>({
-    showPinsToAdmins: true,
-    canAdminAnalyze: true,
-    canAdminDeleteOrders: true,
-    canAdminPrint: true,
-    canAdminEditOrders: true,
-    canAdminMarkDelivered: false,
-  });
+  const [permissions, setPermissions] = useState<{ accountId: number; permissionKey: string }[]>([]);
+  const [accounts, setAccounts] = useState<{ id: number; name: string; role: string }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [addingTo, setAddingTo] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!token) return;
-    fetch("/api/settings", { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data) setSettings(s => ({ ...s, ...data })); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [token]);
-
-  const toggle = async (key: keyof StoreSettings) => {
-    const newVal = !settings[key];
-    setSettings(s => ({ ...s, [key]: newVal }));
-    setSaving(key);
+    setLoading(true);
     try {
-      const r = await fetch("/api/settings", {
-        method: "PUT",
+      const [pRes, aRes] = await Promise.all([
+        fetch(`/api/permissions?storeId=${storeId}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/accounts`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (pRes.ok) setPermissions(await pRes.json());
+      if (aRes.ok) {
+        const all = await aRes.json();
+        setAccounts((all as any[]).filter(a => a.storeId === storeId && !["sudo","superadmin"].includes(a.role)));
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [token, storeId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const grant = async (permissionKey: string, accountId: number) => {
+    setBusy(`${permissionKey}-${accountId}`);
+    try {
+      const r = await fetch("/api/permissions", {
+        method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ [key]: newVal }),
+        body: JSON.stringify({ accountId, permissionKey, storeId }),
       });
       if (!r.ok) throw new Error();
-      const data = await r.json();
-      setSettings(s => ({ ...s, ...data }));
-      toast({ title: "Sozlama saqlandi" });
+      setPermissions(p => [...p, { accountId, permissionKey }]);
+      setAddingTo(null);
+      toast({ title: "✅ Ruxsat berildi" });
     } catch {
-      setSettings(s => ({ ...s, [key]: !newVal }));
-      toast({ title: "Xatolik yuz berdi", variant: "destructive" });
+      toast({ title: "Xatolik", variant: "destructive" });
     } finally {
-      setSaving(null);
+      setBusy(null);
     }
   };
 
-  const settingItems: { key: keyof StoreSettings; label: string; desc: string }[] = [
-    { key: "showPinsToAdmins",       label: "PIN-kodni adminlarga ko'rsatish",     desc: "Yangi zakazlardagi PIN-kod adminlarga ko'rinadi" },
-    { key: "canAdminAnalyze",        label: "Adminlar statistikani ko'ra oladi",   desc: "Yangi/Qabul/Tayyor/Bugun kartochkalarini ko'rish" },
-    { key: "canAdminEditOrders",     label: "Adminlar zakazni tahrirlaydi",         desc: "Admin rolidagi foydalanuvchilar zakazni o'zgartira oladi" },
-    { key: "canAdminDeleteOrders",   label: "Adminlar zakazni o'chiradi",           desc: "Admin rolidagi foydalanuvchilar zakazni o'chira oladi" },
-    { key: "canAdminPrint",          label: "Adminlar chop etadi",                 desc: "Admin va kuzatuvchilar chop etish tugmasini ko'radi" },
-    { key: "canAdminMarkDelivered",  label: "Adminlar 'Topshirildi' belgilaydi",   desc: "Admin rolidagi foydalanuvchilar zakazni 'topshirildi' deb belgilay oladi" },
-  ];
+  const revoke = async (permissionKey: string, accountId: number) => {
+    setBusy(`${permissionKey}-${accountId}`);
+    try {
+      const r = await fetch(`/api/permissions/${accountId}/${permissionKey}?storeId=${storeId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) throw new Error();
+      setPermissions(p => p.filter(x => !(x.accountId === accountId && x.permissionKey === permissionKey)));
+      toast({ title: "Ruxsat olindi" });
+    } catch {
+      toast({ title: "Xatolik", variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
 
   if (loading) {
     return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
@@ -416,32 +439,94 @@ function SettingsView({ token }: { token: string | null }) {
 
   return (
     <div className="space-y-4 max-w-2xl mx-auto">
-      <div className="flex items-center gap-2 mb-6">
-        <Settings className="w-5 h-5 text-primary" />
-        <h2 className="text-lg font-bold">Do'kon sozlamalari</h2>
+      <div className="flex items-center gap-2 mb-2">
+        <ShieldCheck className="w-5 h-5 text-primary" />
+        <h2 className="text-lg font-bold">Ruxsatlar boshqaruvi</h2>
       </div>
-
-      <div className="space-y-3">
-        {settingItems.map(({ key, label, desc }) => (
-          <Card key={key}>
-            <CardContent className="p-4 flex items-center justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm">{label}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">{desc}</div>
-              </div>
-              <Switch
-                checked={settings[key]}
-                onCheckedChange={() => toggle(key)}
-                disabled={saving === key}
-              />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <p className="text-xs text-muted-foreground text-center pt-2">
-        O'zgarishlar real vaqtda barcha qurilmalarga qo'llaniladi
+      <p className="text-xs text-muted-foreground mb-4">
+        Har bir funksiya uchun aniq foydalanuvchilarni tanlang. Rol muhim emas — istalgan foydalanuvchiga ruxsat berish yoki bermaslik mumkin.
       </p>
+
+      <div className="space-y-4">
+        {PERM_ITEMS.map(({ key, label, desc, color }) => {
+          const granted = permissions.filter(p => p.permissionKey === key);
+          const grantedIds = new Set(granted.map(p => p.accountId));
+          const available = accounts.filter(a => !grantedIds.has(a.id));
+          const isAdding = addingTo === key;
+
+          return (
+            <Card key={key} className="overflow-hidden">
+              <div className={`px-4 py-3 border-b ${color} border-opacity-50`}>
+                <div className="font-semibold text-sm">{label}</div>
+                <div className="text-xs opacity-75 mt-0.5">{desc}</div>
+              </div>
+              <CardContent className="p-4">
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {granted.length === 0 && (
+                    <span className="text-xs text-muted-foreground italic">Hech kimga ruxsat berilmagan</span>
+                  )}
+                  {granted.map(({ accountId }) => {
+                    const acc = accounts.find(a => a.id === accountId);
+                    if (!acc) return null;
+                    const isBusy = busy === `${key}-${accountId}`;
+                    return (
+                      <span key={accountId} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${color}`}>
+                        <span>{acc.name}</span>
+                        <span className="opacity-60">({ROLE_LABELS[acc.role] ?? acc.role})</span>
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => revoke(key, accountId)}
+                          className="ml-0.5 hover:opacity-70 disabled:opacity-40"
+                        >
+                          {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+
+                {!isAdding && available.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setAddingTo(key)}
+                    className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    Foydalanuvchi qo'shish
+                  </button>
+                )}
+
+                {isAdding && (
+                  <div className="flex gap-2 mt-1">
+                    <Select
+                      onValueChange={(val) => { if (val) grant(key, parseInt(val)); }}
+                    >
+                      <SelectTrigger className="h-8 text-xs flex-1">
+                        <SelectValue placeholder="Foydalanuvchini tanlang..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {available.map(acc => (
+                          <SelectItem key={acc.id} value={String(acc.id)}>
+                            {acc.name} <span className="text-muted-foreground ml-1">({ROLE_LABELS[acc.role] ?? acc.role})</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <button type="button" onClick={() => setAddingTo(null)} className="text-muted-foreground hover:text-foreground">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                {!isAdding && available.length === 0 && granted.length > 0 && (
+                  <span className="text-xs text-muted-foreground italic">Barcha foydalanuvchilarga ruxsat berilgan</span>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -467,7 +552,7 @@ export default function SuperadminDashboard() {
               <Bluetooth className="w-3 h-3 hidden sm:block" />Printer
             </TabsTrigger>
             <TabsTrigger value="settings" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
-              <Settings className="w-3 h-3" />Sozlamalar
+              <ShieldCheck className="w-3 h-3" />Ruxsatlar
             </TabsTrigger>
           </TabsList>
         </div>
@@ -497,7 +582,7 @@ export default function SuperadminDashboard() {
         </TabsContent>
 
         <TabsContent value="settings" className="p-5 focus-visible:outline-none">
-          <SettingsView token={token} />
+          <PermissionsView token={token} storeId={storeId} />
         </TabsContent>
       </Tabs>
     </div>
