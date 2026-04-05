@@ -915,8 +915,14 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         {activeTab === "history" && renderList(
           historySubTab === "delivered"
             ? (deliveredOrders ?? [])
-            : (historyOrders ?? []).filter((o: any) => o.status !== "topshirildi"),
-          historySubTab === "delivered" ? isDeliveredLoading : isHistoryLoading
+            : (() => {
+                const historyPending = (historyOrders ?? []).filter((o: any) => o.status !== "topshirildi");
+                const readyList = (readyOrders ?? []);
+                const ids = new Set(historyPending.map((o: any) => o.id));
+                const extra = readyList.filter((o: any) => !ids.has(o.id));
+                return [...extra, ...historyPending].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+              })(),
+          historySubTab === "delivered" ? isDeliveredLoading : (isHistoryLoading || isReadyLoading)
         )}
       </div>
 
