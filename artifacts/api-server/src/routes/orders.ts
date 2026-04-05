@@ -192,7 +192,7 @@ router.get("/", async (req, res) => {
       const d = new Date(deliveredDate);
       const next = new Date(d);
       next.setDate(next.getDate() + 1);
-      orders = orders.filter((o) => o.deliveredAt && o.deliveredAt >= d && o.deliveredAt < next);
+      orders = orders.filter((o) => o.status === "topshirildi" && o.deliveredAt && o.deliveredAt >= d && o.deliveredAt < next);
     }
 
     if (search) {
@@ -425,8 +425,15 @@ router.patch("/:id/status", async (req, res) => {
       updates.acceptedById = payload.accountId ?? null;
       updates.acceptedByName = payload.name ?? null;
       updates.acceptedAt = new Date();
+      updates.deliveredAt = null;
+      updates.deliveredByName = null;
     } else if (status === "ready") {
       updates.readyAt = new Date();
+      updates.deliveredAt = null;
+      updates.deliveredByName = null;
+    } else if (status === "new") {
+      updates.deliveredAt = null;
+      updates.deliveredByName = null;
     } else if (status === "topshirildi") {
       updates.deliveredAt = new Date();
       updates.deliveredByName = payload.name ?? null;
