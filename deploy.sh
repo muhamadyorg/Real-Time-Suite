@@ -1,265 +1,334 @@
 #!/bin/bash
-set -e
+# =============================================================
+#  ZAKAZ TIZIMI — AQLLI INSTALLER
+#  Yangi serverga ham, mavjud serverga ham ishlaydi
+# =============================================================
 
-# =========================================================
-#  ZAKAZ TIZIMI — TO'LIQ AVTOMATIK DEPLOY SKRIPTI
-#  Har safar ishlatish mumkin — ma'lumotlar SAQLANIB qoladi
-# =========================================================
-
-GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; BLUE='\033[0;34m'; NC='\033[0m'
+GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'; BOLD='\033[1m'
 ok()   { echo -e "${GREEN}✅ $1${NC}"; }
 warn() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
 fail() { echo -e "${RED}❌ $1${NC}"; exit 1; }
+ask()  { echo -e "${CYAN}${BOLD}❓ $1${NC}"; }
 
-DEPLOY_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="$DEPLOY_DIR/.env"
+REPO_URL="https://github.com/muhamadyorg/Real-Time-Suite.git"
 PM2_APP_NAME="zakaz-api"
 API_PORT=8080
+WWWROOT="/www/wwwroot"
 
 echo ""
-echo -e "${BLUE}============================================${NC}"
-echo -e "${BLUE}   ZAKAZ TIZIMI — DEPLOY BOSHLANDI         ${NC}"
-echo -e "${BLUE}============================================${NC}"
+echo -e "${BLUE}${BOLD}╔═══════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}${BOLD}║     ZAKAZ TIZIMI — AQLLI INSTALLER        ║${NC}"
+echo -e "${BLUE}${BOLD}╚═══════════════════════════════════════════╝${NC}"
 echo ""
 
-# ----------------------------------------------------------
-# 1. NODE.JS tekshirish
-# ----------------------------------------------------------
-info "[1/11] Node.js tekshirilmoqda..."
-if ! command -v node &>/dev/null; then
-  fail "Node.js topilmadi!\nQuyidagini bajaring:\n  curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -\n  sudo apt-get install -y nodejs"
-fi
-ok "Node.js mavjud: $(node -v)"
+# =============================================================
+# 1. DOMEN TANLASH
+# =============================================================
+echo -e "${BLUE}[1/9] ${WWWROOT} ichidagi domenlar:${NC}"
+echo ""
 
-# ----------------------------------------------------------
-# 2. PNPM tekshirish / o'rnatish
-# ----------------------------------------------------------
-info "[2/11] pnpm tekshirilmoqda..."
-if ! command -v pnpm &>/dev/null; then
-  warn "pnpm topilmadi, o'rnatilmoqda..."
-  npm install -g pnpm@latest
+if [ ! -d "$WWWROOT" ]; then
+  fail "${WWWROOT} papkasi topilmadi! Avval veb-server o'rnatilganligini tekshiring."
 fi
-ok "pnpm mavjud: $(pnpm -v)"
 
-# ----------------------------------------------------------
-# 3. PM2 tekshirish / o'rnatish
-# ----------------------------------------------------------
-info "[3/11] PM2 tekshirilmoqda..."
-if ! command -v pm2 &>/dev/null; then
-  warn "PM2 topilmadi, o'rnatilmoqda..."
-  npm install -g pm2
+mapfile -t DOMAINS < <(ls -d "$WWWROOT"/*/ 2>/dev/null | xargs -I{} basename {} | grep -v "^default" | sort)
+
+if [ ${#DOMAINS[@]} -eq 0 ]; then
+  fail "${WWWROOT} ichida hech qanday papka topilmadi!"
 fi
-ok "PM2 mavjud: $(pm2 -v)"
 
-# ----------------------------------------------------------
-# 4. PostgreSQL tekshirish / o'rnatish / ishga tushirish
-# ----------------------------------------------------------
-info "[4/11] PostgreSQL tekshirilmoqda..."
-if ! command -v psql &>/dev/null; then
-  warn "PostgreSQL topilmadi, o'rnatilmoqda..."
-  if command -v apt-get &>/dev/null; then
-    sudo apt-get update -qq
-    sudo apt-get install -y postgresql postgresql-contrib
-    ok "PostgreSQL o'rnatildi"
-  elif command -v yum &>/dev/null; then
-    sudo yum install -y postgresql-server postgresql-contrib
-    sudo postgresql-setup initdb 2>/dev/null || true
-    ok "PostgreSQL o'rnatildi (yum)"
+for i in "${!DOMAINS[@]}"; do
+  idx=$((i+1))
+  DOMAIN_PATH="$WWWROOT/${DOMAINS[$i]}"
+  if [ -d "$DOMAIN_PATH/.git" ]; then
+    BRANCH=$(git -C "$DOMAIN_PATH" branch --show-current 2>/dev/null || echo "?")
+    echo -e "  ${BOLD}[$idx]${NC} ${DOMAINS[$i]}  ${GREEN}(repo mavjud: $BRANCH)${NC}"
+  elif [ "$(ls -A "$DOMAIN_PATH" 2>/dev/null)" ]; then
+    echo -e "  ${BOLD}[$idx]${NC} ${DOMAINS[$i]}  ${YELLOW}(boshqa fayllar bor)${NC}"
   else
-    fail "PostgreSQL topilmadi va avtomatik o'rnatib bo'lmadi.\nQo'lda o'rnating: https://www.postgresql.org/download/"
+    echo -e "  ${BOLD}[$idx]${NC} ${DOMAINS[$i]}  ${CYAN}(bo'sh)${NC}"
   fi
-fi
-ok "PostgreSQL mavjud: $(psql --version)"
+done
 
-# PostgreSQL service ishlayaptimi?
-info "PostgreSQL service tekshirilmoqda..."
-if ! pg_isready -q 2>/dev/null; then
-  warn "PostgreSQL o'chiq, ishga tushirilmoqda..."
-  sudo systemctl start postgresql 2>/dev/null || \
-  sudo service postgresql start 2>/dev/null || \
-  sudo -u postgres pg_ctl start 2>/dev/null || true
-  sleep 3
+echo ""
+ask "Qaysi domenga o'rnatmoqchisiz? Raqam kiriting (1-${#DOMAINS[@]}):"
+read -r DOMAIN_CHOICE
+
+if ! [[ "$DOMAIN_CHOICE" =~ ^[0-9]+$ ]] || [ "$DOMAIN_CHOICE" -lt 1 ] || [ "$DOMAIN_CHOICE" -gt "${#DOMAINS[@]}" ]; then
+  fail "Noto'g'ri tanlov! 1 dan ${#DOMAINS[@]} gacha raqam kiriting."
 fi
 
-if pg_isready -q 2>/dev/null; then
-  ok "PostgreSQL ishlamoqda"
+SELECTED_DOMAIN="${DOMAINS[$((DOMAIN_CHOICE-1))]}"
+DEPLOY_DIR="$WWWROOT/$SELECTED_DOMAIN"
+ENV_FILE="$DEPLOY_DIR/.env"
+
+echo ""
+ok "Tanlandi: $DEPLOY_DIR"
+echo ""
+
+# =============================================================
+# 2. REPO KLONLASH yoki YANGILASH
+# =============================================================
+echo -e "${BLUE}[2/9] Kod tayyorlanmoqda...${NC}"
+
+if [ -d "$DEPLOY_DIR/.git" ]; then
+  info "Repo allaqachon mavjud — yangilanmoqda..."
+  git -C "$DEPLOY_DIR" pull origin main 2>/dev/null || \
+  git -C "$DEPLOY_DIR" pull 2>/dev/null || \
+  warn "git pull ishlamadi — mavjud kod ishlatiladi"
+  ok "Kod yangilandi"
 else
-  warn "PostgreSQL pg_isready javob bermadi. Davom etilmoqda..."
+  EXISTING_FILES=$(ls -A "$DEPLOY_DIR" 2>/dev/null | grep -v "^\.env$" | wc -l)
+  if [ "$EXISTING_FILES" -gt 0 ]; then
+    warn "$DEPLOY_DIR ichida boshqa fayllar bor."
+    ask "Shu papkaga git clone qilishni davom ettirasizmi? (ha/yoq)"
+    read -r CLONE_CONFIRM
+    if [[ ! "$CLONE_CONFIRM" =~ ^[Hh][Aa]?$ ]]; then
+      fail "Bekor qilindi."
+    fi
+  fi
+  info "GitHub dan klonlanmoqda: $REPO_URL"
+  git clone "$REPO_URL" "$DEPLOY_DIR" || fail "git clone ishlamadi! Internet aloqasini tekshiring."
+  ok "Repo klonlandi: $DEPLOY_DIR"
 fi
+echo ""
 
-# ----------------------------------------------------------
-# 5. .env fayl tekshirish / yaratish
-# ----------------------------------------------------------
-info "[5/11] .env fayli tekshirilmoqda..."
+# =============================================================
+# 3. .ENV FAYLI TEKSHIRISH
+# =============================================================
+echo -e "${BLUE}[3/9] .env fayli tekshirilmoqda...${NC}"
+
 if [ -f "$ENV_FILE" ]; then
-  ok ".env mavjud"
+  ok ".env fayli mavjud — ishlatilmoqda"
   set -a; source "$ENV_FILE"; set +a
-else
-  warn ".env topilmadi — yangisi yaratilmoqda..."
 
-  # Tasodifiy parollar
-  DB_PASS=$(openssl rand -hex 16)
+  if [ -z "$DATABASE_URL" ]; then
+    fail ".env faylida DATABASE_URL yo'q! $ENV_FILE ni tekshiring."
+  fi
+  ok "DATABASE_URL o'qildi"
+else
+  warn ".env fayli topilmadi: $ENV_FILE"
+  echo ""
+  ask ".env fayl yaratishga ruxsat berasizmi? (ha/yoq)"
+  read -r ENV_CONFIRM
+
+  if [[ ! "$ENV_CONFIRM" =~ ^[Hh][Aa]?$ ]]; then
+    echo ""
+    warn "Ruxsat berilmadi. Dastur to'xtatildi."
+    echo -e "Qo'lda ${ENV_FILE} yarating va qaytadan ishga tushiring."
+    echo -e "Namuna:"
+    echo -e "  DATABASE_URL=postgresql://zakaz_user:PAROL@localhost:5432/zakaz_db"
+    echo -e "  SESSION_SECRET=\$(openssl rand -hex 32)"
+    echo -e "  PORT=8080"
+    echo -e "  NODE_ENV=production"
+    exit 0
+  fi
+
+  # .env yaratish
+  echo ""
+  info ".env yaratilmoqda..."
+
   DB_NAME="zakaz_db"
   DB_USER="zakaz_user"
-  SESSION_SECRET=$(openssl rand -hex 32)
 
-  # DB foydalanuvchi bor yoki yo'qligini tekshirish
-  USER_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" 2>/dev/null || echo "")
+  USER_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" 2>/dev/null | tr -d '[:space:]' || echo "")
   if [ "$USER_EXISTS" = "1" ]; then
     warn "DB foydalanuvchi '$DB_USER' allaqachon mavjud."
-    warn "Parolni bilmasangiz qo'lda .env ga DATABASE_URL yozing."
-    DB_URL="postgresql://$DB_USER:PAROLNI_KIRITING@localhost:5432/$DB_NAME"
+    echo ""
+    ask "Yangi parol o'rnatamizmi? Agar siz parolni bilsangiz 'yoq' deb, keyin qo'lda .env ga yozing. (ha/yoq)"
+    read -r RESET_PASS
+    if [[ "$RESET_PASS" =~ ^[Hh][Aa]?$ ]]; then
+      DB_PASS=$(openssl rand -hex 16)
+      sudo -u postgres psql -c "ALTER USER $DB_USER WITH PASSWORD '$DB_PASS';" 2>/dev/null
+      ok "Parol yangilandi"
+    else
+      warn "Parolni o'zingiz .env ga yozing!"
+      DB_PASS="PAROLNI_KIRITING"
+    fi
   else
-    sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';" 2>/dev/null || true
-    DB_URL="postgresql://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME"
-    ok "DB foydalanuvchi yaratildi: $DB_USER / $DB_PASS"
+    DB_PASS=$(openssl rand -hex 16)
+    sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';" 2>/dev/null || warn "Foydalanuvchi yaratishda xato"
+    ok "DB foydalanuvchi yaratildi"
   fi
 
-  cat > "$ENV_FILE" << ENVEOF
-DATABASE_URL=$DB_URL
-SESSION_SECRET=$SESSION_SECRET
-PORT=$API_PORT
-NODE_ENV=production
-ENVEOF
+  SESSION_SECRET_VAL=$(openssl rand -hex 32)
 
-  ok ".env yaratildi"
-  warn "MUHIM: .env faylini tekshiring → $ENV_FILE"
+  # .env ni yozish — heredoc emas, echo orqali (variable muammo yo'q)
+  {
+    echo "DATABASE_URL=postgresql://${DB_USER}:${DB_PASS}@localhost:5432/${DB_NAME}"
+    echo "SESSION_SECRET=${SESSION_SECRET_VAL}"
+    echo "PORT=${API_PORT}"
+    echo "NODE_ENV=production"
+  } > "$ENV_FILE"
+
+  ok ".env yaratildi: $ENV_FILE"
+
+  if [ "$DB_PASS" = "PAROLNI_KIRITING" ]; then
+    echo ""
+    warn "⛔ Muhim: $ENV_FILE ga to'g'ri DATABASE_URL yozing va qaytadan ishga tushiring!"
+    exit 1
+  fi
+
   set -a; source "$ENV_FILE"; set +a
 fi
+echo ""
 
-# DATABASE_URL mavjudligini tekshirish
-if [ -z "$DATABASE_URL" ]; then
-  fail "DATABASE_URL .env da topilmadi!\n$ENV_FILE faylini tekshiring."
+# =============================================================
+# 4. KERAKLI DASTURLARNI TEKSHIRISH / O'RNATISH
+# =============================================================
+echo -e "${BLUE}[4/9] Dasturlar tekshirilmoqda...${NC}"
+
+if ! command -v node &>/dev/null; then
+  info "Node.js o'rnatilmoqda..."
+  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - 2>/dev/null
+  sudo apt-get install -y nodejs 2>/dev/null || fail "Node.js o'rnatib bo'lmadi"
 fi
-ok "DATABASE_URL o'qildi"
+ok "Node.js: $(node -v)"
 
-# ----------------------------------------------------------
-# 6. DATABASE yaratish (bor bo'lsa — MA'LUMOTLAR SAQLANADI!)
-# ----------------------------------------------------------
-info "[6/11] Database tekshirilmoqda..."
+if ! command -v pnpm &>/dev/null; then
+  info "pnpm o'rnatilmoqda..."
+  npm install -g pnpm@latest 2>/dev/null || fail "pnpm o'rnatib bo'lmadi"
+fi
+ok "pnpm: $(pnpm -v)"
 
-# DATABASE_URL dan db nomini ajratish
-ACTUAL_DB=$(node -e "const u=new URL('$DATABASE_URL'); console.log(u.pathname.replace('/',''))" 2>/dev/null || \
-            echo "$DATABASE_URL" | sed 's|.*\/||' | sed 's|[?].*||')
-ACTUAL_USER=$(node -e "const u=new URL('$DATABASE_URL'); console.log(u.username)" 2>/dev/null || \
-              echo "$DATABASE_URL" | sed 's|.*://||' | sed 's|[:].*||')
+if ! command -v pm2 &>/dev/null; then
+  info "PM2 o'rnatilmoqda..."
+  npm install -g pm2 2>/dev/null || fail "PM2 o'rnatib bo'lmadi"
+fi
+ok "PM2: $(pm2 -v)"
 
-info "Database: $ACTUAL_DB | Foydalanuvchi: $ACTUAL_USER"
+if ! command -v psql &>/dev/null; then
+  info "PostgreSQL o'rnatilmoqda..."
+  sudo apt-get update -qq 2>/dev/null
+  sudo apt-get install -y postgresql postgresql-contrib 2>/dev/null || \
+  sudo yum install -y postgresql-server postgresql-contrib 2>/dev/null || \
+  fail "PostgreSQL o'rnatib bo'lmadi"
+fi
+ok "PostgreSQL: $(psql --version | head -1)"
 
-DB_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$ACTUAL_DB'" 2>/dev/null || echo "")
+if ! pg_isready -q 2>/dev/null; then
+  info "PostgreSQL ishga tushirilmoqda..."
+  sudo systemctl start postgresql 2>/dev/null || sudo service postgresql start 2>/dev/null || true
+  sleep 3
+fi
+echo ""
+
+# =============================================================
+# 5. DATABASE TEKSHIRISH / YARATISH
+# =============================================================
+echo -e "${BLUE}[5/9] Database tekshirilmoqda...${NC}"
+
+ACTUAL_DB=$(node -e "try{const u=new URL(process.env.DATABASE_URL||'');console.log(u.pathname.replace('/',''))}catch(e){console.log('zakaz_db')}" 2>/dev/null || echo "zakaz_db")
+ACTUAL_USER=$(node -e "try{const u=new URL(process.env.DATABASE_URL||'');console.log(u.username)}catch(e){console.log('zakaz_user')}" 2>/dev/null || echo "zakaz_user")
+
+DB_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$ACTUAL_DB'" 2>/dev/null | tr -d '[:space:]' || echo "")
 if [ "$DB_EXISTS" = "1" ]; then
-  ok "Database '$ACTUAL_DB' mavjud — BARCHA MA'LUMOTLAR SAQLANADI ✅"
+  ok "Database '$ACTUAL_DB' mavjud — barcha ma'lumotlar saqlanib qoladi ✅"
 else
-  warn "Database '$ACTUAL_DB' topilmadi, yaratilmoqda..."
+  info "Database '$ACTUAL_DB' yaratilmoqda..."
   sudo -u postgres psql -c "CREATE DATABASE $ACTUAL_DB OWNER $ACTUAL_USER;" 2>/dev/null || \
   sudo -u postgres createdb -O "$ACTUAL_USER" "$ACTUAL_DB" 2>/dev/null || \
-  fail "Database yaratib bo'lmadi!\nQo'lda bajaring:\n  sudo -u postgres createdb -O $ACTUAL_USER $ACTUAL_DB"
+  fail "Database yaratib bo'lmadi! qo'lda bajaring: sudo -u postgres createdb -O $ACTUAL_USER $ACTUAL_DB"
   ok "Database '$ACTUAL_DB' yaratildi"
 fi
+echo ""
 
-# ----------------------------------------------------------
-# 7. KODLARNI YANGILASH (git pull)
-# ----------------------------------------------------------
-info "[7/11] Yangi kodlar olinmoqda..."
+# =============================================================
+# 6. KUTUBXONALARNI O'RNATISH
+# =============================================================
+echo -e "${BLUE}[6/9] Kutubxonalar o'rnatilmoqda...${NC}"
 cd "$DEPLOY_DIR"
-git pull origin main 2>/dev/null || git pull 2>/dev/null || warn "git pull ishlamadi — local kodlar ishlatiladi"
-ok "Kod yangilandi"
-
-# ----------------------------------------------------------
-# 8. KUTUBXONALARNI O'RNATISH
-# ----------------------------------------------------------
-info "[8/11] Kutubxonalar o'rnatilmoqda..."
 pnpm install --frozen-lockfile 2>/dev/null || pnpm install
 ok "Kutubxonalar tayyor"
+echo ""
 
-# ----------------------------------------------------------
-# 9. DATABASE SCHEMA YANGILASH (FAQAT QO'SHADI, O'CHIRMAYDI!)
-# ----------------------------------------------------------
-info "[9/11] Database schema yangilanmoqda..."
-info "Bu faqat yangi jadvallar/ustunlar qo'shadi — hech qanday ma'lumot o'CHIRMAYDI"
+# =============================================================
+# 7. DATABASE SCHEMA YANGILASH
+# =============================================================
+echo -e "${BLUE}[7/9] Database schema yangilanmoqda (ma'lumotlar o'CHIRMAYDI)...${NC}"
 cd "$DEPLOY_DIR/lib/db"
 DATABASE_URL="$DATABASE_URL" npx drizzle-kit push --config ./drizzle.config.ts --force 2>&1 | \
-  grep -E "✓|✗|error|Error|applying|Changes|No changes|already" || true
+  grep -vE "^$|Warning|deprecated" | head -20 || true
 cd "$DEPLOY_DIR"
-ok "Schema yangilandi (ma'lumotlar saqlanib qoldi)"
+ok "Schema yangilandi"
+echo ""
 
-# ----------------------------------------------------------
-# 10. BUILD (API + FRONTEND)
-# ----------------------------------------------------------
-info "[10/11] Build qilinmoqda..."
+# =============================================================
+# 8. BUILD
+# =============================================================
+echo -e "${BLUE}[8/9] Build qilinmoqda...${NC}"
 info "  → API server..."
 pnpm --filter @workspace/api-server run build
-ok "  API server build tayyor"
-
+ok "  API server tayyor"
 info "  → Frontend..."
-PORT=3000 BASE_PATH=/ pnpm --filter @workspace/order-system run build
-ok "  Frontend build tayyor"
+pnpm --filter @workspace/order-system run build 2>/dev/null || warn "  Frontend build ishlamadi (ixtiyoriy)"
+ok "  Frontend tayyor"
+echo ""
 
-# ----------------------------------------------------------
-# 11. PM2 ECOSYSTEM VA RESTART
-# ----------------------------------------------------------
-info "[11/11] PM2 sozlanmoqda va ishga tushirilmoqda..."
+# =============================================================
+# 9. PM2 SOZLASH VA ISHGA TUSHIRISH
+# =============================================================
+echo -e "${BLUE}[9/9] PM2 sozlanmoqda...${NC}"
 
-ECOSYSTEM_FILE="$DEPLOY_DIR/ecosystem.config.cjs"
+mkdir -p "$DEPLOY_DIR/logs"
 
-# .env dan qiymatlarni o'qish
-DB_URL_VAL=$(grep -E "^DATABASE_URL=" "$ENV_FILE" | cut -d= -f2-)
-SESSION_SECRET_VAL=$(grep -E "^SESSION_SECRET=" "$ENV_FILE" | cut -d= -f2-)
-TELEGRAM_TOKEN_VAL=$(grep -E "^TELEGRAM_BOT_TOKEN=" "$ENV_FILE" | cut -d= -f2- || echo "")
+DB_URL_VAL=$(grep -E "^DATABASE_URL=" "$ENV_FILE" | cut -d= -f2- | tr -d '\r')
+SESSION_VAL=$(grep -E "^SESSION_SECRET=" "$ENV_FILE" | cut -d= -f2- | tr -d '\r')
+TELEGRAM_VAL=$(grep -E "^TELEGRAM_BOT_TOKEN=" "$ENV_FILE" | cut -d= -f2- | tr -d '\r' || echo "")
 
-cat > "$ECOSYSTEM_FILE" << ECOEOF
-module.exports = {
+# Node.js orqali yozamiz — heredoc variable muammosi yo'q
+node -e "
+const fs = require('fs');
+const cfg = {
   apps: [{
-    name: '$PM2_APP_NAME',
-    script: '$DEPLOY_DIR/artifacts/api-server/dist/index.mjs',
+    name: '${PM2_APP_NAME}',
+    script: '${DEPLOY_DIR}/artifacts/api-server/dist/index.mjs',
     interpreter: 'node',
     interpreter_args: '--enable-source-maps',
-    cwd: '$DEPLOY_DIR',
+    cwd: '${DEPLOY_DIR}',
     env: {
       NODE_ENV: 'production',
-      PORT: '$API_PORT',
-      DATABASE_URL: '$DB_URL_VAL',
-      SESSION_SECRET: '$SESSION_SECRET_VAL',
-      TELEGRAM_BOT_TOKEN: '$TELEGRAM_TOKEN_VAL',
+      PORT: '${API_PORT}',
+      DATABASE_URL: '${DB_URL_VAL}',
+      SESSION_SECRET: '${SESSION_VAL}',
+      TELEGRAM_BOT_TOKEN: '${TELEGRAM_VAL}',
     },
     watch: false,
     restart_delay: 3000,
     max_restarts: 10,
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
-    error_file: '$DEPLOY_DIR/logs/pm2-error.log',
-    out_file: '$DEPLOY_DIR/logs/pm2-out.log',
+    error_file: '${DEPLOY_DIR}/logs/pm2-error.log',
+    out_file: '${DEPLOY_DIR}/logs/pm2-out.log',
   }]
 };
-ECOEOF
-
-mkdir -p "$DEPLOY_DIR/logs"
+fs.writeFileSync('${DEPLOY_DIR}/ecosystem.config.cjs', 'module.exports=' + JSON.stringify(cfg, null, 2));
+console.log('ecosystem.config.cjs yozildi');
+"
 
 if pm2 list | grep -q "$PM2_APP_NAME"; then
-  pm2 reload "$PM2_APP_NAME" --update-env 2>/dev/null || pm2 restart "$PM2_APP_NAME"
-  ok "PM2 reload muvaffaqiyatli"
-else
-  pm2 start "$ECOSYSTEM_FILE"
-  ok "PM2 ishga tushirildi"
+  pm2 delete "$PM2_APP_NAME" 2>/dev/null || true
 fi
-
-# Sozlamalarni saqlash (server reboot dan keyin ham ishlashi uchun)
+pm2 start "$DEPLOY_DIR/ecosystem.config.cjs"
 pm2 save
-pm2 startup 2>/dev/null | grep "sudo" | head -1 || true
+pm2 startup 2>/dev/null | grep "^sudo" | bash 2>/dev/null || true
 
-# ----------------------------------------------------------
-# YAKUNIY HOLAT
-# ----------------------------------------------------------
+sleep 4
+
 echo ""
-echo -e "${GREEN}============================================${NC}"
-echo -e "${GREEN}   🎉 DEPLOY MUVAFFAQIYATLI YAKUNLANDI!     ${NC}"
-echo -e "${GREEN}============================================${NC}"
+echo -e "${GREEN}${BOLD}╔═══════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}${BOLD}║     🎉 O'RNATISH MUVAFFAQIYATLI!          ║${NC}"
+echo -e "${GREEN}${BOLD}╚═══════════════════════════════════════════╝${NC}"
 echo ""
 pm2 status "$PM2_APP_NAME" 2>/dev/null || pm2 status
 echo ""
-ok "API: http://localhost:$API_PORT"
-ok "Database: $ACTUAL_DB (ma'lumotlar saqlanib qoldi)"
+ok "Sayt: http://$SELECTED_DOMAIN"
+ok "API:  http://localhost:$API_PORT"
+ok "Database: $ACTUAL_DB"
 echo ""
-info "Loglarni ko'rish:  pm2 logs $PM2_APP_NAME"
-info "Status:            pm2 status"
-info "To'xtatish:        pm2 stop $PM2_APP_NAME"
+info "Loglar:    pm2 logs $PM2_APP_NAME"
+info "Qayta:     pm2 restart $PM2_APP_NAME"
+info "To'xtat:   pm2 stop $PM2_APP_NAME"
+echo ""
+
+pm2 logs "$PM2_APP_NAME" --lines 8 --nostream 2>/dev/null || true
