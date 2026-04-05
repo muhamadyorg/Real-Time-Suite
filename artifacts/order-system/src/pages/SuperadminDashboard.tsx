@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Header } from "@/components/Header";
 import { 
-  useGetAccounts, useCreateAccount, useDeleteAccount,
+  useGetAccounts, useCreateAccount, useDeleteAccount, useUpdateAccount,
   useGetServiceTypes, useCreateServiceType, useDeleteServiceType,
   useGetClients, useApproveClient, useRejectClient,
   getGetAccountsQueryKey, getGetServiceTypesQueryKey, getGetClientsQueryKey
@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import AdminDashboard from "./AdminDashboard";
 import ProductsView from "@/components/ProductsView";
@@ -28,6 +28,7 @@ function AccountsView({ storeId }: { storeId: number }) {
   const { data: serviceTypes } = useGetServiceTypes({ query: { queryKey: getGetServiceTypesQueryKey() } });
   const createAccount = useCreateAccount();
   const deleteAccount = useDeleteAccount();
+  const updateAccount = useUpdateAccount();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -37,11 +38,47 @@ function AccountsView({ storeId }: { storeId: number }) {
   const [pin, setPin] = useState("");
   const [serviceTypeId, setServiceTypeId] = useState<string>("");
 
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingAcc, setEditingAcc] = useState<any>(null);
+  const [editName, setEditName] = useState("");
+  const [editRole, setEditRole] = useState<any>("worker");
+  const [editPin, setEditPin] = useState("");
+  const [editServiceTypeId, setEditServiceTypeId] = useState<string>("");
+
   const storeAccounts = data?.filter(a => a.storeId === storeId);
   const storeServices = serviceTypes?.filter(s => s.storeId === storeId || s.storeId === null) ?? [];
 
   const resetForm = () => {
     setName(""); setRole("worker"); setPin(""); setServiceTypeId("");
+  };
+
+  const openEdit = (acc: any) => {
+    setEditingAcc(acc);
+    setEditName(acc.name ?? "");
+    setEditRole(acc.role ?? "worker");
+    setEditPin((acc as any).pin ?? "");
+    setEditServiceTypeId((acc as any).serviceTypeId?.toString() ?? "");
+    setEditOpen(true);
+  };
+
+  const handleUpdate = () => {
+    if (!editName) { toast({ title: "Ism kiritilmadi", variant: "destructive" }); return; }
+    updateAccount.mutate({
+      id: editingAcc.id,
+      data: {
+        name: editName,
+        role: editRole,
+        pin: editPin || null,
+        serviceTypeId: editRole === "worker" && editServiceTypeId ? Number(editServiceTypeId) : null,
+      }
+    }, {
+      onSuccess: () => {
+        toast({ title: "Saqlandi" });
+        queryClient.invalidateQueries({ queryKey: getGetAccountsQueryKey() });
+        setEditOpen(false);
+      },
+      onError: (err) => toast({ title: "Xatolik", description: (err as any).data?.error, variant: "destructive" })
+    });
   };
 
   const handleCreate = () => {
@@ -177,6 +214,9 @@ function AccountsView({ storeId }: { storeId: number }) {
                     {svc ? <span className="text-primary font-medium">{svc.name}</span> : "—"}
                   </TableCell>
                   <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" onClick={() => openEdit(acc)}>
+                      <Pencil className="w-4 h-4 text-muted-foreground" />
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => handleDelete(acc.id)}>
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
@@ -187,6 +227,59 @@ function AccountsView({ storeId }: { storeId: number }) {
           </TableBody>
         </Table>
       </Card>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Ishchini tahrirlash</DialogTitle>
+            <DialogDescription>Ma'lumotlarni o'zgartiring</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Ism</Label>
+              <Input placeholder="Xodim ismi" value={editName} onChange={e => setEditName(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Rol</Label>
+              <Select value={editRole} onValueChange={(v) => { setEditRole(v); if (v !== 'worker') setEditServiceTypeId(""); }}>
+                <SelectTrigger><SelectValue placeholder="Rol" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="viewer">Viewer (faqat ko'rish)</SelectItem>
+                  <SelectItem value="worker">Ishchi (Worker)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {editRole === "worker" && (
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5">
+                  <Wrench className="w-3.5 h-3.5 text-primary" />
+                  Xizmat turi
+                </Label>
+                <Select value={editServiceTypeId} onValueChange={setEditServiceTypeId}>
+                  <SelectTrigger><SelectValue placeholder="Xizmat turini tanlang..." /></SelectTrigger>
+                  <SelectContent>
+                    {storeServices.map(s => (
+                      <SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>
+                    ))}
+                    {!storeServices.length && <div className="p-2 text-sm text-muted-foreground">Xizmat turlari yo'q</div>}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label>PIN kod (6 raqam)</Label>
+              <Input type="tel" placeholder="Masalan: 123456" value={editPin} onChange={e => setEditPin(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} inputMode="numeric" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleUpdate} disabled={updateAccount.isPending} className="w-full">
+              {updateAccount.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Saqlash
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
