@@ -315,6 +315,77 @@ pm2 startup 2>/dev/null | grep "^sudo" | bash 2>/dev/null || true
 
 sleep 4
 
+# =============================================================
+# NGINX AVTOMATIK SOZLASH
+# =============================================================
+echo -e "${BLUE}[+] Nginx sozlanmoqda...${NC}"
+
+NGINX_CONF=""
+for CONF_PATH in \
+  "/www/server/panel/vhost/nginx/${SELECTED_DOMAIN}.conf" \
+  "/etc/nginx/sites-enabled/${SELECTED_DOMAIN}" \
+  "/etc/nginx/sites-enabled/${SELECTED_DOMAIN}.conf" \
+  "/etc/nginx/conf.d/${SELECTED_DOMAIN}.conf"; do
+  if [ -f "$CONF_PATH" ]; then
+    NGINX_CONF="$CONF_PATH"
+    break
+  fi
+done
+
+if [ -z "$NGINX_CONF" ]; then
+  warn "Nginx config topilmadi. Qo'lda sozlang: proxy_pass http://127.0.0.1:$API_PORT;"
+else
+  if grep -q "proxy_pass" "$NGINX_CONF" 2>/dev/null; then
+    # Mavjud proxy_pass ni yangilash
+    sed -i "s|proxy_pass .*;|proxy_pass http://127.0.0.1:${API_PORT};|g" "$NGINX_CONF"
+    ok "Nginx proxy_pass yangilandi: $NGINX_CONF"
+  else
+    # location / blokini topib ichiga proxy qo'shish
+    # Avval backup qilish
+    cp "$NGINX_CONF" "${NGINX_CONF}.bak"
+
+    # location / ni proxy bilan almashtirish
+    node -e "
+const fs = require('fs');
+let conf = fs.readFileSync('$NGINX_CONF', 'utf8');
+
+const proxyBlock = \`
+    location / {
+        proxy_pass http://127.0.0.1:${API_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \\\$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \\\$scheme;
+        proxy_cache_bypass \\\$http_upgrade;
+    }\`;
+
+// Eski location / {} blokini o'chirib proxy bilan almashtirish
+conf = conf.replace(/location\s*\/\s*\{[^}]*\}/s, proxyBlock);
+
+// Agar location / umuman yo'q bo'lsa, server {} ichiga qo'shish
+if (!conf.includes('proxy_pass')) {
+  conf = conf.replace(/server\s*\{/, 'server {' + proxyBlock);
+}
+
+fs.writeFileSync('$NGINX_CONF', conf);
+console.log('Nginx config yangilandi');
+" 2>/dev/null && ok "Nginx config yangilandi: $NGINX_CONF" || warn "Nginx config o'zgartirishda xato — qo'lda sozlang"
+  fi
+
+  # Nginx tekshirish va qayta yuklash
+  if nginx -t 2>/dev/null; then
+    nginx -s reload 2>/dev/null && ok "Nginx qayta yuklandi" || \
+    systemctl reload nginx 2>/dev/null && ok "Nginx qayta yuklandi" || \
+    service nginx reload 2>/dev/null || warn "Nginx qayta yuklanmadi: nginx -s reload"
+  else
+    warn "Nginx config xatosi bor! Backup tiklash: cp ${NGINX_CONF}.bak $NGINX_CONF"
+    cp "${NGINX_CONF}.bak" "$NGINX_CONF" 2>/dev/null || true
+  fi
+fi
+
 echo ""
 echo -e "${GREEN}${BOLD}╔═══════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}${BOLD}║     🎉 O'RNATISH MUVAFFAQIYATLI!          ║${NC}"
