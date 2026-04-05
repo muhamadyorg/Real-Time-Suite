@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, ordersTable, serviceTypesTable, clientsTable, storesTable, accountsTable, accountPermissionsTable } from "@workspace/db";
+import { db, ordersTable, serviceTypesTable, clientsTable, storesTable, accountsTable, accountPermissionsTable, storePermissionModesTable } from "@workspace/db";
 import { eq, and, asc, desc, sql, isNull, lt } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 import type { Server as SocketServer } from "socket.io";
@@ -381,14 +381,30 @@ router.patch("/:id/status", async (req, res) => {
     if (status === "topshirildi") {
       if (!["sudo", "superadmin"].includes(payload.role)) {
         if (!payload.accountId) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
-        const perm = await db.query.accountPermissionsTable.findFirst({
+        const storeId = order.storeId;
+        const modeRow = await db.query.storePermissionModesTable.findFirst({
+          where: and(
+            eq(storePermissionModesTable.storeId, storeId),
+            eq(storePermissionModesTable.permissionKey, "can_mark_delivered")
+          )
+        });
+        const mode = (modeRow?.mode ?? "some") as "none" | "some" | "all";
+        if (mode === "none") {
+          res.status(403).json({ error: "Sizga 'Topshirildi' belgilash ruxsati berilmagan" }); return;
+        }
+        const explicitEntry = await db.query.accountPermissionsTable.findFirst({
           where: and(
             eq(accountPermissionsTable.accountId, payload.accountId),
             eq(accountPermissionsTable.permissionKey, "can_mark_delivered"),
-            eq(accountPermissionsTable.storeId, order.storeId)
+            eq(accountPermissionsTable.storeId, storeId)
           )
         });
-        if (!perm) { res.status(403).json({ error: "Sizga 'Topshirildi' belgilash ruxsati berilmagan" }); return; }
+        if (mode === "some" && !explicitEntry) {
+          res.status(403).json({ error: "Sizga 'Topshirildi' belgilash ruxsati berilmagan" }); return;
+        }
+        if (mode === "all" && explicitEntry) {
+          res.status(403).json({ error: "Sizga 'Topshirildi' belgilash ruxsati berilmagan" }); return;
+        }
       }
     }
 
