@@ -1027,7 +1027,11 @@ function DatabaseView() {
       a.download = `backup-${date}.sql`;
       a.click();
       URL.revokeObjectURL(url);
-      toast({ title: "✅ Backup yuklab olindi" });
+      const kb = (blob.size / 1024).toFixed(1);
+      const size = blob.size >= 1024 * 1024
+        ? `${(blob.size / 1024 / 1024).toFixed(2)} MB`
+        : `${kb} KB`;
+      toast({ title: `✅ Backup yuklab olindi (${size})` });
     } catch {
       toast({ title: "Export xatoligi", variant: "destructive" });
     }
@@ -1078,7 +1082,7 @@ function DatabaseView() {
             <Database className="w-6 h-6 text-primary" />
             Ma'lumotlar bazasi
           </h2>
-          {dbSize && <p className="text-sm text-muted-foreground mt-0.5">Baza hajmi: <span className="font-semibold">{dbSize}</span></p>}
+          {dbSize && <p className="text-sm text-muted-foreground mt-0.5">Ma'lumotlar hajmi: <span className="font-semibold">{dbSize}</span></p>}
         </div>
         <Button variant="outline" size="sm" onClick={loadStats} disabled={loadingStats} className="gap-2">
           {loadingStats ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
