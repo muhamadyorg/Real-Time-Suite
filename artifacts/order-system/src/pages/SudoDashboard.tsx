@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Header } from "@/components/Header";
 import {
@@ -995,6 +995,8 @@ function DatabaseView() {
   const [importConfirm, setImportConfirm] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  useEffect(() => { loadStats(); }, [token]);
 
   const loadStats = async () => {
     if (!token) return;
