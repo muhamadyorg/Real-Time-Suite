@@ -12,7 +12,8 @@ function isSudo(req: express.Request): boolean {
   return payload?.role === "sudo";
 }
 
-// parent-first order required for FK constraints
+// FK-safe insert order: parent tables first, child tables last
+// accounts.service_type_id → service_types.id  (so service_types must come before accounts)
 const TABLES_ORDERED = [
   "stores",
   "service_types",
@@ -24,14 +25,10 @@ const TABLES_ORDERED = [
   "store_permission_modes",
 ];
 
-const STORE_ID_TABLES = new Set([
-  "service_types",
-  "accounts",
-  "orders",
-  "account_permissions",
-  "store_permission_modes",
-]);
+// Reverse order for DELETE (children first, parents last)
+const TABLES_REVERSE = [...TABLES_ORDERED].reverse();
 
+// Dynamically reset all sequences — covers every serial column, no hardcoded list
 const SEQUENCE_RESET_SQL = `DO $$
 DECLARE r RECORD;
 BEGIN
@@ -52,127 +49,14 @@ BEGIN
   END LOOP;
 END $$;`;
 
-function parseSqlValues(valsStr: string): string[] {
-  const vals: string[] = [];
-  let current = "";
-  let i = 0;
-  while (i < valsStr.length) {
-    const ch = valsStr[i];
-    if (ch === "'") {
-      current += ch; i++;
-      while (i < valsStr.length) {
-        const c = valsStr[i];
-        if (c === "'" && valsStr[i + 1] === "'") { current += "''"; i += 2; }
-        else if (c === "'") { current += c; i++; break; }
-        else { current += c; i++; }
-      }
-    } else if (ch === ",") {
-      vals.push(current.trim()); current = ""; i++;
-      while (i < valsStr.length && valsStr[i] === " ") i++;
-    } else { current += ch; i++; }
-  }
-  if (current.trim()) vals.push(current.trim());
-  return vals;
-}
-
-function getInsertColValue(line: string, colName: string): string | null {
-  const m = line.match(/^INSERT INTO "\w+" \((.+?)\) VALUES \((.+)\);/);
-  if (!m) return null;
-  const cols = m[1].split(", ").map(c => c.replace(/^"|"$/g, ""));
-  const idx = cols.indexOf(colName);
-  if (idx < 0) return null;
-  return parseSqlValues(m[2])[idx] ?? null;
-}
-
-function parseBackupInserts(sql: string): Record<string, string[]> {
-  const result: Record<string, string[]> = {};
-  for (const line of sql.split("\n")) {
-    const m = line.match(/^INSERT INTO "(\w+)"/);
-    if (!m) continue;
-    const t = m[1];
-    (result[t] = result[t] || []).push(line);
-  }
-  return result;
-}
-
-function parseStoresFromBackup(sql: string): { id: number; name: string }[] {
-  const stores: { id: number; name: string }[] = [];
-  for (const line of sql.split("\n")) {
-    if (!line.startsWith('INSERT INTO "stores"')) continue;
-    const idVal = getInsertColValue(line, "id");
-    const nameVal = getInsertColValue(line, "name");
-    if (!idVal || !nameVal) continue;
-    const id = parseInt(idVal);
-    const name = nameVal.replace(/^'|'$/g, "").replace(/''/g, "'");
-    if (!isNaN(id)) stores.push({ id, name });
-  }
-  return stores;
-}
-
-function filterByStoreId(lines: string[], ids: Set<number>): string[] {
-  return lines.filter(line => {
-    const val = getInsertColValue(line, "store_id");
-    if (val === null) return true;
-    if (val === "NULL") return false;
-    return ids.has(parseInt(val));
-  });
-}
-
-function buildSelectiveImportSql(inserts: Record<string, string[]>, storeIds: number[]): string {
-  const ids = new Set(storeIds);
-  const idsStr = storeIds.join(", ");
-  let sql = "";
-
-  sql += `DELETE FROM "store_permission_modes" WHERE store_id IN (${idsStr});\n`;
-  sql += `DELETE FROM "account_permissions" WHERE store_id IN (${idsStr});\n`;
-  sql += `DELETE FROM "orders" WHERE store_id IN (${idsStr});\n`;
-  sql += `DELETE FROM "accounts" WHERE store_id IN (${idsStr});\n`;
-  sql += `DELETE FROM "service_types" WHERE store_id IN (${idsStr});\n`;
-  sql += `DELETE FROM "stores" WHERE id IN (${idsStr});\n\n`;
-
-  const stypeIds = new Set<number>();
-  for (const line of (inserts["service_types"] || [])) {
-    const sid = getInsertColValue(line, "store_id");
-    const tid = getInsertColValue(line, "id");
-    if (sid && tid && ids.has(parseInt(sid))) stypeIds.add(parseInt(tid));
-  }
-
-  const neededClientIds = new Set<number>();
-  for (const line of (inserts["orders"] || [])) {
-    const sid = getInsertColValue(line, "store_id");
-    const cid = getInsertColValue(line, "client_id");
-    if (sid && cid && ids.has(parseInt(sid))) neededClientIds.add(parseInt(cid));
-  }
-
-  for (const table of TABLES_ORDERED) {
-    const rows = inserts[table] || [];
-    let filtered: string[] = [];
-
-    if (table === "stores") {
-      filtered = rows.filter(l => { const v = getInsertColValue(l, "id"); return v && ids.has(parseInt(v)); });
-    } else if (table === "clients") {
-      filtered = rows
-        .filter(l => { const v = getInsertColValue(l, "id"); return v && neededClientIds.has(parseInt(v)); })
-        .map(l => l.replace(/;$/, " ON CONFLICT (id) DO NOTHING;"));
-    } else if (table === "products") {
-      filtered = rows.filter(l => { const v = getInsertColValue(l, "service_type_id"); return v && stypeIds.has(parseInt(v)); });
-    } else if (STORE_ID_TABLES.has(table)) {
-      filtered = filterByStoreId(rows, ids);
-    }
-
-    if (filtered.length) sql += filtered.join("\n") + "\n\n";
-  }
-
-  return sql;
-}
-
+// GET /api/db/stats
 router.get("/stats", async (req, res) => {
   if (!isSudo(req)) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
   try {
-    const tableStats = await Promise.all(
+    const stats = await Promise.all(
       TABLES_ORDERED.map(async (table) => {
-        const r = await pool.query(`SELECT COUNT(*) AS count FROM "${table}"`);
-        return { table, count: Number(r.rows[0].count) };
+        const result = await pool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+        return { table, count: Number(result.rows[0].count) };
       })
     );
     const sizeRes = await pool.query(`
@@ -182,60 +66,37 @@ router.get("/stats", async (req, res) => {
       FROM information_schema.tables
       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
     `);
-    const storesRes = await pool.query(`SELECT id, name FROM "stores" ORDER BY id`);
-    res.json({ stats: tableStats, dbSize: sizeRes.rows[0].size, stores: storesRes.rows });
-  } catch (e: any) { res.status(500).json({ error: e.message }); }
+    res.json({ stats, dbSize: sizeRes.rows[0].size });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
+// GET /api/db/export — export all data as SQL
+// NOTE: Does NOT use session_replication_role (requires superuser).
+// Instead: DELETE in reverse FK order, INSERT in FK-safe order.
 router.get("/export", async (req, res) => {
   if (!isSudo(req)) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
-  const storeId = req.query.storeId ? parseInt(req.query.storeId as string) : null;
-  const filtered = storeId !== null && !isNaN(storeId);
-
   try {
     const date = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    let storeName = "all";
-    if (filtered) {
-      const sr = await pool.query(`SELECT name FROM "stores" WHERE id = $1`, [storeId]);
-      storeName = sr.rows[0]?.name?.replace(/[^a-zA-Z0-9]/g, "_") ?? `store_${storeId}`;
-    }
-
     let totalRows = 0;
-    let out = `-- Buyurtma tizimi DB backup\n-- Sana: ${new Date().toISOString()}\n\n`;
+    let out = `-- Buyurtma tizimi DB backup\n`;
+    out += `-- Sana: ${new Date().toISOString()}\n`;
+    out += `-- Versiya: 1.0\n\n`;
 
-    if (filtered) {
-      out += `DELETE FROM "store_permission_modes" WHERE store_id = ${storeId};\n`;
-      out += `DELETE FROM "account_permissions" WHERE store_id = ${storeId};\n`;
-      out += `DELETE FROM "orders" WHERE store_id = ${storeId};\n`;
-      out += `DELETE FROM "accounts" WHERE store_id = ${storeId};\n`;
-      out += `DELETE FROM "service_types" WHERE store_id = ${storeId};\n`;
-      out += `DELETE FROM "stores" WHERE id = ${storeId};\n\n`;
-    } else {
-      for (const table of [...TABLES_ORDERED].reverse()) out += `DELETE FROM "${table}";\n`;
-      out += "\n";
+    // DELETE in reverse FK order (children first) — no superuser needed
+    out += `-- ===== Eski ma'lumotlarni tozalash =====\n`;
+    for (const table of TABLES_REVERSE) {
+      out += `DELETE FROM "${table}";\n`;
     }
+    out += `\n`;
 
+    // INSERT in FK-safe order (parents first)
     for (const table of TABLES_ORDERED) {
-      let query: string;
-      if (!filtered) {
-        query = `SELECT * FROM "${table}" ORDER BY id`;
-      } else if (table === "stores") {
-        query = `SELECT * FROM "stores" WHERE id = ${storeId}`;
-      } else if (STORE_ID_TABLES.has(table)) {
-        query = `SELECT * FROM "${table}" WHERE store_id = ${storeId} ORDER BY id`;
-      } else if (table === "products") {
-        query = `SELECT * FROM "products" WHERE service_type_id IN (SELECT id FROM service_types WHERE store_id = ${storeId}) ORDER BY id`;
-      } else if (table === "clients") {
-        query = `SELECT * FROM "clients" WHERE id IN (SELECT DISTINCT client_id FROM orders WHERE store_id = ${storeId}) ORDER BY id`;
-      } else {
-        query = `SELECT * FROM "${table}" ORDER BY id`;
-      }
-
-      const rowsRes = await pool.query(query);
+      const rowsRes = await pool.query(`SELECT * FROM "${table}" ORDER BY id`);
+      out += `-- ===== ${table} (${rowsRes.rows.length} ta yozuv) =====\n`;
       totalRows += rowsRes.rows.length;
-      if (!rowsRes.rows.length) continue;
 
-      out += `-- ${table} (${rowsRes.rows.length})\n`;
       for (const row of rowsRes.rows) {
         const cols = Object.keys(row).map(c => `"${c}"`).join(", ");
         const vals = Object.values(row).map(v => {
@@ -243,32 +104,30 @@ router.get("/export", async (req, res) => {
           if (typeof v === "number") return v.toString();
           if (typeof v === "boolean") return v ? "true" : "false";
           if (v instanceof Date) return `'${v.toISOString()}'`;
-          return `'${String(v).replace(/\\/g, "\\\\").replace(/'/g, "''")}'`;
+          const str = String(v).replace(/\\/g, "\\\\").replace(/'/g, "''");
+          return `'${str}'`;
         }).join(", ");
-        const onConflict = (table === "clients" && filtered) ? " ON CONFLICT (id) DO NOTHING" : "";
-        out += `INSERT INTO "${table}" (${cols}) VALUES (${vals})${onConflict};\n`;
+        out += `INSERT INTO "${table}" (${cols}) VALUES (${vals});\n`;
       }
-      out += "\n";
+      out += `\n`;
     }
 
-    out += `${SEQUENCE_RESET_SQL}\n-- Total rows: ${totalRows}\n`;
+    out += `-- ===== Sequence reset =====\n`;
+    out += SEQUENCE_RESET_SQL + "\n";
+    out += `-- Total rows: ${totalRows}\n`;
 
-    const filename = filtered ? `backup-${storeName}-${date}.sql` : `backup-${date}.sql`;
     res.setHeader("Content-Type", "application/sql");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Disposition", `attachment; filename="backup-${date}.sql"`);
     res.send(out);
-  } catch (e: any) { res.status(500).json({ error: e.message }); }
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-router.post(
-  "/import/preview",
-  express.text({ type: "*/*", limit: "100mb" }),
-  (req, res) => {
-    if (!isSudo(req)) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
-    res.json({ stores: parseStoresFromBackup(req.body as string) });
-  }
-);
-
+// POST /api/db/import — restore from SQL text
+// Strips session_replication_role lines (requires superuser — not available on all setups).
+// Sends entire SQL to PostgreSQL server in one call (server-side parser handles
+// semicolons inside string literals correctly).
 router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req, res) => {
   if (!isSudo(req)) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
   const sqlText = req.body as string;
@@ -276,27 +135,31 @@ router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req
     res.status(400).json({ error: "SQL matn kerak" }); return;
   }
 
+  // Strip all session_replication_role lines — requires superuser, not needed
+  // when inserts are in FK-safe order and DELETEs are in reverse order.
   const cleanedSql = sqlText
     .split("\n")
     .filter(line => !/SET\s+session_replication_role/i.test(line))
     .join("\n");
 
-  const storeIdsHeader = req.headers["x-store-ids"] as string | undefined;
-  const storeIds = storeIdsHeader
-    ? storeIdsHeader.split(",").map(Number).filter(n => !isNaN(n) && n > 0)
-    : null;
-
-  const finalSql = (storeIds && storeIds.length > 0)
-    ? buildSelectiveImportSql(parseBackupInserts(cleanedSql), storeIds)
-    : cleanedSql;
-
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    for (const table of TABLES_ORDERED) await client.query(`ALTER TABLE "${table}" DISABLE TRIGGER ALL`);
-    await client.query(finalSql);
+
+    // Disable FK trigger checks on all tables so backup files work regardless
+    // of insert order. Requires table ownership (not superuser).
+    for (const table of TABLES_ORDERED) {
+      await client.query(`ALTER TABLE "${table}" DISABLE TRIGGER ALL`);
+    }
+
+    await client.query(cleanedSql);
     await client.query(SEQUENCE_RESET_SQL);
-    for (const table of TABLES_ORDERED) await client.query(`ALTER TABLE "${table}" ENABLE TRIGGER ALL`);
+
+    // Re-enable FK triggers
+    for (const table of TABLES_ORDERED) {
+      await client.query(`ALTER TABLE "${table}" ENABLE TRIGGER ALL`);
+    }
+
     await client.query("COMMIT");
     res.json({ ok: true, message: "Import muvaffaqiyatli bajarildi" });
   } catch (e: any) {
