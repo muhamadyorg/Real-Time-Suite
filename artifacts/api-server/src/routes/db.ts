@@ -13,10 +13,11 @@ function isSudo(req: express.Request): boolean {
 }
 
 // FK-safe insert order: parent tables first, child tables last
+// accounts.service_type_id → service_types.id  (so service_types must come before accounts)
 const TABLES_ORDERED = [
   "stores",
-  "accounts",
   "service_types",
+  "accounts",
   "clients",
   "products",
   "orders",
