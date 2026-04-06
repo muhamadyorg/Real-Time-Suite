@@ -1089,12 +1089,14 @@ function DatabaseView() {
     setImportStep("importing");
     try {
       const text = await selectedFile.text();
-      const allSelected = chosenStoreIds.size === backupStores.length;
       const headers: Record<string, string> = {
         Authorization: `Bearer ${token}`,
         "Content-Type": "text/plain",
       };
-      if (!allSelected && chosenStoreIds.size > 0) {
+      // Always send X-Store-Ids when backup has known stores.
+      // This ensures only the chosen stores are replaced and
+      // any store NOT in the backup is never touched.
+      if (backupStores.length > 0 && chosenStoreIds.size > 0) {
         headers["X-Store-Ids"] = [...chosenStoreIds].join(",");
       }
       const r = await fetch(`${baseUrl}/api/db/import`, { method: "POST", headers, body: text });
