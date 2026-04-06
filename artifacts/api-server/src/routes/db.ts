@@ -178,9 +178,51 @@ function splitSqlStatements(sql: string): string[] {
   return statements;
 }
 
+// Parse pg_dump COPY blocks → grouped by table name
+function parsePgDump(sql: string): Map<string, string[]> {
+  const knownTables = new Set(TABLES_ORDERED);
+  const byTable = new Map<string, string[]>();
+  const lines = sql.split("\n");
+
+  let inCopy = false;
+  let table = "";
+  let columns: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+
+    const m = line.match(/^COPY\s+(?:public\.)?(\w+)\s+\(([^)]+)\)\s+FROM\s+stdin/i);
+    if (m) {
+      if (knownTables.has(m[1])) {
+        inCopy = true;
+        table = m[1];
+        columns = m[2].split(",").map(c => c.trim());
+        if (!byTable.has(table)) byTable.set(table, []);
+      }
+      continue;
+    }
+
+    if (line === "\\.") { inCopy = false; table = ""; columns = []; continue; }
+
+    if (inCopy && line.length > 0) {
+      const vals = line.split("\t").map(v => {
+        if (v === "\\N") return "NULL";
+        const d = v.replace(/\\\\/g, "\\").replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+        return `'${d.replace(/'/g, "''")}'`;
+      });
+      const colList = columns.map(c => `"${c}"`).join(", ");
+      byTable.get(table)!.push(
+        `INSERT INTO "${table}" (${colList}) VALUES (${vals.join(", ")}) ON CONFLICT (id) DO NOTHING`
+      );
+    }
+  }
+  return byTable;
+}
+
 // POST /api/db/import — restore from SQL text
-// Executes each statement individually (guarantees FK-safe sequential order).
-// No superuser privileges required.
+// Supports our own export format AND pg_dump format.
+// pg_dump: FK-safe insert order, ON CONFLICT DO NOTHING (keeps existing data).
+// Our format: runs statements as-is (includes DELETE + INSERT).
 router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req, res) => {
   if (!isSudo(req)) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
   const sqlText = req.body as string;
@@ -188,33 +230,43 @@ router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req
     res.status(400).json({ error: "SQL matn kerak" }); return;
   }
 
-  // Strip lines that require superuser
-  const cleaned = sqlText
-    .split("\n")
-    .filter(line =>
-      !/SET\s+session_replication_role/i.test(line) &&
-      !/ALTER\s+TABLE\s+.+\s+(DISABLE|ENABLE)\s+TRIGGER/i.test(line)
-    )
-    .join("\n");
+  let statements: string[];
+  const isPgDumpFormat =
+    /-- PostgreSQL database dump/i.test(sqlText) ||
+    /COPY\s+(?:public\.)?\w+\s+\([^)]+\)\s+FROM\s+stdin/i.test(sqlText);
 
-  const statements = splitSqlStatements(cleaned).filter(s => {
-    const up = s.replace(/--[^\n]*/g, "").trim().toUpperCase();
-    return up.length > 0 && !up.match(/^--/);
-  });
+  if (isPgDumpFormat) {
+    // Parse COPY blocks, then replay in FK-safe order (TABLES_ORDERED)
+    const byTable = parsePgDump(sqlText);
+    statements = [];
+    for (const tbl of TABLES_ORDERED) {
+      const rows = byTable.get(tbl);
+      if (rows && rows.length > 0) statements.push(...rows);
+    }
+  } else {
+    // Our own export format
+    const cleaned = sqlText
+      .split("\n")
+      .filter(line =>
+        !/SET\s+session_replication_role/i.test(line) &&
+        !/ALTER\s+TABLE\s+.+\s+(DISABLE|ENABLE)\s+TRIGGER/i.test(line)
+      )
+      .join("\n");
+    statements = splitSqlStatements(cleaned).filter(s => {
+      const up = s.replace(/--[^\n]*/g, "").trim().toUpperCase();
+      return up.length > 0 && !up.match(/^--/);
+    });
+  }
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-
     for (const stmt of statements) {
       await client.query(stmt);
     }
-
-    // Always reset sequences after import
     await client.query(SEQUENCE_RESET_SQL);
-
     await client.query("COMMIT");
-    res.json({ ok: true, message: "Import muvaffaqiyatli bajarildi" });
+    res.json({ ok: true, message: `Import muvaffaqiyatli bajarildi (${statements.length} ta amal)` });
   } catch (e: any) {
     await client.query("ROLLBACK").catch(() => {});
     res.status(400).json({ error: e.message });
