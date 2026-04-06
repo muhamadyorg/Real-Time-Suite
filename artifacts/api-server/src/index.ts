@@ -7,6 +7,7 @@ import { setSettingsSocketIO } from "./routes/settings";
 import { verifyToken } from "./lib/auth";
 import { initTelegramBot, initStoreBots } from "./routes/telegram";
 import { seedSudo } from "./lib/seed";
+import { db, storesTable } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
 
@@ -33,7 +34,7 @@ const io = new SocketServer(httpServer, {
 setSocketIO(io);
 setSettingsSocketIO(io);
 
-io.on("connection", (socket) => {
+io.on("connection", async (socket) => {
   const token = socket.handshake.auth?.token as string | undefined;
   if (token) {
     const payload = verifyToken(token);
@@ -42,11 +43,17 @@ io.on("connection", (socket) => {
     }
     if (payload?.role === "sudo") {
       socket.join("sudo");
+      try {
+        const stores = await db.select({ id: storesTable.id }).from(storesTable);
+        stores.forEach((s) => socket.join(`store:${s.id}`));
+      } catch (e) {
+        logger.error({ err: e }, "sudo room join failed");
+      }
     }
   }
 
   socket.on("join-store", (storeId: number) => {
-    socket.join(`store:${storeId}`);
+    if (storeId > 0) socket.join(`store:${storeId}`);
   });
 });
 

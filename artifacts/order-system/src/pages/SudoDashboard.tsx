@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSocket } from "@/hooks/useSocket";
 import { Header } from "@/components/Header";
 import {
   useGetStores, useCreateStore, useDeleteStore, useUpdateStore,
@@ -716,7 +717,7 @@ function ClientsView() {
 function OrdersView() {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [filterStoreId, setFilterStoreId] = useState<string>("all");
-  const { data, isLoading } = useGetOrders({ date }, { query: { queryKey: getGetOrdersQueryKey({ date }) } });
+  const { data, isLoading } = useGetOrders({ date }, { query: { queryKey: getGetOrdersQueryKey({ date }), refetchInterval: 30000 } });
   const { data: stores } = useGetStores({ query: { queryKey: getGetStoresQueryKey() } });
   const { data: serviceTypes } = useGetServiceTypes({ query: { queryKey: getGetServiceTypesQueryKey() } });
   const createOrder = useCreateOrder();
@@ -1219,7 +1220,8 @@ const NAV_ITEMS = [
 ];
 
 export default function SudoDashboard() {
-  const { accountName, clearStoreAuth } = useAuth();
+  const { accountName, clearStoreAuth, token, storeId } = useAuth();
+  useSocket(token, storeId);
   const [view, setView] = useState("stores");
 
   const views: any = {
