@@ -9,6 +9,7 @@ import clientsRouter from "./clients";
 import productsRouter from "./products";
 import settingsRouter from "./settings";
 import permissionsRouter from "./permissions";
+import dbRouter from "./db";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use("/clients", clientsRouter);
 router.use("/products", productsRouter);
 router.use("/settings", settingsRouter);
 router.use("/permissions", permissionsRouter);
+router.use("/db", dbRouter);
 
 export default router;
