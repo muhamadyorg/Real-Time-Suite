@@ -124,10 +124,63 @@ router.get("/export", async (req, res) => {
   }
 });
 
+/**
+ * Split a SQL string into individual statements.
+ * Correctly handles $$ dollar-quoted blocks (DO statements, functions, etc.)
+ * so that semicolons inside dollar quotes are NOT treated as statement terminators.
+ */
+function splitSqlStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = "";
+  let inDollarQuote = false;
+  let dollarTag = "";
+  let i = 0;
+
+  while (i < sql.length) {
+    // Detect dollar-quote start (e.g. $$ or $body$)
+    if (!inDollarQuote && sql[i] === "$") {
+      const rest = sql.slice(i);
+      const m = rest.match(/^\$([^$]*)\$/);
+      if (m) {
+        inDollarQuote = true;
+        dollarTag = m[0];
+        current += dollarTag;
+        i += dollarTag.length;
+        continue;
+      }
+    }
+
+    // Detect dollar-quote end
+    if (inDollarQuote && sql.slice(i).startsWith(dollarTag)) {
+      inDollarQuote = false;
+      current += dollarTag;
+      i += dollarTag.length;
+      dollarTag = "";
+      continue;
+    }
+
+    // Statement separator (only outside dollar quotes)
+    if (!inDollarQuote && sql[i] === ";") {
+      current += ";";
+      const stmt = current.trim();
+      if (stmt.length > 1) statements.push(stmt);
+      current = "";
+      i++;
+      continue;
+    }
+
+    current += sql[i];
+    i++;
+  }
+
+  const tail = current.trim();
+  if (tail) statements.push(tail);
+  return statements;
+}
+
 // POST /api/db/import — restore from SQL text
-// Strips session_replication_role lines (requires superuser — not available on all setups).
-// Sends entire SQL to PostgreSQL server in one call (server-side parser handles
-// semicolons inside string literals correctly).
+// Executes each statement individually (guarantees FK-safe sequential order).
+// No superuser privileges required.
 router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req, res) => {
   if (!isSudo(req)) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
   const sqlText = req.body as string;
@@ -135,20 +188,29 @@ router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req
     res.status(400).json({ error: "SQL matn kerak" }); return;
   }
 
-  // Strip all session_replication_role lines — requires superuser, not needed
-  // when inserts are in FK-safe order and DELETEs are in reverse order.
-  const cleanedSql = sqlText
+  // Strip lines that require superuser
+  const cleaned = sqlText
     .split("\n")
-    .filter(line => !/SET\s+session_replication_role/i.test(line))
+    .filter(line =>
+      !/SET\s+session_replication_role/i.test(line) &&
+      !/ALTER\s+TABLE\s+.+\s+(DISABLE|ENABLE)\s+TRIGGER/i.test(line)
+    )
     .join("\n");
+
+  const statements = splitSqlStatements(cleaned).filter(s => {
+    const up = s.replace(/--[^\n]*/g, "").trim().toUpperCase();
+    return up.length > 0 && !up.match(/^--/);
+  });
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    // Export generates SQL in FK-safe order (parents first, children last for INSERT;
-    // reverse order for DELETE) so no trigger disabling is needed — avoids superuser requirement.
-    await client.query(cleanedSql);
+    for (const stmt of statements) {
+      await client.query(stmt);
+    }
+
+    // Always reset sequences after import
     await client.query(SEQUENCE_RESET_SQL);
 
     await client.query("COMMIT");
