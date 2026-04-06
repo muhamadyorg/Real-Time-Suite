@@ -23,20 +23,27 @@ const TABLES_ORDERED = [
   "store_permission_modes",
 ];
 
-const SERIAL_TABLES = [
-  "stores",
-  "accounts",
-  "service_types",
-  "clients",
-  "products",
-  "orders",
-];
-
-function sequenceResetSql(): string {
-  return SERIAL_TABLES.map(t =>
-    `SELECT setval(pg_get_serial_sequence('"${t}"', 'id'), COALESCE((SELECT MAX(id) FROM "${t}"), 1));`
-  ).join("\n");
-}
+// Dynamically reset all sequences in the public schema.
+// Uses pg catalog — automatically covers every serial column, no manual list to maintain.
+const SEQUENCE_RESET_SQL = `DO $$
+DECLARE r RECORD;
+BEGIN
+  FOR r IN
+    SELECT c.relname AS tname, a.attname AS cname
+    FROM pg_class c
+    JOIN pg_attribute a ON a.attrelid = c.oid
+    WHERE c.relkind = 'r'
+      AND a.attnum > 0
+      AND NOT a.attisdropped
+      AND c.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
+      AND pg_get_serial_sequence(quote_ident(c.relname), a.attname) IS NOT NULL
+  LOOP
+    EXECUTE format(
+      'SELECT setval(pg_get_serial_sequence(%L, %L), COALESCE((SELECT MAX(id) FROM %I), 1))',
+      r.tname, r.cname, r.tname
+    );
+  END LOOP;
+END $$;`;
 
 // GET /api/db/stats
 router.get("/stats", async (req, res) => {
@@ -93,8 +100,8 @@ router.get("/export", async (req, res) => {
     }
 
     out += `SET session_replication_role = 'DEFAULT';\n\n`;
-    out += `-- ===== Sequence reset (sonraki insertlar uchun) =====\n`;
-    out += sequenceResetSql() + "\n";
+    out += `-- ===== Sequence reset (covers all serial columns, no drift) =====\n`;
+    out += SEQUENCE_RESET_SQL + "\n";
     out += `-- Total rows: ${totalRows}\n`;
 
     res.setHeader("Content-Type", "application/sql");
@@ -123,8 +130,8 @@ router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req
     // The server-side parser handles semicolons in string literals correctly.
     await client.query(sqlText);
 
-    // Ensure sequences reflect max IDs even if backup predates sequence resets
-    await client.query(sequenceResetSql());
+    // Ensure all sequences reflect max IDs — covers every serial column dynamically
+    await client.query(SEQUENCE_RESET_SQL);
 
     await client.query("COMMIT");
     res.json({ ok: true, message: "Import muvaffaqiyatli bajarildi" });
