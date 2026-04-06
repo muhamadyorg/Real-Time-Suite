@@ -57,19 +57,21 @@ function StoresView() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [tgToken, setTgToken] = useState("");
+  const [tgChatId, setTgChatId] = useState("");
 
   const [editName, setEditName] = useState("");
   const [editUsername, setEditUsername] = useState("");
   const [editPassword, setEditPassword] = useState("");
   const [editTgToken, setEditTgToken] = useState("");
+  const [editTgChatId, setEditTgChatId] = useState("");
 
   const handleCreate = () => {
     if (!name || !username || !password) return toast({ title: "Xatolik", description: "Barcha maydonlarni to'ldiring", variant: "destructive" });
-    createStore.mutate({ data: { name, username, password, telegramBotToken: tgToken || null } as any }, {
+    createStore.mutate({ data: { name, username, password, telegramBotToken: tgToken || null, telegramChatId: tgChatId || null } as any }, {
       onSuccess: () => {
         toast({ title: "Do'kon yaratildi" });
         queryClient.invalidateQueries({ queryKey: getGetStoresQueryKey() });
-        setOpen(false); setName(""); setUsername(""); setPassword(""); setTgToken("");
+        setOpen(false); setName(""); setUsername(""); setPassword(""); setTgToken(""); setTgChatId("");
       },
       onError: (err) => toast({ title: "Xatolik", description: err.data?.error, variant: "destructive" })
     });
@@ -81,6 +83,7 @@ function StoresView() {
     setEditUsername(store.username);
     setEditPassword("");
     setEditTgToken(store.telegramBotToken || "");
+    setEditTgChatId(store.telegramChatId || "");
     setEditOpen(true);
   };
 
@@ -89,6 +92,7 @@ function StoresView() {
     const data: any = { name: editName, username: editUsername };
     if (editPassword) data.password = editPassword;
     data.telegramBotToken = editTgToken || null;
+    data.telegramChatId = editTgChatId || null;
     updateStore.mutate({ id: editTarget.id, data }, {
       onSuccess: () => {
         toast({ title: "Do'kon yangilandi" });
@@ -131,6 +135,7 @@ function StoresView() {
               <div className="space-y-1.5"><Label>Login</Label><Input placeholder="do'kon_login" value={username} onChange={e => setUsername(e.target.value)} /></div>
               <div className="space-y-1.5"><Label>Parol</Label><Input placeholder="••••••••" type="password" value={password} onChange={e => setPassword(e.target.value)} /></div>
               <div className="space-y-1.5"><Label>Telegram Bot Token (ixtiyoriy)</Label><Input placeholder="1234567890:AAF..." value={tgToken} onChange={e => setTgToken(e.target.value)} className="font-mono text-xs" /></div>
+              <div className="space-y-1.5"><Label>Telegram Chat ID (admin raqami)</Label><Input placeholder="-1001234567890 yoki 123456789" value={tgChatId} onChange={e => setTgChatId(e.target.value)} className="font-mono text-xs" /><p className="text-xs text-muted-foreground">Bot orqali <code>@userinfobot</code> ga yozing, ID'ni oling. Yangi zakazlar shu raqamga boradi.</p></div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpen(false)}>Bekor</Button>
@@ -154,6 +159,7 @@ function StoresView() {
             <div className="space-y-1.5"><Label>Login</Label><Input value={editUsername} onChange={e => setEditUsername(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>Yangi parol (ixtiyoriy)</Label><Input placeholder="O'zgartirmasangiz bo'sh qoldiring" type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>Telegram Bot Token</Label><Input placeholder="1234567890:AAF... (bo'sh qoldirsa o'chadi)" value={editTgToken} onChange={e => setEditTgToken(e.target.value)} className="font-mono text-xs" /></div>
+            <div className="space-y-1.5"><Label>Telegram Chat ID (admin raqami)</Label><Input placeholder="-1001234567890 yoki 123456789" value={editTgChatId} onChange={e => setEditTgChatId(e.target.value)} className="font-mono text-xs" /><p className="text-xs text-muted-foreground">Yangi zakazlar va status o'zgarishlari shu raqamga boradi. <code>@userinfobot</code> dan ID oling.</p></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>Bekor</Button>
@@ -184,7 +190,10 @@ function StoresView() {
                   <TableCell className="text-muted-foreground text-sm">{store.id}</TableCell>
                   <TableCell className="font-semibold">{store.name}</TableCell>
                   <TableCell className="font-mono text-sm text-muted-foreground">{store.username}</TableCell>
-                  <TableCell>{store.telegramBotToken ? <span className="text-green-600 text-xs font-medium">✅ Ulangan</span> : <span className="text-muted-foreground text-xs">—</span>}</TableCell>
+                  <TableCell>
+                    {store.telegramBotToken ? <span className="text-green-600 text-xs font-medium">✅ Bot</span> : <span className="text-muted-foreground text-xs">—</span>}
+                    {store.telegramChatId ? <span className="text-blue-600 text-xs font-medium ml-1">📬 Chat</span> : null}
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{format(new Date(store.createdAt), "dd.MM.yyyy")}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">

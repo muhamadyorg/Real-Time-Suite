@@ -330,6 +330,25 @@ router.post("/", async (req, res) => {
     const showLockPin = payload.role !== "worker";
     const response = mapOrder(order, showLockPin);
     io?.to(`store:${storeId}`).emit("order:created", mapOrder(order, true));
+
+    // Notify store admin about new order
+    try {
+      const { notifyStoreAdmin } = await import("./telegram");
+      const qty = formatQty(order.quantity);
+      await notifyStoreAdmin(
+        storeId,
+        `🆕 <b>Yangi zakaz!</b>\n\n` +
+        `📦 Zakaz: <b>${order.orderId}</b>\n` +
+        `🛠 Xizmat: <b>${order.serviceTypeName}</b>\n` +
+        `🔢 Miqdor: <b>${qty}${order.unit ? " " + order.unit : ""}</b>\n` +
+        (resolvedClientName ? `👤 Mijoz: <b>${resolvedClientName}</b>\n` : ``) +
+        (resolvedClientPhone ? `📱 Telefon: <b>${resolvedClientPhone}</b>\n` : ``) +
+        (order.shelf ? `📍 Qolib: <b>${order.shelf}</b>\n` : ``) +
+        (order.notes ? `📝 Izoh: <b>${order.notes}</b>\n` : ``) +
+        `\n🏪 Do'kon: <b>${order.storeName}</b>`
+      );
+    } catch (_e) { /* ignore */ }
+
     res.status(201).json(response);
   } catch (err) {
     req.log.error(err);
@@ -507,7 +526,7 @@ router.patch("/:id/status", async (req, res) => {
       io?.to(`store:${updatedOrder.storeId}`).emit("order:updated", response);
     }
 
-    // Telegram notification for client
+    // Telegram notification for client (via global bot — client registered through global bot)
     if (updatedOrder.clientId && updatedOrder.status === "accepted") {
       try {
         const { sendTelegramNotification } = await import("./telegram");
@@ -524,8 +543,7 @@ router.patch("/:id/status", async (req, res) => {
             (updatedOrder.shelf ? `📍 Qolib: <b>${updatedOrder.shelf}</b>\n` : ``) +
             (updatedOrder.notes ? `📝 Izoh: <b>${updatedOrder.notes}</b>\n` : ``) +
             `\n⏳ Buyurtmangiz tayyorlanmoqda...\n` +
-            `Tayyor bo'lishi bilanoq xabar beramiz! 🔔`,
-            updatedOrder.storeId ?? undefined
+            `Tayyor bo'lishi bilanoq xabar beramiz! 🔔`
           );
         }
       } catch (_e) { /* Telegram not configured */ }
@@ -547,11 +565,30 @@ router.patch("/:id/status", async (req, res) => {
             (updatedOrder.shelf ? `📍 Qolib: <b>${updatedOrder.shelf}</b>\n` : ``) +
             (updatedOrder.notes ? `📝 Izoh: <b>${updatedOrder.notes}</b>\n` : ``) +
             `\n🏪 Buyurtmangizni olib ketishingiz mumkin!\n` +
-            `💎 Bizga ishonganingiz uchun katta rahmat!`,
-            updatedOrder.storeId ?? undefined
+            `💎 Bizga ishonganingiz uchun katta rahmat!`
           );
         }
       } catch (_e) { /* Telegram not configured */ }
+    }
+
+    // Notify store admin about status change
+    if (updatedOrder.storeId && ["accepted", "ready", "topshirildi"].includes(updatedOrder.status)) {
+      try {
+        const { notifyStoreAdmin } = await import("./telegram");
+        const qty = formatQty(updatedOrder.quantity);
+        const statusLabel: Record<string, string> = { accepted: "✅ Qabul qilindi", ready: "🎁 TAYYOR", topshirildi: "🚚 Olib ketildi" };
+        await notifyStoreAdmin(
+          updatedOrder.storeId,
+          `${statusLabel[updatedOrder.status]}\n\n` +
+          `📦 Zakaz: <b>${updatedOrder.orderId}</b>\n` +
+          `🛠 Xizmat: <b>${updatedOrder.serviceTypeName}</b>\n` +
+          `🔢 Miqdor: <b>${qty}${updatedOrder.unit ? " " + updatedOrder.unit : ""}</b>\n` +
+          (updatedOrder.clientName ? `👤 Mijoz: <b>${updatedOrder.clientName}</b>\n` : ``) +
+          (updatedOrder.clientPhone ? `📱 Telefon: <b>${updatedOrder.clientPhone}</b>\n` : ``) +
+          (updatedOrder.shelf ? `📍 Qolib: <b>${updatedOrder.shelf}</b>\n` : ``) +
+          (updatedOrder.notes ? `📝 Izoh: <b>${updatedOrder.notes}</b>\n` : ``)
+        );
+      } catch (_e) { /* ignore */ }
     }
 
     res.json(response);

@@ -59,16 +59,24 @@ export function updateStoreBot(storeId: number, token: string | null) {
   }
 }
 
-export function sendTelegramNotification(chatId: string, message: string, storeId?: number): Promise<void> {
-  let bot: TelegramBot | null = null;
-  if (storeId !== undefined && storeBots.has(storeId)) {
-    bot = storeBots.get(storeId)!;
-  } else {
-    bot = globalBot;
+export async function notifyStoreAdmin(storeId: number, message: string): Promise<void> {
+  try {
+    const store = await db.query.storesTable.findFirst({ where: (t, { eq: e }) => e(t.id, storeId) });
+    if (!store?.telegramChatId) return;
+    const token = store.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN;
+    if (!token) return;
+    const bot = store.telegramBotToken ? (storeBots.get(storeId) ?? new TelegramBot(token, { polling: false })) : (globalBot ?? new TelegramBot(token, { polling: false }));
+    await bot.sendMessage(store.telegramChatId, message, { parse_mode: "HTML" });
+  } catch (err: any) {
+    logger.warn({ storeId, err: err?.message }, "notifyStoreAdmin: xabar yuborilmadi");
   }
+}
+
+export function sendTelegramNotification(chatId: string, message: string): Promise<void> {
+  const bot = globalBot;
   if (!bot) return Promise.resolve();
   return bot.sendMessage(chatId, message, { parse_mode: "HTML" }).then(() => {}).catch((err) => {
-    logger.warn({ err, chatId, storeId }, "Telegram send failed");
+    logger.warn({ err, chatId }, "Telegram send failed");
   });
 }
 

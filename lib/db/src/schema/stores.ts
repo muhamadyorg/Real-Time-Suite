@@ -8,6 +8,7 @@ export const storesTable = pgTable("stores", {
   username: text("username").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   telegramBotToken: text("telegram_bot_token"),
+  telegramChatId: text("telegram_chat_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   // Admin ruxsatlari sozlamalari
   showPinsToAdmins: boolean("show_pins_to_admins").notNull().default(true),
