@@ -23,7 +23,7 @@ const TABLES_ORDERED = [
   "store_permission_modes",
 ];
 
-const SEQUENCE_TABLES = [
+const SERIAL_TABLES = [
   "stores",
   "accounts",
   "service_types",
@@ -33,7 +33,7 @@ const SEQUENCE_TABLES = [
 ];
 
 function sequenceResetSql(): string {
-  return SEQUENCE_TABLES.map(t =>
+  return SERIAL_TABLES.map(t =>
     `SELECT setval(pg_get_serial_sequence('"${t}"', 'id'), COALESCE((SELECT MAX(id) FROM "${t}"), 1));`
   ).join("\n");
 }
@@ -60,15 +60,22 @@ router.get("/export", async (req, res) => {
   if (!isSudo(req)) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
   try {
     const date = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    let totalRows = 0;
     let out = `-- Buyurtma tizimi DB backup\n`;
     out += `-- Sana: ${new Date().toISOString()}\n`;
     out += `-- Versiya: 1.0\n\n`;
+
+    // Single multi-table TRUNCATE with CASCADE — safe even with FK constraints
+    const tableList = TABLES_ORDERED.map(t => `"${t}"`).join(", ");
+    out += `TRUNCATE ${tableList} CASCADE;\n\n`;
+
+    // Disable FK trigger checks for fast bulk inserts
     out += `SET session_replication_role = 'replica';\n\n`;
 
     for (const table of TABLES_ORDERED) {
       const rowsRes = await pool.query(`SELECT * FROM "${table}" ORDER BY id`);
       out += `-- ===== ${table} (${rowsRes.rows.length} ta yozuv) =====\n`;
-      out += `TRUNCATE TABLE "${table}";\n`;
+      totalRows += rowsRes.rows.length;
 
       for (const row of rowsRes.rows) {
         const cols = Object.keys(row).map(c => `"${c}"`).join(", ");
@@ -86,8 +93,9 @@ router.get("/export", async (req, res) => {
     }
 
     out += `SET session_replication_role = 'DEFAULT';\n\n`;
-    out += `-- ===== Sequence reset =====\n`;
+    out += `-- ===== Sequence reset (sonraki insertlar uchun) =====\n`;
     out += sequenceResetSql() + "\n";
+    out += `-- Total rows: ${totalRows}\n`;
 
     res.setHeader("Content-Type", "application/sql");
     res.setHeader("Content-Disposition", `attachment; filename="backup-${date}.sql"`);
@@ -98,8 +106,8 @@ router.get("/export", async (req, res) => {
 });
 
 // POST /api/db/import — restore from SQL text
-// Sends the entire SQL to PostgreSQL server as one query — server handles
-// parsing correctly, including semicolons inside string literals.
+// Sends entire SQL to PostgreSQL server in one call — server-side parser
+// correctly handles semicolons inside string literals, dollar-quoting, etc.
 router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req, res) => {
   if (!isSudo(req)) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
   const sqlText = req.body as string;
@@ -111,15 +119,15 @@ router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req
   try {
     await client.query("BEGIN");
 
-    // Pass the entire SQL to PostgreSQL — server-side parser handles
-    // quoted strings, dollar-quoting, semicolons in literals, etc.
+    // Pass the entire SQL to the PostgreSQL server in one call.
+    // The server-side parser handles semicolons in string literals correctly.
     await client.query(sqlText);
 
-    // Ensure sequences are correct even if backup predates sequence resets
+    // Ensure sequences reflect max IDs even if backup predates sequence resets
     await client.query(sequenceResetSql());
 
     await client.query("COMMIT");
-    res.json({ ok: true });
+    res.json({ ok: true, message: "Import muvaffaqiyatli bajarildi" });
   } catch (e: any) {
     await client.query("ROLLBACK").catch(() => {});
     res.status(400).json({ error: e.message });
