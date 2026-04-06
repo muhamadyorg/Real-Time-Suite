@@ -12,6 +12,7 @@ function isSudo(req: express.Request): boolean {
   return payload?.role === "sudo";
 }
 
+// FK-safe insert order: parent tables first, child tables last
 const TABLES_ORDERED = [
   "stores",
   "accounts",
@@ -23,8 +24,10 @@ const TABLES_ORDERED = [
   "store_permission_modes",
 ];
 
-// Dynamically reset all sequences in the public schema.
-// Uses pg catalog — automatically covers every serial column, no manual list to maintain.
+// Reverse order for DELETE (children first, parents last)
+const TABLES_REVERSE = [...TABLES_ORDERED].reverse();
+
+// Dynamically reset all sequences — covers every serial column, no hardcoded list
 const SEQUENCE_RESET_SQL = `DO $$
 DECLARE r RECORD;
 BEGIN
@@ -55,7 +58,6 @@ router.get("/stats", async (req, res) => {
         return { table, count: Number(result.rows[0].count) };
       })
     );
-    // Show only user tables size (not full DB which includes system/WAL overhead)
     const sizeRes = await pool.query(`
       SELECT pg_size_pretty(
         COALESCE(SUM(pg_total_relation_size(quote_ident(table_name))), 0)::bigint
@@ -70,6 +72,8 @@ router.get("/stats", async (req, res) => {
 });
 
 // GET /api/db/export — export all data as SQL
+// NOTE: Does NOT use session_replication_role (requires superuser).
+// Instead: DELETE in reverse FK order, INSERT in FK-safe order.
 router.get("/export", async (req, res) => {
   if (!isSudo(req)) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
   try {
@@ -79,13 +83,14 @@ router.get("/export", async (req, res) => {
     out += `-- Sana: ${new Date().toISOString()}\n`;
     out += `-- Versiya: 1.0\n\n`;
 
-    // Single multi-table TRUNCATE with CASCADE — safe even with FK constraints
-    const tableList = TABLES_ORDERED.map(t => `"${t}"`).join(", ");
-    out += `TRUNCATE ${tableList} CASCADE;\n\n`;
+    // DELETE in reverse FK order (children first) — no superuser needed
+    out += `-- ===== Eski ma'lumotlarni tozalash =====\n`;
+    for (const table of TABLES_REVERSE) {
+      out += `DELETE FROM "${table}";\n`;
+    }
+    out += `\n`;
 
-    // Disable FK trigger checks for fast bulk inserts
-    out += `SET session_replication_role = 'replica';\n\n`;
-
+    // INSERT in FK-safe order (parents first)
     for (const table of TABLES_ORDERED) {
       const rowsRes = await pool.query(`SELECT * FROM "${table}" ORDER BY id`);
       out += `-- ===== ${table} (${rowsRes.rows.length} ta yozuv) =====\n`;
@@ -106,8 +111,7 @@ router.get("/export", async (req, res) => {
       out += `\n`;
     }
 
-    out += `SET session_replication_role = 'origin';\n\n`;
-    out += `-- ===== Sequence reset (covers all serial columns, no drift) =====\n`;
+    out += `-- ===== Sequence reset =====\n`;
     out += SEQUENCE_RESET_SQL + "\n";
     out += `-- Total rows: ${totalRows}\n`;
 
@@ -120,8 +124,9 @@ router.get("/export", async (req, res) => {
 });
 
 // POST /api/db/import — restore from SQL text
-// Sends entire SQL to PostgreSQL server in one call — server-side parser
-// correctly handles semicolons inside string literals, dollar-quoting, etc.
+// Strips session_replication_role lines (requires superuser — not available on all setups).
+// Sends entire SQL to PostgreSQL server in one call (server-side parser handles
+// semicolons inside string literals correctly).
 router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req, res) => {
   if (!isSudo(req)) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
   const sqlText = req.body as string;
@@ -129,23 +134,18 @@ router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req
     res.status(400).json({ error: "SQL matn kerak" }); return;
   }
 
-  // Fix old backups that used invalid 'DEFAULT' value — replace with 'origin'
-  const cleanedSql = sqlText.replace(
-    /SET\s+session_replication_role\s*=\s*'DEFAULT'/gi,
-    "SET session_replication_role = 'origin'"
-  );
+  // Strip all session_replication_role lines — requires superuser, not needed
+  // when inserts are in FK-safe order and DELETEs are in reverse order.
+  const cleanedSql = sqlText
+    .split("\n")
+    .filter(line => !/SET\s+session_replication_role/i.test(line))
+    .join("\n");
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-
-    // Pass the entire SQL to the PostgreSQL server in one call.
-    // The server-side parser handles semicolons in string literals correctly.
     await client.query(cleanedSql);
-
-    // Ensure all sequences reflect max IDs — covers every serial column dynamically
     await client.query(SEQUENCE_RESET_SQL);
-
     await client.query("COMMIT");
     res.json({ ok: true, message: "Import muvaffaqiyatli bajarildi" });
   } catch (e: any) {
