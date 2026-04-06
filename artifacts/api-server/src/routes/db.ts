@@ -146,19 +146,10 @@ router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req
   try {
     await client.query("BEGIN");
 
-    // Disable FK trigger checks on all tables so backup files work regardless
-    // of insert order. Requires table ownership (not superuser).
-    for (const table of TABLES_ORDERED) {
-      await client.query(`ALTER TABLE "${table}" DISABLE TRIGGER ALL`);
-    }
-
+    // Export generates SQL in FK-safe order (parents first, children last for INSERT;
+    // reverse order for DELETE) so no trigger disabling is needed — avoids superuser requirement.
     await client.query(cleanedSql);
     await client.query(SEQUENCE_RESET_SQL);
-
-    // Re-enable FK triggers
-    for (const table of TABLES_ORDERED) {
-      await client.query(`ALTER TABLE "${table}" ENABLE TRIGGER ALL`);
-    }
 
     await client.query("COMMIT");
     res.json({ ok: true, message: "Import muvaffaqiyatli bajarildi" });
