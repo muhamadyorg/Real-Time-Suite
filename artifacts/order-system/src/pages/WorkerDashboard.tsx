@@ -524,10 +524,10 @@ export default function WorkerDashboard() {
 
   const { secondsLeft } = useInactivityTimer(15, handleTimeout);
 
-  const { data: newOrders, isLoading: isNewLoading } = useGetOrders({ status: "new", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "new", storeId: storeId! }), refetchInterval: 60000, enabled: !!storeId } });
-  const { data: acceptedOrders, isLoading: isAcceptedLoading } = useGetOrders({ status: "accepted", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "accepted", storeId: storeId! }), refetchInterval: 60000, enabled: !!storeId } });
-  const { data: readyOrders, isLoading: isReadyLoading } = useGetOrders({ status: "ready", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "ready", storeId: storeId! }), refetchInterval: 60000, enabled: !!storeId } });
-  const { data: historyOrders, isLoading: isHistoryLoading } = useGetOrders({ storeId: storeId!, date }, { query: { queryKey: getGetOrdersQueryKey({ storeId: storeId!, date }), refetchInterval: 60000, enabled: !!storeId } });
+  const { data: newOrders, isLoading: isNewLoading } = useGetOrders({ status: "new", storeId: storeId! }, { query: { queryKey: [...getGetOrdersQueryKey({ status: "new", storeId: storeId! }), accountId], refetchInterval: 60000, enabled: !!storeId && !!accountId } });
+  const { data: acceptedOrders, isLoading: isAcceptedLoading } = useGetOrders({ status: "accepted", storeId: storeId! }, { query: { queryKey: [...getGetOrdersQueryKey({ status: "accepted", storeId: storeId! }), accountId], refetchInterval: 60000, enabled: !!storeId && !!accountId } });
+  const { data: readyOrders, isLoading: isReadyLoading } = useGetOrders({ status: "ready", storeId: storeId! }, { query: { queryKey: [...getGetOrdersQueryKey({ status: "ready", storeId: storeId! }), accountId], refetchInterval: 60000, enabled: !!storeId && !!accountId } });
+  const { data: historyOrders, isLoading: isHistoryLoading } = useGetOrders({ storeId: storeId!, date }, { query: { queryKey: [...getGetOrdersQueryKey({ storeId: storeId!, date }), accountId], refetchInterval: 60000, enabled: !!storeId && !!accountId } });
 
   const updateStatus = useUpdateOrderStatus();
 
