@@ -99,7 +99,7 @@ router.get("/export", async (req, res) => {
       out += `\n`;
     }
 
-    out += `SET session_replication_role = 'DEFAULT';\n\n`;
+    out += `SET session_replication_role = 'origin';\n\n`;
     out += `-- ===== Sequence reset (covers all serial columns, no drift) =====\n`;
     out += SEQUENCE_RESET_SQL + "\n";
     out += `-- Total rows: ${totalRows}\n`;
@@ -122,13 +122,19 @@ router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req
     res.status(400).json({ error: "SQL matn kerak" }); return;
   }
 
+  // Fix old backups that used invalid 'DEFAULT' value — replace with 'origin'
+  const cleanedSql = sqlText.replace(
+    /SET\s+session_replication_role\s*=\s*'DEFAULT'/gi,
+    "SET session_replication_role = 'origin'"
+  );
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
     // Pass the entire SQL to the PostgreSQL server in one call.
     // The server-side parser handles semicolons in string literals correctly.
-    await client.query(sqlText);
+    await client.query(cleanedSql);
 
     // Ensure all sequences reflect max IDs — covers every serial column dynamically
     await client.query(SEQUENCE_RESET_SQL);
