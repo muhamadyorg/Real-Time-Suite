@@ -55,7 +55,14 @@ router.get("/stats", async (req, res) => {
         return { table, count: Number(result.rows[0].count) };
       })
     );
-    const sizeRes = await pool.query(`SELECT pg_size_pretty(pg_database_size(current_database())) as size`);
+    // Show only user tables size (not full DB which includes system/WAL overhead)
+    const sizeRes = await pool.query(`
+      SELECT pg_size_pretty(
+        COALESCE(SUM(pg_total_relation_size(quote_ident(table_name))), 0)::bigint
+      ) AS size
+      FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+    `);
     res.json({ stats, dbSize: sizeRes.rows[0].size });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
