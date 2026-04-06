@@ -1047,7 +1047,7 @@ function DatabaseView() {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error);
-      toast({ title: `✅ Import muvaffaqiyatli: ${data.executed} ta buyruq bajarildi` });
+      toast({ title: `✅ ${data.message ?? "Import muvaffaqiyatli bajarildi"}` });
       setSelectedFile(null);
       loadStats();
     } catch (e: any) {
