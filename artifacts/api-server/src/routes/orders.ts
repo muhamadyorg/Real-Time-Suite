@@ -526,51 +526,48 @@ router.patch("/:id/status", async (req, res) => {
       io?.to(`store:${updatedOrder.storeId}`).emit("order:updated", response);
     }
 
-    // Telegram notification for client — do'kon botini ishlatadi (agar token bo'lsa), aks holda global bot
-    if (updatedOrder.clientId && updatedOrder.status === "accepted") {
+    // Telegram notification for client — client.botStoreId bilan ro'yxatdan o'tgan bot orqali yuboriladi
+    if (updatedOrder.clientId && (updatedOrder.status === "accepted" || updatedOrder.status === "ready")) {
       try {
         const { sendTelegramNotification } = await import("./telegram");
         const client = await db.query.clientsTable.findFirst({ where: eq(clientsTable.id, updatedOrder.clientId) });
         if (client?.telegramUserId) {
+          // client.botStoreId: mijoz qaysi bot bilan ro'yxatdan o'tgan — o'SHA botni ishlatamiz
+          const botStoreId = client.botStoreId ?? updatedOrder.storeId ?? undefined;
           const qty = formatQty(updatedOrder.quantity);
-          await sendTelegramNotification(
-            client.telegramUserId,
-            `⚡️ <b>Buyurtma qabul qilindi!</b>\n\n` +
-            `👋 Hurmatli <b>${client.firstName} ${client.lastName}</b>,\n\n` +
-            `📦 Buyurtma raqami: <b>${updatedOrder.orderId}</b>\n` +
-            `🛠 Xizmat: <b>${updatedOrder.serviceTypeName}</b>\n` +
-            `🔢 Miqdor: <b>${qty}${updatedOrder.unit ? " " + updatedOrder.unit : ""}</b>\n` +
-            (updatedOrder.shelf ? `📍 Qolib: <b>${updatedOrder.shelf}</b>\n` : ``) +
-            (updatedOrder.notes ? `📝 Izoh: <b>${updatedOrder.notes}</b>\n` : ``) +
-            `\n⏳ Buyurtmangiz tayyorlanmoqda...\n` +
-            `Tayyor bo'lishi bilanoq xabar beramiz! 🔔`,
-            updatedOrder.storeId ?? undefined
-          );
+          if (updatedOrder.status === "accepted") {
+            await sendTelegramNotification(
+              client.telegramUserId,
+              `⚡️ <b>Buyurtma qabul qilindi!</b>\n\n` +
+              `👋 Hurmatli <b>${client.firstName} ${client.lastName}</b>,\n\n` +
+              `📦 Buyurtma raqami: <b>${updatedOrder.orderId}</b>\n` +
+              `🛠 Xizmat: <b>${updatedOrder.serviceTypeName}</b>\n` +
+              `🔢 Miqdor: <b>${qty}${updatedOrder.unit ? " " + updatedOrder.unit : ""}</b>\n` +
+              (updatedOrder.shelf ? `📍 Qolib: <b>${updatedOrder.shelf}</b>\n` : ``) +
+              (updatedOrder.notes ? `📝 Izoh: <b>${updatedOrder.notes}</b>\n` : ``) +
+              `\n⏳ Buyurtmangiz tayyorlanmoqda...\n` +
+              `Tayyor bo'lishi bilanoq xabar beramiz! 🔔`,
+              botStoreId
+            );
+          } else {
+            await sendTelegramNotification(
+              client.telegramUserId,
+              `✅ <b>Buyurtmangiz TAYYOR!</b>\n\n` +
+              `🎉 Hurmatli <b>${client.firstName} ${client.lastName}</b>,\n\n` +
+              `📦 Buyurtma raqami: <b>${updatedOrder.orderId}</b>\n` +
+              `🛠 Xizmat: <b>${updatedOrder.serviceTypeName}</b>\n` +
+              `🔢 Miqdor: <b>${qty}${updatedOrder.unit ? " " + updatedOrder.unit : ""}</b>\n` +
+              (updatedOrder.shelf ? `📍 Qolib: <b>${updatedOrder.shelf}</b>\n` : ``) +
+              (updatedOrder.notes ? `📝 Izoh: <b>${updatedOrder.notes}</b>\n` : ``) +
+              `\n🏪 Buyurtmangizni olib ketishingiz mumkin!\n` +
+              `💎 Bizga ishonganingiz uchun katta rahmat!`,
+              botStoreId
+            );
+          }
         }
-      } catch (_e) { /* Telegram not configured */ }
-    }
-
-    if (updatedOrder.clientId && updatedOrder.status === "ready") {
-      try {
-        const { sendTelegramNotification } = await import("./telegram");
-        const client = await db.query.clientsTable.findFirst({ where: eq(clientsTable.id, updatedOrder.clientId) });
-        if (client?.telegramUserId) {
-          const qty = formatQty(updatedOrder.quantity);
-          await sendTelegramNotification(
-            client.telegramUserId,
-            `✅ <b>Buyurtmangiz TAYYOR!</b>\n\n` +
-            `🎉 Hurmatli <b>${client.firstName} ${client.lastName}</b>,\n\n` +
-            `📦 Buyurtma raqami: <b>${updatedOrder.orderId}</b>\n` +
-            `🛠 Xizmat: <b>${updatedOrder.serviceTypeName}</b>\n` +
-            `🔢 Miqdor: <b>${qty}${updatedOrder.unit ? " " + updatedOrder.unit : ""}</b>\n` +
-            (updatedOrder.shelf ? `📍 Qolib: <b>${updatedOrder.shelf}</b>\n` : ``) +
-            (updatedOrder.notes ? `📝 Izoh: <b>${updatedOrder.notes}</b>\n` : ``) +
-            `\n🏪 Buyurtmangizni olib ketishingiz mumkin!\n` +
-            `💎 Bizga ishonganingiz uchun katta rahmat!`,
-            updatedOrder.storeId ?? undefined
-          );
-        }
-      } catch (_e) { /* Telegram not configured */ }
+      } catch (_e: any) {
+        req.log.warn({ err: _e?.message }, "Client telegram notification error");
+      }
     }
 
     // Notify store admin about status change

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, pgEnum, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -10,6 +10,7 @@ export const clientsTable = pgTable("clients", {
   lastName: text("last_name").notNull(),
   phone: text("phone").notNull(),
   telegramUserId: text("telegram_user_id").unique(),
+  botStoreId: integer("bot_store_id"),
   status: clientStatusEnum("status").notNull().default("pending"),
   registrationStep: text("registration_step").default("start"),
   tempData: text("temp_data"),
