@@ -39,8 +39,8 @@ BEGIN
       AND pg_get_serial_sequence(quote_ident(c.relname), a.attname) IS NOT NULL
   LOOP
     EXECUTE format(
-      'SELECT setval(pg_get_serial_sequence(%L, %L), COALESCE((SELECT MAX(id) FROM %I), 1))',
-      r.tname, r.cname, r.tname
+      'SELECT setval(pg_get_serial_sequence(%L, %L), COALESCE((SELECT MAX(%I) FROM %I), 1))',
+      r.tname, r.cname, r.cname, r.tname
     );
   END LOOP;
 END $$;`;
