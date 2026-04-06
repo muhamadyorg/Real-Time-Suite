@@ -5,7 +5,7 @@ import { logger } from "./lib/logger";
 import { setSocketIO } from "./routes/orders";
 import { setSettingsSocketIO } from "./routes/settings";
 import { verifyToken } from "./lib/auth";
-import { initTelegramBot, initStoreBots } from "./routes/telegram";
+import { initTelegramBot, initStoreBots, checkAllBots } from "./routes/telegram";
 import { seedSudo } from "./lib/seed";
 import { db, storesTable } from "@workspace/db";
 
@@ -62,6 +62,10 @@ seedSudo().catch((err) => logger.error({ err }, "Seed error"));
 
 // Init store bots (per-store tokens)
 initStoreBots().catch((err) => logger.error({ err }, "Store bots init error"));
+
+// Check all bots on startup and every 5 minutes
+setTimeout(() => checkAllBots().catch(() => {}), 5000);
+setInterval(() => checkAllBots().catch(() => {}), 5 * 60 * 1000);
 
 // Init global Telegram bot if token provided
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN;

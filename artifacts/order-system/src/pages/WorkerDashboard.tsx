@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
 import { PrintLabelButton } from "@/components/PrintLabelButton";
-import { Search, Loader2, X, QrCode, Clock, CheckCircle, Package, Hash, User, Phone, FileText, Building2, Plus, Users, Lock, Split } from "lucide-react";
+import { Search, Loader2, X, QrCode, Clock, CheckCircle, Package, Hash, User, Phone, FileText, Building2, Plus, Users, Lock, Split, Truck } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -570,6 +570,21 @@ export default function WorkerDashboard() {
     );
   };
 
+  const handleDeliver = (orderId: number) => {
+    updateStatus.mutate(
+      { id: orderId, data: { status: "topshirildi" } as any },
+      {
+        onSuccess: () => {
+          toast({ title: "Olib ketildi deb belgilandi!" });
+          queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
+        },
+        onError: (err: any) => {
+          toast({ title: "Ruxsat yo'q", description: err.data?.error || "Olib ketildi deb belgilash uchun ruxsat yo'q", variant: "destructive" });
+        }
+      }
+    );
+  };
+
   const openSplit = (order: any) => {
     setSplitOrder(order);
     setSplitQty("");
@@ -757,6 +772,34 @@ export default function WorkerDashboard() {
     );
   };
 
+  const renderReadyOrders = (orders: any[] | undefined, isLoading: boolean) => {
+    if (isLoading) return <div className="flex justify-center p-12"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
+    const filtered = filterBySearch(orders);
+    if (!filtered.length) return <div className="text-center p-12 text-muted-foreground bg-muted/20 rounded-xl mt-4 border border-dashed">Tayyor zakazlar yo'q</div>;
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+        {filtered.map(order => (
+          <OrderCard
+            key={order.id}
+            order={order}
+            search={search}
+            onOrderClick={() => setSelectedOrder(order)}
+            actionButton={
+              <Button
+                className="w-full h-12 text-base font-bold bg-green-600 hover:bg-green-700 text-white"
+                onClick={() => handleDeliver(order.id)}
+                disabled={updateStatus.isPending}
+              >
+                <Truck className="w-4 h-4 mr-2" />
+                OLIB KETILDI
+              </Button>
+            }
+          />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-muted/20 pb-20">
       <Header
@@ -819,7 +862,7 @@ export default function WorkerDashboard() {
       <div className="w-full max-w-[1600px] mx-auto">
         {activeTab === "new" && renderNewOrders(newOrders, isNewLoading)}
         {activeTab === "accepted" && renderAcceptedOrders(myAcceptedOrders, isAcceptedLoading)}
-        {activeTab === "ready" && renderList(readyOrders, isReadyLoading)}
+        {activeTab === "ready" && renderReadyOrders(readyOrders, isReadyLoading)}
         {activeTab === "history" && renderList(historyOrders, isHistoryLoading)}
       </div>
 

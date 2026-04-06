@@ -25,6 +25,25 @@ export async function initStoreBots() {
   }
 }
 
+export async function checkAllBots() {
+  try {
+    const stores = await db.query.storesTable.findMany();
+    for (const store of stores) {
+      const token = store.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN;
+      if (!token) continue;
+      try {
+        const bot = new TelegramBot(token, { polling: false });
+        const me = await bot.getMe();
+        logger.info({ storeId: store.id, storeName: store.name, botUsername: me.username }, "Bot ishlayapti");
+      } catch (e: any) {
+        logger.warn({ storeId: store.id, err: e?.message }, "Bot xatosi");
+      }
+    }
+  } catch (err) {
+    logger.error({ err }, "checkAllBots xatosi");
+  }
+}
+
 export function updateStoreBot(storeId: number, token: string | null) {
   if (storeBots.has(storeId)) {
     storeBots.delete(storeId);
