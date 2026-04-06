@@ -72,11 +72,16 @@ export async function notifyStoreAdmin(storeId: number, message: string): Promis
   }
 }
 
-export function sendTelegramNotification(chatId: string, message: string): Promise<void> {
-  const bot = globalBot;
+export function sendTelegramNotification(chatId: string, message: string, storeId?: number): Promise<void> {
+  let bot: TelegramBot | null = null;
+  if (storeId !== undefined && storeBots.has(storeId)) {
+    bot = storeBots.get(storeId)!;
+  } else {
+    bot = globalBot;
+  }
   if (!bot) return Promise.resolve();
   return bot.sendMessage(chatId, message, { parse_mode: "HTML" }).then(() => {}).catch((err) => {
-    logger.warn({ err, chatId }, "Telegram send failed");
+    logger.warn({ err, chatId, storeId }, "Telegram send failed");
   });
 }
 

@@ -526,7 +526,7 @@ router.patch("/:id/status", async (req, res) => {
       io?.to(`store:${updatedOrder.storeId}`).emit("order:updated", response);
     }
 
-    // Telegram notification for client (via global bot — client registered through global bot)
+    // Telegram notification for client — do'kon botini ishlatadi (agar token bo'lsa), aks holda global bot
     if (updatedOrder.clientId && updatedOrder.status === "accepted") {
       try {
         const { sendTelegramNotification } = await import("./telegram");
@@ -543,7 +543,8 @@ router.patch("/:id/status", async (req, res) => {
             (updatedOrder.shelf ? `📍 Qolib: <b>${updatedOrder.shelf}</b>\n` : ``) +
             (updatedOrder.notes ? `📝 Izoh: <b>${updatedOrder.notes}</b>\n` : ``) +
             `\n⏳ Buyurtmangiz tayyorlanmoqda...\n` +
-            `Tayyor bo'lishi bilanoq xabar beramiz! 🔔`
+            `Tayyor bo'lishi bilanoq xabar beramiz! 🔔`,
+            updatedOrder.storeId ?? undefined
           );
         }
       } catch (_e) { /* Telegram not configured */ }
@@ -565,7 +566,8 @@ router.patch("/:id/status", async (req, res) => {
             (updatedOrder.shelf ? `📍 Qolib: <b>${updatedOrder.shelf}</b>\n` : ``) +
             (updatedOrder.notes ? `📝 Izoh: <b>${updatedOrder.notes}</b>\n` : ``) +
             `\n🏪 Buyurtmangizni olib ketishingiz mumkin!\n` +
-            `💎 Bizga ishonganingiz uchun katta rahmat!`
+            `💎 Bizga ishonganingiz uchun katta rahmat!`,
+            updatedOrder.storeId ?? undefined
           );
         }
       } catch (_e) { /* Telegram not configured */ }
