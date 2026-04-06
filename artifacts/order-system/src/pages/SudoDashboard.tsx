@@ -988,13 +988,19 @@ function OrdersView() {
 function DatabaseView() {
   const { token } = useAuth();
   const { toast } = useToast();
+  const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+
   const [stats, setStats] = useState<{ table: string; count: number }[]>([]);
   const [dbSize, setDbSize] = useState<string>("");
+  const [stores, setStores] = useState<{ id: number; name: string }[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [importConfirm, setImportConfirm] = useState(false);
+  const [exportingStoreId, setExportingStoreId] = useState<number | "all" | null>(null);
+
+  // Import flow: idle → previewing → selecting → importing
+  const [importStep, setImportStep] = useState<"idle" | "previewing" | "selecting" | "importing">("idle");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const [backupStores, setBackupStores] = useState<{ id: number; name: string }[]>([]);
+  const [chosenStoreIds, setChosenStoreIds] = useState<Set<number>>(new Set());
 
   useEffect(() => { loadStats(); }, [token]);
 
@@ -1007,6 +1013,7 @@ function DatabaseView() {
       const data = await r.json();
       setStats(data.stats);
       setDbSize(data.dbSize);
+      setStores(data.stores ?? []);
     } catch {
       toast({ title: "Statistika yuklashda xatolik", variant: "destructive" });
     } finally {
@@ -1014,68 +1021,104 @@ function DatabaseView() {
     }
   };
 
-  const handleExport = async () => {
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    const size = blob.size >= 1048576
+      ? `${(blob.size / 1048576).toFixed(2)} MB`
+      : `${(blob.size / 1024).toFixed(1)} KB`;
+    toast({ title: `✅ Backup yuklab olindi (${size})` });
+  };
+
+  const handleExport = async (storeId?: number) => {
     if (!token) return;
+    const key = storeId ?? "all";
+    setExportingStoreId(key);
     try {
-      const r = await fetch(`${baseUrl}/api/db/export`, { headers: { Authorization: `Bearer ${token}` } });
+      const url = storeId
+        ? `${baseUrl}/api/db/export?storeId=${storeId}`
+        : `${baseUrl}/api/db/export`;
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!r.ok) throw new Error();
       const blob = await r.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
       const date = new Date().toISOString().slice(0, 10);
-      a.href = url;
-      a.download = `backup-${date}.sql`;
-      a.click();
-      URL.revokeObjectURL(url);
-      const kb = (blob.size / 1024).toFixed(1);
-      const size = blob.size >= 1024 * 1024
-        ? `${(blob.size / 1024 / 1024).toFixed(2)} MB`
-        : `${kb} KB`;
-      toast({ title: `✅ Backup yuklab olindi (${size})` });
+      const storeName = storeId
+        ? stores.find(s => s.id === storeId)?.name?.replace(/[^a-zA-Z0-9]/g, "_") ?? `store_${storeId}`
+        : "all";
+      downloadBlob(blob, `backup-${storeName}-${date}.sql`);
     } catch {
       toast({ title: "Export xatoligi", variant: "destructive" });
+    } finally {
+      setExportingStoreId(null);
     }
+  };
+
+  const handleFileSelect = async (file: File) => {
+    setSelectedFile(file);
+    setImportStep("previewing");
+    try {
+      const text = await file.text();
+      const r = await fetch(`${baseUrl}/api/db/import/preview`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "text/plain" },
+        body: text,
+      });
+      const data = await r.json();
+      const found: { id: number; name: string }[] = data.stores ?? [];
+      setBackupStores(found);
+      setChosenStoreIds(new Set(found.map(s => s.id)));
+      setImportStep("selecting");
+    } catch {
+      toast({ title: "Fayl tahlil qilinmadi", variant: "destructive" });
+      setImportStep("idle");
+    }
+  };
+
+  const toggleStore = (id: number) => {
+    setChosenStoreIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   };
 
   const handleImport = async () => {
     if (!token || !selectedFile) return;
-    setImporting(true);
-    setImportConfirm(false);
+    setImportStep("importing");
     try {
       const text = await selectedFile.text();
-      const r = await fetch(`${baseUrl}/api/db/import`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "text/plain",
-        },
-        body: text,
-      });
+      const allSelected = chosenStoreIds.size === backupStores.length;
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "text/plain",
+      };
+      if (!allSelected && chosenStoreIds.size > 0) {
+        headers["X-Store-Ids"] = [...chosenStoreIds].join(",");
+      }
+      const r = await fetch(`${baseUrl}/api/db/import`, { method: "POST", headers, body: text });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error);
       toast({ title: `✅ ${data.message ?? "Import muvaffaqiyatli bajarildi"}` });
       setSelectedFile(null);
+      setImportStep("idle");
       loadStats();
     } catch (e: any) {
       toast({ title: "Import xatoligi: " + e.message, variant: "destructive" });
-    } finally {
-      setImporting(false);
+      setImportStep("selecting");
     }
   };
 
   const TABLE_LABELS: Record<string, string> = {
-    stores: "Do'konlar",
-    accounts: "Hisoblar",
-    service_types: "Xizmat turlari",
-    clients: "Mijozlar",
-    products: "Mahsulotlar",
-    orders: "Zakazlar",
-    account_permissions: "Ruxsatlar",
-    store_permission_modes: "Ruxsat rejimlari",
+    stores: "Do'konlar", accounts: "Hisoblar", service_types: "Xizmat turlari",
+    clients: "Mijozlar", products: "Mahsulotlar", orders: "Zakazlar",
+    account_permissions: "Ruxsatlar", store_permission_modes: "Ruxsat rejimlari",
   };
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
@@ -1090,18 +1133,7 @@ function DatabaseView() {
         </Button>
       </div>
 
-      {stats.length === 0 && !loadingStats && (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <Database className="w-10 h-10 text-muted-foreground mb-3" />
-            <p className="text-muted-foreground text-sm">Statistikani ko'rish uchun "Yangilash" tugmasini bosing</p>
-            <Button className="mt-4 gap-2" onClick={loadStats}>
-              <RefreshCw className="w-4 h-4" /> Yuklash
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
+      {/* Stats table */}
       {stats.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
@@ -1112,7 +1144,7 @@ function DatabaseView() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Jadval</TableHead>
-                  <TableHead className="text-right">Yozuvlar soni</TableHead>
+                  <TableHead className="text-right">Yozuvlar</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1131,25 +1163,69 @@ function DatabaseView() {
         </Card>
       )}
 
+      {/* Per-store backups */}
+      {stores.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Download className="w-4 h-4 text-green-600" />
+              Do'konlar bo'yicha backup
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableBody>
+                {stores.map(store => (
+                  <TableRow key={store.id}>
+                    <TableCell className="font-medium">{store.name}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs">ID: {store.id}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm" variant="outline"
+                        className="gap-1.5 text-green-700 border-green-200 hover:bg-green-50"
+                        onClick={() => handleExport(store.id)}
+                        disabled={exportingStoreId !== null}
+                      >
+                        {exportingStoreId === store.id
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Download className="w-3.5 h-3.5" />}
+                        Backup
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Full backup + Import */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Full backup */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Download className="w-4 h-4 text-green-600" />
-              Export (Backup)
+              To'liq backup (barcha do'konlar)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Barcha ma'lumotlarni SQL fayl sifatida yuklab oling. Fayl keyinchalik import qilish uchun ishlatiladi.
-            </p>
-            <Button onClick={handleExport} className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white">
-              <Download className="w-4 h-4" />
+            <p className="text-sm text-muted-foreground">Barcha do'konlar ma'lumotlari bitta SQL faylda.</p>
+            <Button
+              onClick={() => handleExport()}
+              disabled={exportingStoreId !== null}
+              className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
+            >
+              {exportingStoreId === "all"
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Download className="w-4 h-4" />}
               Backup yuklab olish (.sql)
             </Button>
           </CardContent>
         </Card>
 
+        {/* Import */}
         <Card className="border-orange-200 dark:border-orange-800">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -1158,46 +1234,81 @@ function DatabaseView() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-start gap-2 p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-800">
-              <AlertTriangle className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
-              <p className="text-xs text-orange-700 dark:text-orange-400">
-                Diqqat! Import qilish joriy barcha ma'lumotlarni almashtiradi. Bu amalni qaytarib bo'lmaydi.
-              </p>
-            </div>
-            <label className="block">
-              <div className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${selectedFile ? "border-orange-400 bg-orange-50 dark:bg-orange-950/20" : "border-border hover:border-orange-300"}`}>
-                <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
-                {selectedFile
-                  ? <p className="text-sm font-medium text-orange-700 dark:text-orange-400">{selectedFile.name}</p>
-                  : <p className="text-sm text-muted-foreground">.sql fayl tanlang</p>
-                }
-                <input type="file" accept=".sql,text/plain" className="hidden" onChange={e => setSelectedFile(e.target.files?.[0] ?? null)} />
-              </div>
-            </label>
-
-            {selectedFile && !importConfirm && (
-              <Button variant="outline" className="w-full gap-2 border-orange-400 text-orange-700 hover:bg-orange-50" onClick={() => setImportConfirm(true)}>
-                <Upload className="w-4 h-4" />
-                Import qilish
-              </Button>
+            {importStep === "idle" && (
+              <>
+                <div className="flex items-start gap-2 p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-800">
+                  <AlertTriangle className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-orange-700 dark:text-orange-400">
+                    Import qilish tanlangan do'kon(lar) ma'lumotlarini almashtiradi.
+                  </p>
+                </div>
+                <label className="block cursor-pointer">
+                  <div className="border-2 border-dashed rounded-lg p-4 text-center hover:border-orange-300 transition-colors">
+                    <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">.sql fayl tanlang</p>
+                  </div>
+                  <input type="file" accept=".sql,text/plain" className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); e.target.value = ""; }} />
+                </label>
+              </>
             )}
 
-            {importConfirm && (
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-center text-orange-700">Haqiqatan ham almashtirilsinmi?</p>
-                <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1" onClick={() => setImportConfirm(false)}>Bekor</Button>
-                  <Button className="flex-1 bg-orange-600 hover:bg-orange-700 text-white gap-2" onClick={handleImport} disabled={importing}>
-                    {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    Ha, import qilish
+            {importStep === "previewing" && (
+              <div className="flex flex-col items-center gap-2 py-6 text-sm text-muted-foreground">
+                <Loader2 className="w-6 h-6 animate-spin" />
+                Fayl tahlil qilinmoqda...
+              </div>
+            )}
+
+            {importStep === "selecting" && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium">
+                  <span className="text-orange-600">⚠</span> {selectedFile?.name}
+                </p>
+                {backupStores.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Backupda do'kon topilmadi — to'liq import bo'ladi.</p>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium">Qaysi do'konlarni import qilish?</p>
+                      <div className="flex gap-2 text-xs">
+                        <button className="text-primary underline" onClick={() => setChosenStoreIds(new Set(backupStores.map(s => s.id)))}>Hammasi</button>
+                        <button className="text-muted-foreground underline" onClick={() => setChosenStoreIds(new Set())}>Hech biri</button>
+                      </div>
+                    </div>
+                    <div className="border rounded-lg divide-y max-h-48 overflow-y-auto">
+                      {backupStores.map(s => (
+                        <label key={s.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted/50">
+                          <input
+                            type="checkbox"
+                            checked={chosenStoreIds.has(s.id)}
+                            onChange={() => toggleStore(s.id)}
+                            className="accent-primary"
+                          />
+                          <span className="text-sm flex-1">{s.name}</span>
+                          <span className="text-xs text-muted-foreground">ID: {s.id}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <Button variant="outline" className="flex-1" onClick={() => { setImportStep("idle"); setSelectedFile(null); }}>Bekor</Button>
+                  <Button
+                    className="flex-1 bg-orange-600 hover:bg-orange-700 text-white gap-1"
+                    disabled={backupStores.length > 0 && chosenStoreIds.size === 0}
+                    onClick={handleImport}
+                  >
+                    <Upload className="w-4 h-4" />
+                    Import qilish
                   </Button>
                 </div>
               </div>
             )}
 
-            {importing && (
-              <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" />
+            {importStep === "importing" && (
+              <div className="flex flex-col items-center gap-2 py-6 text-sm text-muted-foreground">
+                <Loader2 className="w-6 h-6 animate-spin" />
                 Import bajarilmoqda...
               </div>
             )}
