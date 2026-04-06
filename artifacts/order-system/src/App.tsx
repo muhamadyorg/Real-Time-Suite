@@ -16,31 +16,30 @@ import SuperadminDashboard from "@/pages/SuperadminDashboard";
 import SudoDashboard from "@/pages/SudoDashboard";
 import PublicOrderPage from "@/pages/PublicOrderPage";
 
-// Stable QueryClient — must live outside component so it is never recreated on re-render
+// Stable QueryClient — must live outside App so it is never recreated on re-render
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: false,
       refetchOnWindowFocus: false,
-      staleTime: 20000, // treat data as fresh for 20 s to suppress duplicate fetches
+      staleTime: 20000,
     },
   },
 });
 
 // --- Route guards ---------------------------------------------------------
 // useAuth() must be called at component level (Rules of Hooks).
-// Render-props of <Route> are not React components, so hooks cannot be used
-// directly inside them. We extract the logic into proper components instead.
+// Route render-props are plain callbacks, not React components, so hooks cannot
+// be used inside them.  We extract the auth-check logic into proper components.
+
+type DashboardComponent = React.ComponentType<Record<string, never>>;
 
 function ProtectedContent({
   component: Component,
   allowedRoles,
-  params,
 }: {
-  component: React.ComponentType<any>;
+  component: DashboardComponent;
   allowedRoles: string[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  params: any;
 }) {
   const { role, storeId } = useAuth();
   if (!storeId) return <Redirect to="/" />;
@@ -51,7 +50,7 @@ function ProtectedContent({
     if (role === "superadmin") return <Redirect to="/superadmin" />;
     if (role === "sudo") return <Redirect to="/sudo" />;
   }
-  return <Component {...params} />;
+  return <Component />;
 }
 
 function ProtectedRoute({
@@ -60,14 +59,12 @@ function ProtectedRoute({
   allowedRoles,
 }: {
   path: string;
-  component: React.ComponentType<any>;
+  component: DashboardComponent;
   allowedRoles: string[];
 }) {
   return (
     <Route path={path}>
-      {(params) => (
-        <ProtectedContent component={component} allowedRoles={allowedRoles} params={params} />
-      )}
+      {() => <ProtectedContent component={component} allowedRoles={allowedRoles} />}
     </Route>
   );
 }
