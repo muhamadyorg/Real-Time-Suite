@@ -21,7 +21,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   Loader2, Plus, Trash2, CheckCircle, XCircle, Pencil,
-  Store, Users, Layers, UserCheck, ShoppingBag, LayoutDashboard, Package
+  Store, Users, Layers, UserCheck, ShoppingBag, LayoutDashboard, Package,
+  Database, Download, Upload, RefreshCw, AlertTriangle
 } from "lucide-react";
 import ProductsView from "@/components/ProductsView";
 import { format } from "date-fns";
@@ -984,6 +985,223 @@ function OrdersView() {
   );
 }
 
+function DatabaseView() {
+  const { token } = useAuth();
+  const { toast } = useToast();
+  const [stats, setStats] = useState<{ table: string; count: number }[]>([]);
+  const [dbSize, setDbSize] = useState<string>("");
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importConfirm, setImportConfirm] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  const loadStats = async () => {
+    if (!token) return;
+    setLoadingStats(true);
+    try {
+      const r = await fetch(`${baseUrl}/api/db/stats`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error();
+      const data = await r.json();
+      setStats(data.stats);
+      setDbSize(data.dbSize);
+    } catch {
+      toast({ title: "Statistika yuklashda xatolik", variant: "destructive" });
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!token) return;
+    try {
+      const r = await fetch(`${baseUrl}/api/db/export`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error();
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `backup-${date}.sql`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "✅ Backup yuklab olindi" });
+    } catch {
+      toast({ title: "Export xatoligi", variant: "destructive" });
+    }
+  };
+
+  const handleImport = async () => {
+    if (!token || !selectedFile) return;
+    setImporting(true);
+    setImportConfirm(false);
+    try {
+      const text = await selectedFile.text();
+      const r = await fetch(`${baseUrl}/api/db/import`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "text/plain",
+        },
+        body: text,
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error);
+      toast({ title: `✅ Import muvaffaqiyatli: ${data.executed} ta buyruq bajarildi` });
+      setSelectedFile(null);
+      loadStats();
+    } catch (e: any) {
+      toast({ title: "Import xatoligi: " + e.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const TABLE_LABELS: Record<string, string> = {
+    stores: "Do'konlar",
+    accounts: "Hisoblar",
+    service_types: "Xizmat turlari",
+    clients: "Mijozlar",
+    products: "Mahsulotlar",
+    orders: "Zakazlar",
+    account_permissions: "Ruxsatlar",
+    store_permission_modes: "Ruxsat rejimlari",
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <Database className="w-6 h-6 text-primary" />
+            Ma'lumotlar bazasi
+          </h2>
+          {dbSize && <p className="text-sm text-muted-foreground mt-0.5">Baza hajmi: <span className="font-semibold">{dbSize}</span></p>}
+        </div>
+        <Button variant="outline" size="sm" onClick={loadStats} disabled={loadingStats} className="gap-2">
+          {loadingStats ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          Yangilash
+        </Button>
+      </div>
+
+      {stats.length === 0 && !loadingStats && (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <Database className="w-10 h-10 text-muted-foreground mb-3" />
+            <p className="text-muted-foreground text-sm">Statistikani ko'rish uchun "Yangilash" tugmasini bosing</p>
+            <Button className="mt-4 gap-2" onClick={loadStats}>
+              <RefreshCw className="w-4 h-4" /> Yuklash
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {stats.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Jadvallar statistikasi</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Jadval</TableHead>
+                  <TableHead className="text-right">Yozuvlar soni</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {stats.map(({ table, count }) => (
+                  <TableRow key={table}>
+                    <TableCell>
+                      <span className="font-medium">{TABLE_LABELS[table] ?? table}</span>
+                      <span className="text-xs text-muted-foreground ml-2 font-mono">{table}</span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono font-semibold">{count.toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Download className="w-4 h-4 text-green-600" />
+              Export (Backup)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Barcha ma'lumotlarni SQL fayl sifatida yuklab oling. Fayl keyinchalik import qilish uchun ishlatiladi.
+            </p>
+            <Button onClick={handleExport} className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white">
+              <Download className="w-4 h-4" />
+              Backup yuklab olish (.sql)
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-orange-200 dark:border-orange-800">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Upload className="w-4 h-4 text-orange-600" />
+              Import (Restore)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-start gap-2 p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-800">
+              <AlertTriangle className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
+              <p className="text-xs text-orange-700 dark:text-orange-400">
+                Diqqat! Import qilish joriy barcha ma'lumotlarni almashtiradi. Bu amalni qaytarib bo'lmaydi.
+              </p>
+            </div>
+            <label className="block">
+              <div className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${selectedFile ? "border-orange-400 bg-orange-50 dark:bg-orange-950/20" : "border-border hover:border-orange-300"}`}>
+                <Upload className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
+                {selectedFile
+                  ? <p className="text-sm font-medium text-orange-700 dark:text-orange-400">{selectedFile.name}</p>
+                  : <p className="text-sm text-muted-foreground">.sql fayl tanlang</p>
+                }
+                <input type="file" accept=".sql,text/plain" className="hidden" onChange={e => setSelectedFile(e.target.files?.[0] ?? null)} />
+              </div>
+            </label>
+
+            {selectedFile && !importConfirm && (
+              <Button variant="outline" className="w-full gap-2 border-orange-400 text-orange-700 hover:bg-orange-50" onClick={() => setImportConfirm(true)}>
+                <Upload className="w-4 h-4" />
+                Import qilish
+              </Button>
+            )}
+
+            {importConfirm && (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-center text-orange-700">Haqiqatan ham almashtirilsinmi?</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={() => setImportConfirm(false)}>Bekor</Button>
+                  <Button className="flex-1 bg-orange-600 hover:bg-orange-700 text-white gap-2" onClick={handleImport} disabled={importing}>
+                    {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    Ha, import qilish
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {importing && (
+              <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Import bajarilmoqda...
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 const NAV_ITEMS = [
   { key: "stores", label: "Do'konlar", icon: Store },
   { key: "accounts", label: "Hisoblar", icon: Users },
@@ -991,6 +1209,7 @@ const NAV_ITEMS = [
   { key: "products", label: "Mahsulotlar", icon: Package },
   { key: "clients", label: "Mijozlar", icon: UserCheck },
   { key: "orders", label: "Zakazlar", icon: ShoppingBag },
+  { key: "database", label: "Database", icon: Database },
 ];
 
 export default function SudoDashboard() {
@@ -1003,7 +1222,8 @@ export default function SudoDashboard() {
     services: <ServiceTypesView />,
     products: <div className="p-5 max-w-4xl mx-auto"><ProductsView /></div>,
     clients: <ClientsView />,
-    orders: <OrdersView />
+    orders: <OrdersView />,
+    database: <DatabaseView />,
   };
 
   return (
