@@ -23,6 +23,21 @@ const TABLES_ORDERED = [
   "store_permission_modes",
 ];
 
+const SEQUENCE_TABLES = [
+  "stores",
+  "accounts",
+  "service_types",
+  "clients",
+  "products",
+  "orders",
+];
+
+function sequenceResetSql(): string {
+  return SEQUENCE_TABLES.map(t =>
+    `SELECT setval(pg_get_serial_sequence('"${t}"', 'id'), COALESCE((SELECT MAX(id) FROM "${t}"), 1));`
+  ).join("\n");
+}
+
 // GET /api/db/stats
 router.get("/stats", async (req, res) => {
   if (!isSudo(req)) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
@@ -45,7 +60,9 @@ router.get("/export", async (req, res) => {
   if (!isSudo(req)) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
   try {
     const date = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    let out = `-- Buyurtma tizimi DB backup\n-- Sana: ${new Date().toISOString()}\n-- Versiya: 1.0\n\n`;
+    let out = `-- Buyurtma tizimi DB backup\n`;
+    out += `-- Sana: ${new Date().toISOString()}\n`;
+    out += `-- Versiya: 1.0\n\n`;
     out += `SET session_replication_role = 'replica';\n\n`;
 
     for (const table of TABLES_ORDERED) {
@@ -60,14 +77,17 @@ router.get("/export", async (req, res) => {
           if (typeof v === "number") return v.toString();
           if (typeof v === "boolean") return v ? "true" : "false";
           if (v instanceof Date) return `'${v.toISOString()}'`;
-          return `'${String(v).replace(/\\/g, "\\\\").replace(/'/g, "''")}'`;
+          const str = String(v).replace(/\\/g, "\\\\").replace(/'/g, "''");
+          return `'${str}'`;
         }).join(", ");
         out += `INSERT INTO "${table}" (${cols}) VALUES (${vals});\n`;
       }
       out += `\n`;
     }
 
-    out += `SET session_replication_role = 'DEFAULT';\n`;
+    out += `SET session_replication_role = 'DEFAULT';\n\n`;
+    out += `-- ===== Sequence reset =====\n`;
+    out += sequenceResetSql() + "\n";
 
     res.setHeader("Content-Type", "application/sql");
     res.setHeader("Content-Disposition", `attachment; filename="backup-${date}.sql"`);
@@ -78,6 +98,8 @@ router.get("/export", async (req, res) => {
 });
 
 // POST /api/db/import — restore from SQL text
+// Sends the entire SQL to PostgreSQL server as one query — server handles
+// parsing correctly, including semicolons inside string literals.
 router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req, res) => {
   if (!isSudo(req)) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
   const sqlText = req.body as string;
@@ -88,25 +110,16 @@ router.post("/import", express.text({ type: "*/*", limit: "100mb" }), async (req
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query("SET session_replication_role = 'replica'");
 
-    const statements = sqlText
-      .split("\n")
-      .filter(line => !line.trimStart().startsWith("--"))
-      .join("\n")
-      .split(";")
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
+    // Pass the entire SQL to PostgreSQL — server-side parser handles
+    // quoted strings, dollar-quoting, semicolons in literals, etc.
+    await client.query(sqlText);
 
-    let executed = 0;
-    for (const stmt of statements) {
-      await client.query(stmt);
-      executed++;
-    }
+    // Ensure sequences are correct even if backup predates sequence resets
+    await client.query(sequenceResetSql());
 
-    await client.query("SET session_replication_role = 'DEFAULT'");
     await client.query("COMMIT");
-    res.json({ ok: true, executed });
+    res.json({ ok: true });
   } catch (e: any) {
     await client.query("ROLLBACK").catch(() => {});
     res.status(400).json({ error: e.message });
