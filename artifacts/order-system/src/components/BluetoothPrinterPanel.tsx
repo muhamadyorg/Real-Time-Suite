@@ -276,12 +276,12 @@ function LabelEditor({ initialLayout, onSave, onClose }: {
   useEffect(() => {
     const compute = () => {
       const w = containerRef.current?.clientWidth ?? 340;
-      setScale((w - 24) / (draftRef.current.widthMm * DPM));
+      setScale((w - 24) / (draft.widthMm * DPM));
     };
     compute();
     window.addEventListener("resize", compute);
     return () => window.removeEventListener("resize", compute);
-  }, []);
+  }, [draft.widthMm]);
 
   const sel   = selKey ? draft.elements[selKey] : null;
   const isSep = selKey==="sep1"||selKey==="sep2";
