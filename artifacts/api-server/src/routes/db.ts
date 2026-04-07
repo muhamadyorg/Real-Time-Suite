@@ -84,7 +84,7 @@ router.get("/export", async (req, res) => {
     const tashkentMs = now.getTime() + tashkentOffset * 60 * 1000;
     const t = new Date(tashkentMs);
     const pad = (n: number) => String(n).padStart(2, "0");
-    const dateLabel = `${t.getUTCFullYear()}-${pad(t.getUTCMonth()+1)}-${pad(t.getUTCDate())}`;
+    const dateLabel = `${pad(t.getUTCDate())}.${pad(t.getUTCMonth()+1)}.${t.getUTCFullYear()}`;
     const timeLabel = `${pad(t.getUTCHours())}-${pad(t.getUTCMinutes())}`;
     const date = `${dateLabel}_${timeLabel}`;
     const datePretty = `${pad(t.getUTCDate())}.${pad(t.getUTCMonth()+1)}.${t.getUTCFullYear()} ${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())} (Toshkent vaqti)`;
