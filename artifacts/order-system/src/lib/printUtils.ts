@@ -68,23 +68,22 @@ export function buildReceiptHtml(order: any): string {
 // ─── Brauzer orqali chop etish (sozlash talab qilmaydi) ──────────────────────
 export function printReceiptRawBT(order: any): void {
   const html = buildReceiptHtml(order);
-  const blob = new Blob([html], { type: "text/html; charset=utf-8" });
-  const url = URL.createObjectURL(blob);
 
-  const iframe = document.createElement("iframe");
-  iframe.style.cssText =
-    "position:fixed;right:0;bottom:0;width:1px;height:1px;border:none;opacity:0;pointer-events:none;";
+  // Yangi oynada faqat chek HTML ochiladi — asosiy sahifa chop etilmaydi
+  const printWindow = window.open("", "_blank", "width=300,height=600");
+  if (!printWindow) return;
 
-  iframe.onload = () => {
-    try { iframe.contentWindow?.print(); } catch { /* ignore */ }
-    setTimeout(() => {
-      try { document.body.removeChild(iframe); } catch { /* ignore */ }
-      URL.revokeObjectURL(url);
-    }, 3000);
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+
+  // Hujjat yuklangandan so'ng print dialog
+  printWindow.onload = () => {
+    printWindow.focus();
+    printWindow.print();
+    // Chop bo'lgach oyna yopiladi
+    printWindow.onafterprint = () => printWindow.close();
   };
-
-  iframe.src = url;
-  document.body.appendChild(iframe);
 }
 
 // ─── Eski label HTML (saqlanadi) ─────────────────────────────────────────────
