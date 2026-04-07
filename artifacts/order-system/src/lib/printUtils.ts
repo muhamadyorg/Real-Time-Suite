@@ -1,4 +1,3 @@
-// Fix 4 — XSS himoyasi: barcha order maydonlari HTML-escaped bo'lishi kerak
 function escHtml(s: unknown): string {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -7,12 +6,70 @@ function escHtml(s: unknown): string {
     .replace(/"/g, "&quot;");
 }
 
+// ─── Toshkent vaqtiga o'tkazish (UTC+5) ───────────────────────────────────
+function toTashkentParts(iso: string): { dateStr: string; timeStr: string } {
+  const d = new Date(iso);
+  const offset = 5 * 60 * 60 * 1000;
+  const t = new Date(d.getTime() + offset);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const dateStr = `${pad(t.getUTCDate())}.${pad(t.getUTCMonth() + 1)}.${t.getUTCFullYear()}`;
+  const timeStr = `${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}`;
+  return { dateStr, timeStr };
+}
+
+// ─── RawBT chek HTML ────────────────────────────────────────────────────────
+export function buildReceiptHtml(order: any): string {
+  const { dateStr, timeStr } = order.createdAt
+    ? toTashkentParts(order.createdAt)
+    : { dateStr: "--.--.----", timeStr: "--:--" };
+
+  const ordNum = String(order.id).padStart(5, "0");
+  const qrData = `${window.location.origin}/order/${order.id}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(qrData)}`;
+
+  const qty = [order.quantity, order.unit].filter(Boolean).join(" ");
+
+  const rows = [
+    `<tr><td>${escHtml(order.serviceTypeName)}</td><td style="text-align:right">${escHtml(qty)}</td></tr>`,
+    order.shelf
+      ? `<tr><td>Javon</td><td style="text-align:right">${escHtml(order.shelf)}</td></tr>`
+      : "",
+    order.clientName
+      ? `<tr><td>Mijoz</td><td style="text-align:right">${escHtml(order.clientName)}</td></tr>`
+      : "",
+  ].join("");
+
+  return `<html><body style="font-family:monospace;font-size:12px;width:58mm;margin:0;padding:2mm;">
+<div style="text-align:center;font-weight:bold;font-size:14px;">${escHtml(order.storeName || "DO'KON")}</div>
+<div style="text-align:center;">Buyurtma #${ordNum}</div>
+<div style="text-align:center;font-size:11px;">Sana: ${dateStr}&nbsp;&nbsp;Vaqt: ${timeStr}</div>
+<div>--------------------------------</div>
+<table style="width:100%;font-size:11px;border-collapse:collapse;">
+${rows}
+</table>
+<div>--------------------------------</div>
+<div style="text-align:center;margin-top:4px;">
+<img src="${qrUrl}" style="width:80px;height:80px;">
+</div>
+<div style="text-align:center;font-size:10px;">/order/${order.id}</div>
+<div style="text-align:center;margin-top:6px;font-weight:bold;">Rahmat!</div>
+<br><br><br><br>
+</body></html>`;
+}
+
+// ─── RawBT orqali chop etish ─────────────────────────────────────────────────
+export function printReceiptRawBT(order: any): void {
+  const html = buildReceiptHtml(order);
+  const base64 = btoa(unescape(encodeURIComponent(html)));
+  window.location.href = "rawbt:html:base64," + base64;
+}
+
+// ─── Eski label HTML (saqlanadi) ─────────────────────────────────────────────
 export function buildLabelHtml(order: any, widthMm = 58): string {
   const dateStr = order.createdAt
     ? new Date(order.createdAt).toLocaleString("uz-UZ")
     : new Date().toLocaleString("uz-UZ");
 
-  // Fix 4 — barcha maydonlarga escHtml qo'llaymiz
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -45,14 +102,9 @@ export function buildLabelHtml(order: any, widthMm = 58): string {
 </html>`;
 }
 
-/**
- * Fix 5 — Blob URL usuli: document.write() o'rniga ishlatiladi.
- * iframe ichida ham ishlaydi, popup bloker muammosi yo'q.
- */
 export function printOrderLabel(order: any, widthMm = 58): void {
   const html = buildLabelHtml(order, widthMm);
 
-  // Fix 5 — Blob URL orqali iframe yuklash
   const blob = new Blob([html], { type: "text/html; charset=utf-8" });
   const url = URL.createObjectURL(blob);
 

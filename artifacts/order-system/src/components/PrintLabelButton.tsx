@@ -1,9 +1,8 @@
-import { Printer, Loader2, CheckCircle2, AlertCircle, Bluetooth, FileText } from "lucide-react";
+import { Printer, Loader2, CheckCircle2, AlertCircle, Bluetooth } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useBTPrinterContext } from "@/hooks/useBTPrinter";
-import { printOrderLabel } from "@/lib/printUtils";
+import { printReceiptRawBT } from "@/lib/printUtils";
 import { cn } from "@/lib/utils";
-
 interface PrintLabelButtonProps {
   order: any;
   variant?: "icon" | "full";
@@ -13,30 +12,30 @@ interface PrintLabelButtonProps {
 export function PrintLabelButton({ order, variant = "full", className }: PrintLabelButtonProps) {
   const { print, status, errorMsg, printerName, profileName, isSupported } = useBTPrinterContext();
 
+  const handleRawBTClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    printReceiptRawBT(order);
+  };
+
   const handleBTClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     print(order);
   };
 
-  const handlePdfClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    printOrderLabel(order, 58);
-  };
-
   if (variant === "icon") {
     return (
       <div className="flex items-center gap-1">
-        {/* Browser print — always available */}
+        {/* RawBT print — telefondagi RawBT ilovasi orqali */}
         <button
           type="button"
-          onClick={handlePdfClick}
-          title="Browser orqali chop et"
+          onClick={handleRawBTClick}
+          title="RawBT orqali chop et"
           className={cn(
             "p-1.5 rounded-lg transition-all text-muted-foreground hover:text-green-600 hover:bg-green-50",
             className
           )}
         >
-          <FileText className="w-4 h-4" />
+          <Printer className="w-4 h-4" />
         </button>
 
         {/* BT print — only if Bluetooth supported */}
@@ -65,7 +64,7 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
               ? <CheckCircle2 className="w-4 h-4" />
               : status === "error"
               ? <AlertCircle className="w-4 h-4" />
-              : <Printer className="w-4 h-4" />
+              : <Bluetooth className="w-4 h-4" />
             }
           </button>
         )}
@@ -75,14 +74,14 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
 
   return (
     <div className="space-y-2">
-      {/* Browser print — always visible, no BLE needed */}
+      {/* RawBT print — telefondagi RawBT ilovasi orqali */}
       <Button
         type="button"
-        onClick={handlePdfClick}
+        onClick={handleRawBTClick}
         className={cn("w-full gap-2 bg-green-600 hover:bg-green-700 text-white", className)}
       >
-        <FileText className="w-4 h-4" />
-        Nakleyka chop et (Browser)
+        <Printer className="w-4 h-4" />
+        Chek chop et (RawBT)
       </Button>
 
       {/* BLE ESC/POS — only if Bluetooth supported */}
