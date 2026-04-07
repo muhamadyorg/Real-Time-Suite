@@ -441,6 +441,20 @@ function LabelEditor({ initialLayout, onSave, onClose }: {
             </div>
           </div>
         )}
+
+        {/* ── SAVE — har doim ko'rinadigan pastki tugma ── */}
+        <div className="px-3 py-2 border-t bg-card flex gap-2">
+          <Button
+            className={`flex-1 h-12 text-base font-bold gap-2 transition-colors ${saved ? "bg-green-600 hover:bg-green-600" : "bg-green-600 hover:bg-green-700"}`}
+            onClick={handleSave}
+          >
+            <CheckCircle2 className="w-5 h-5" />
+            {saved ? "Saqlandi ✓" : "Saqlash"}
+          </Button>
+          <Button variant="outline" className="h-12 px-4" onClick={onClose}>
+            <X className="w-5 h-5" />
+          </Button>
+        </div>
       </div>
     </div>,
     document.body
