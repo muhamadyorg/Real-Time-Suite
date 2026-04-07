@@ -1,6 +1,7 @@
-import { Printer, Loader2, CheckCircle2, AlertCircle, Bluetooth, BluetoothSearching } from "lucide-react";
+import { Printer, Loader2, CheckCircle2, AlertCircle, Bluetooth } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useBTPrinterContext } from "@/hooks/useBTPrinter";
+import { buildReceiptHtml } from "@/lib/printUtils";
 import { cn } from "@/lib/utils";
 
 interface PrintLabelButtonProps {
@@ -16,55 +17,53 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
   } = useBTPrinterContext();
 
   const hasBluetooth = isSupported && !!(navigator as any).bluetooth;
+  const isPrinting   = status === "connecting" || status === "printing";
+
+  /** BLE mavjud bo'lsa TSPL, yo'qsa brauzer print */
+  const handlePrint = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (hasBluetooth) {
+      printTspl(order);
+    } else {
+      // BLE yo'q — brauzer orqali chop etish
+      const html = buildReceiptHtml(order);
+      const w = window.open("", "_blank", "width=300,height=600");
+      if (!w) return;
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      w.onload = () => { w.focus(); w.print(); w.onafterprint = () => w.close(); };
+    }
+  };
 
   const handleConnect = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!hasBluetooth) {
-      alert("Iltimos Chrome Android ishlatng — bu brauzer Web Bluetooth'ni qo'llab-quvvatlamaydi.");
-      return;
-    }
     connect();
   };
-
-  const handlePrint = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!hasBluetooth) {
-      alert("Iltimos Chrome Android ishlatng — bu brauzer Web Bluetooth'ni qo'llab-quvvatlamaydi.");
-      return;
-    }
-    printTspl(order);
-  };
-
-  const isPrinting = status === "connecting" || status === "printing";
 
   if (variant === "icon") {
     return (
       <div className="flex items-center gap-1">
-        {/* Ulash tugmasi — faqat ulanmagan payt */}
         {hasBluetooth && !isConnected && (
           <button
             type="button"
             onClick={handleConnect}
             disabled={isPrinting}
             title="Printer ulash"
-            className={cn(
-              "p-1.5 rounded-lg transition-all text-blue-500 hover:text-blue-700 hover:bg-blue-50",
-              className
-            )}
+            className={cn("p-1.5 rounded-lg text-blue-500 hover:text-blue-700 hover:bg-blue-50 transition-all", className)}
           >
-            <BluetoothSearching className="w-4 h-4" />
+            <Bluetooth className="w-4 h-4" />
           </button>
         )}
-
-        {/* TSPL chop etish */}
         <button
           type="button"
           onClick={handlePrint}
           disabled={isPrinting}
           title={
-            isPrinting ? "Chop etilmoqda..." :
-            isConnected ? `Chop et (${printerName ?? "ulangan"})` :
-            "Chop et (avval Ulash bosing)"
+            isPrinting     ? "Chop etilmoqda..." :
+            !hasBluetooth  ? "Brauzer orqali chop et" :
+            isConnected    ? `Chop et (${printerName ?? "ulangan"})` :
+            "Chop et (BLE)"
           }
           className={cn(
             "p-1.5 rounded-lg transition-all",
@@ -89,7 +88,6 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
 
   return (
     <div className="space-y-2">
-      {/* Ulash tugmasi — faqat ulanmagan payt ko'rinadi */}
       {hasBluetooth && !isConnected && (
         <Button
           type="button"
@@ -98,12 +96,11 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
           disabled={isPrinting}
           className={cn("w-full gap-2 border-blue-400 text-blue-600 hover:bg-blue-50", className)}
         >
-          <BluetoothSearching className="w-4 h-4" />
-          Printer ulash
+          <Bluetooth className="w-4 h-4" />
+          Printer ulash (BLE)
         </Button>
       )}
 
-      {/* TSPL chop etish */}
       <Button
         type="button"
         onClick={handlePrint}
@@ -117,8 +114,7 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
         )}
       >
         {isPrinting ? (
-          <><Loader2 className="w-4 h-4 animate-spin" />
-          {status === "connecting" ? "Ulanmoqda..." : "Chop etilmoqda..."}</>
+          <><Loader2 className="w-4 h-4 animate-spin" />{status === "connecting" ? "Ulanmoqda..." : "Chop etilmoqda..."}</>
         ) : status === "done" ? (
           <><CheckCircle2 className="w-4 h-4" />Chop etildi!</>
         ) : status === "error" ? (
@@ -126,29 +122,20 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
         ) : (
           <>
             <Printer className="w-4 h-4" />
-            Chek chop et
-            {isConnected && printerName && (
-              <span className="text-xs opacity-75 ml-1 truncate">({printerName})</span>
+            {hasBluetooth ? (
+              <>Chek chop et (TSPL){isConnected && printerName && <span className="text-xs opacity-75 ml-1">({printerName})</span>}</>
+            ) : (
+              "Chek chop et (Brauzer)"
             )}
           </>
         )}
       </Button>
 
-      {/* Xatolik xabari */}
       {status === "error" && errorMsg && (
         <p className="text-xs text-destructive text-center leading-tight px-1">{errorMsg}</p>
       )}
-
-      {/* Muvaffaqiyatli chop profili */}
       {status === "done" && profileName && (
         <p className="text-xs text-muted-foreground text-center">{profileName}</p>
-      )}
-
-      {/* Ulanmagan holat xabari */}
-      {!hasBluetooth && (
-        <p className="text-xs text-muted-foreground text-center">
-          Chrome Android kerak (BLE)
-        </p>
       )}
     </div>
   );
