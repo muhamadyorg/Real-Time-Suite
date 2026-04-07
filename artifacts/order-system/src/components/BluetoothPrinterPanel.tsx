@@ -1,7 +1,10 @@
 import { useState } from "react";
-import { printOrderLabel } from "@/lib/printUtils";
-import { useBTPrinterContext, DEFAULT_LABEL_CONFIG, PRINTER_PROFILES, buildLabel, buildSimpleTest } from "@/hooks/useBTPrinter";
-import type { LabelConfig } from "@/hooks/useBTPrinter";
+import { buildReceiptHtml } from "@/lib/printUtils";
+import {
+  useBTPrinterContext,
+  PRINTER_PROFILES,
+  buildTsplReceipt,
+} from "@/hooks/useBTPrinter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,103 +13,77 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
   Bluetooth, BluetoothConnected, BluetoothOff, BluetoothSearching,
-  Printer, CheckCircle2, XCircle, AlertCircle, Wifi, WifiOff,
-  RefreshCw, Zap, ChevronDown, ChevronUp, Clock
+  Printer, CheckCircle2, XCircle, AlertCircle, RefreshCw, Zap,
+  ChevronDown, ChevronUp, Clock, FileText,
 } from "lucide-react";
 
 const STATUS_META = {
-  idle: { label: "Tayyor", color: "bg-gray-100 text-gray-700 border-gray-200", icon: Bluetooth },
-  connecting: { label: "Ulanmoqda...", color: "bg-blue-100 text-blue-700 border-blue-200 animate-pulse", icon: BluetoothSearching },
-  printing: { label: "Chop etmoqda...", color: "bg-yellow-100 text-yellow-700 border-yellow-200 animate-pulse", icon: Printer },
-  done: { label: "✅ Muvaffaqiyatli!", color: "bg-green-100 text-green-700 border-green-200", icon: CheckCircle2 },
-  error: { label: "❌ Xatolik", color: "bg-red-100 text-red-700 border-red-200", icon: XCircle },
+  idle:       { label: "Tayyor",            color: "bg-gray-100 text-gray-700 border-gray-200",                          icon: Bluetooth },
+  connecting: { label: "Ulanmoqda...",      color: "bg-blue-100 text-blue-700 border-blue-200 animate-pulse",            icon: BluetoothSearching },
+  printing:   { label: "Chop etmoqda...",   color: "bg-yellow-100 text-yellow-700 border-yellow-200 animate-pulse",      icon: Printer },
+  done:       { label: "✅ Muvaffaqiyatli!", color: "bg-green-100 text-green-700 border-green-200",                      icon: CheckCircle2 },
+  error:      { label: "❌ Xatolik",         color: "bg-red-100 text-red-700 border-red-200",                            icon: XCircle },
 };
 
-const PAPER_PRESETS = [
-  { label: "58mm (384)", dots: 384, chars: 32 },
-  { label: "72mm (576)", dots: 576, chars: 42 },
-  { label: "80mm (576)", dots: 576, chars: 48 },
-];
+const DEFAULT_ORDER = {
+  id: 42,
+  storeName: "Alshib shop",
+  serviceTypeName: "Kimyoviy tozalash",
+  quantity: "3",
+  unit: "dona",
+  shelf: "A-12",
+  clientName: "Alisher Karimov",
+  createdAt: new Date().toISOString(),
+};
 
 export default function BluetoothPrinterPanel() {
   const {
-    print, printRaw, connect, disconnect,
+    printTspl, printRaw, connect, disconnect,
     status, errorMsg,
     printerName, profileName, serviceUuid, charUuid,
     allServices, isConnected, isSupported,
     printLog, labelBytes,
   } = useBTPrinterContext();
 
-  const [labelConfig, setLabelConfig] = useState<LabelConfig>(DEFAULT_LABEL_CONFIG);
+  const [testOrder, setTestOrder] = useState(DEFAULT_ORDER);
   const [showServices, setShowServices] = useState(false);
   const [showLog, setShowLog] = useState(false);
-
-  const [testOrder, setTestOrder] = useState({
-    orderId: "00042",
-    serviceTypeName: "Kimyoviy tozalash",
-    quantity: "3",
-    unit: "dona",
-    shelf: "A-12",
-    product: "Ko'ylak",
-    clientName: "Alisher Karimov",
-    createdAt: new Date().toISOString(),
-  });
 
   const isBusy = status === "connecting" || status === "printing";
   const StatusIcon = STATUS_META[status].icon;
 
-  const handlePrint = () => {
-    print(
-      {
-        ...testOrder,
-        quantity: parseFloat(testOrder.quantity) || 1,
-        createdAt: new Date().toISOString(),
-      },
-      labelConfig
-    );
+  const getOrder = () => ({
+    ...testOrder,
+    quantity: parseFloat(testOrder.quantity) || 1,
+    createdAt: new Date().toISOString(),
+  });
+
+  const handleTsplPrint = () => printTspl(getOrder());
+
+  const handleBrowserPrint = () => {
+    const html = buildReceiptHtml(getOrder());
+    const w = window.open("", "_blank", "width=300,height=600");
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.onload = () => { w.focus(); w.print(); w.onafterprint = () => w.close(); };
   };
 
-  const handleConnect = () => connect();
-
-  const printAsBrowserPdf = () => {
-    const order = {
-      ...testOrder,
-      quantity: parseFloat(testOrder.quantity) || 1,
-      createdAt: new Date().toISOString(),
-    };
-    const widthMm = labelConfig.paperDots >= 500 ? 80 : labelConfig.paperDots >= 450 ? 72 : 58;
-    printOrderLabel(order, widthMm);
+  const handleRawTest = () => {
+    const data = buildTsplReceipt(getOrder());
+    printRaw(data, "TSPL raw test");
   };
 
-  const labelByteCount = buildLabel(
-    { ...testOrder, quantity: parseFloat(testOrder.quantity) || 1, createdAt: new Date().toISOString() },
-    labelConfig
-  ).length;
-
-  const field = (label: string, key: keyof typeof testOrder, placeholder?: string) => (
+  const field = (label: string, key: keyof typeof testOrder, type: "text" | "number" = "text") => (
     <div className="space-y-1">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <Input
         className="h-8 text-sm"
+        type={type}
         value={testOrder[key]}
-        placeholder={placeholder}
-        onChange={e => setTestOrder(prev => ({ ...prev, [key]: e.target.value }))}
+        onChange={e => setTestOrder(prev => ({ ...prev, [key]: type === "number" ? Number(e.target.value) : e.target.value }))}
       />
-    </div>
-  );
-
-  const cfgNum = (label: string, key: keyof LabelConfig, min: number, max: number) => (
-    <div className="space-y-1">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <div className="flex items-center gap-2">
-        <input
-          type="range" min={min} max={max}
-          value={labelConfig[key]}
-          className="flex-1 accent-primary"
-          onChange={e => setLabelConfig(prev => ({ ...prev, [key]: parseInt(e.target.value) }))}
-        />
-        <span className="text-sm font-mono w-10 text-right">{labelConfig[key]}</span>
-      </div>
     </div>
   );
 
@@ -119,8 +96,8 @@ export default function BluetoothPrinterPanel() {
             <div>
               <p className="font-semibold">Web Bluetooth qo'llab-quvvatlanmaydi</p>
               <p className="text-sm mt-1 opacity-80">
-                Bu funksiya faqat <strong>Chrome</strong> brauzerida va <strong>HTTPS</strong> orqali ishlaydi.
-                Replit preview (iframe) da Bluetooth bloklanadi — to'g'ridan-to'g'ri <code className="bg-black/10 px-1 rounded">zakaz.muhamadyorg.uz</code> saytiga kiring.
+                Faqat <strong>Chrome Android</strong> da va <strong>HTTPS</strong> orqali ishlaydi.
+                To'g'ridan-to'g'ri <code className="bg-black/10 px-1 rounded">zakaz.muhamadyorg.uz</code> saytiga kiring.
               </p>
             </div>
           </div>
@@ -132,34 +109,30 @@ export default function BluetoothPrinterPanel() {
   return (
     <div className="space-y-4 max-w-2xl mx-auto">
 
-      {/* STATUS BAR */}
+      {/* ── STATUS ── */}
       <Card className={`border ${STATUS_META[status].color}`}>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <StatusIcon className="w-6 h-6" />
-              <div>
-                <p className="font-semibold text-base">{STATUS_META[status].label}</p>
-                {errorMsg && (
-                  <p className="text-xs mt-0.5 font-mono whitespace-pre-wrap break-all opacity-90">{errorMsg}</p>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {isConnected
-                ? <BluetoothConnected className="w-5 h-5 text-green-600" />
-                : <BluetoothOff className="w-5 h-5 text-gray-400" />
-              }
+        <CardContent className="p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <StatusIcon className="w-6 h-6" />
+            <div>
+              <p className="font-semibold">{STATUS_META[status].label}</p>
+              {errorMsg && (
+                <p className="text-xs mt-0.5 font-mono whitespace-pre-wrap break-all opacity-90">{errorMsg}</p>
+              )}
             </div>
           </div>
+          {isConnected
+            ? <BluetoothConnected className="w-5 h-5 text-green-600" />
+            : <BluetoothOff className="w-5 h-5 text-gray-400" />
+          }
         </CardContent>
       </Card>
 
-      {/* DEVICE INFO */}
+      {/* ── QURILMA MA'LUMOTI ── */}
       <Card>
         <CardHeader className="pb-2 pt-4 px-4">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Bluetooth className="w-4 h-4" /> Qurilma ma'lumoti
+            <Bluetooth className="w-4 h-4" /> Printer qurilma
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-3">
@@ -172,40 +145,36 @@ export default function BluetoothPrinterPanel() {
               <span className="text-muted-foreground text-xs">Profil</span>
               <p className="font-medium font-mono text-xs">{profileName || "—"}</p>
             </div>
-            <div className="col-span-2">
-              <span className="text-muted-foreground text-xs">Service UUID</span>
-              <p className="font-mono text-xs break-all text-blue-600">{serviceUuid || "—"}</p>
-            </div>
-            <div className="col-span-2">
-              <span className="text-muted-foreground text-xs">Characteristic UUID</span>
-              <p className="font-mono text-xs break-all text-green-600">{charUuid || "—"}</p>
-            </div>
+            {serviceUuid && (
+              <div className="col-span-2">
+                <span className="text-muted-foreground text-xs">Service UUID</span>
+                <p className="font-mono text-xs break-all text-blue-600">{serviceUuid}</p>
+              </div>
+            )}
+            {charUuid && (
+              <div className="col-span-2">
+                <span className="text-muted-foreground text-xs">Characteristic UUID</span>
+                <p className="font-mono text-xs break-all text-green-600">{charUuid}</p>
+              </div>
+            )}
           </div>
 
           <Separator />
 
           <div className="flex gap-2">
-            {!isConnected ? (
-              <Button
-                className="flex-1"
-                onClick={handleConnect}
-                disabled={isBusy}
-              >
-                {isBusy
-                  ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Ulanmoqda...</>
-                  : <><Bluetooth className="w-4 h-4 mr-2" /> Bluetooth ulash</>
-                }
-              </Button>
-            ) : (
-              <Button
-                className="flex-1"
-                variant="outline"
-                onClick={handleConnect}
-                disabled={isBusy}
-              >
-                <RefreshCw className="w-4 h-4 mr-2" /> Boshqasini ulash
-              </Button>
-            )}
+            <Button
+              className="flex-1"
+              variant={isConnected ? "outline" : "default"}
+              onClick={connect}
+              disabled={isBusy}
+            >
+              {isBusy
+                ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Ulanmoqda...</>
+                : isConnected
+                ? <><RefreshCw className="w-4 h-4 mr-2" />Boshqasini ulash</>
+                : <><Bluetooth className="w-4 h-4 mr-2" />Bluetooth ulash</>
+              }
+            </Button>
             {isConnected && (
               <Button variant="destructive" size="icon" onClick={disconnect} disabled={isBusy} title="Uzish">
                 <BluetoothOff className="w-4 h-4" />
@@ -213,7 +182,7 @@ export default function BluetoothPrinterPanel() {
             )}
           </div>
 
-          {/* Known profiles reference */}
+          {/* Ma'lum profil ro'yxati */}
           <details className="text-xs">
             <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
               Ma'lum printer profillari ({PRINTER_PROFILES.length} ta)
@@ -221,13 +190,10 @@ export default function BluetoothPrinterPanel() {
             <div className="mt-2 space-y-1">
               {PRINTER_PROFILES.map(p => (
                 <div key={p.char} className="flex items-center gap-2">
-                  <Badge
-                    variant={profileName === p.name ? "default" : "outline"}
-                    className="text-xs font-normal"
-                  >
+                  <Badge variant={profileName === p.name ? "default" : "outline"} className="text-xs font-normal">
                     {p.name}
                   </Badge>
-                  <span className="font-mono text-muted-foreground truncate">{p.svc.slice(4, 8)}/{p.char.slice(4, 8)}</span>
+                  <span className="font-mono text-muted-foreground truncate">{p.svc.slice(4,8)}/{p.char.slice(4,8)}</span>
                   {profileName === p.name && <CheckCircle2 className="w-3 h-3 text-green-500 ml-auto flex-shrink-0" />}
                 </div>
               ))}
@@ -236,7 +202,7 @@ export default function BluetoothPrinterPanel() {
         </CardContent>
       </Card>
 
-      {/* ALL BLE SERVICES (from scan) */}
+      {/* ── BLE SERVICES (scan natijalari) ── */}
       {allServices.length > 0 && (
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
@@ -245,8 +211,8 @@ export default function BluetoothPrinterPanel() {
               onClick={() => setShowServices(v => !v)}
             >
               <span className="flex items-center gap-2">
-                <Wifi className="w-4 h-4" />
-                Qurilmada topilgan UUID lar ({allServices.length} servis)
+                <Bluetooth className="w-4 h-4" />
+                Topilgan UUID lar ({allServices.length} servis)
               </span>
               {showServices ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
@@ -262,11 +228,7 @@ export default function BluetoothPrinterPanel() {
                       <p className="font-mono text-xs break-all">{ch.uuid}</p>
                       <div className="flex flex-wrap gap-1 mt-0.5">
                         {ch.props.map(p => (
-                          <Badge
-                            key={p}
-                            variant={p.includes("write") ? "default" : "secondary"}
-                            className="text-xs py-0 h-4"
-                          >
+                          <Badge key={p} variant={p.includes("write") ? "default" : "secondary"} className="text-xs py-0 h-4">
                             {p}
                           </Badge>
                         ))}
@@ -280,103 +242,69 @@ export default function BluetoothPrinterPanel() {
         </Card>
       )}
 
-      {/* LABEL SETTINGS */}
+      {/* ── TEST CHEK ── */}
       <Card>
         <CardHeader className="pb-2 pt-4 px-4">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Printer className="w-4 h-4" /> Yorliq o'lchamlari
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4 space-y-4">
-          <div className="flex gap-2 flex-wrap">
-            {PAPER_PRESETS.map(pr => (
-              <Button
-                key={pr.dots + pr.chars}
-                size="sm"
-                variant={labelConfig.paperDots === pr.dots && labelConfig.charsPerLine === pr.chars ? "default" : "outline"}
-                className="text-xs h-7"
-                onClick={() => setLabelConfig(prev => ({ ...prev, paperDots: pr.dots, charsPerLine: pr.chars }))}
-              >
-                {pr.label}
-              </Button>
-            ))}
-          </div>
-          <div className="space-y-3">
-            {cfgNum("Kenglik (dots)", "paperDots", 200, 700)}
-            {cfgNum("Satr uzunligi (belgi)", "charsPerLine", 16, 56)}
-            {cfgNum("Separator uzunligi", "separatorLen", 10, 56)}
-            {cfgNum("Qo'shimcha qatorlar (feed)", "feedLines", 0, 10)}
-          </div>
-          <p className="text-xs text-muted-foreground font-mono">
-            Yorliq hajmi: ~{labelByteCount} bayt
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* TEST ORDER DATA */}
-      <Card>
-        <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Zap className="w-4 h-4" /> Test buyurtma ma'lumotlari
+            <Zap className="w-4 h-4" /> Test chek ma'lumotlari
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            {field("Buyurtma ID", "orderId", "00042")}
-            {field("Xizmat turi", "serviceTypeName", "Kimyoviy tozalash")}
-            {field("Miqdor", "quantity", "3")}
-            {field("O'lchov birligi", "unit", "dona")}
-            {field("Qolib/Shelf", "shelf", "A-12")}
-            {field("Mahsulot", "product", "Ko'ylak")}
+            {field("Do'kon nomi", "storeName")}
+            {field("Xizmat turi", "serviceTypeName")}
+            {field("Miqdor", "quantity")}
+            {field("O'lchov", "unit")}
+            {field("Javon", "shelf")}
+            {field("Mijoz", "clientName")}
           </div>
-          {field("Mijoz ismi", "clientName", "Alisher Karimov")}
 
-          {/* Browser PDF print — no BLE, no ESC/POS */}
-          <Button
-            className="w-full h-12 text-base font-bold bg-green-600 hover:bg-green-700 text-white"
-            onClick={printAsBrowserPdf}
-          >
-            <Printer className="w-5 h-5 mr-2" />
-            Browser orqali chop et (PDF usuli — BLE shart emas)
-          </Button>
-          <p className="text-xs text-muted-foreground text-center -mt-1">
-            Yangi oyna ochiladi → printer XP-365B ni tanlang → Print
-          </p>
+          <Separator />
 
-          {/* Simple ESC/POS raw test */}
-          <Button
-            className="w-full h-10 text-sm"
-            variant="outline"
-            onClick={() => printRaw(buildSimpleTest(), "Oddiy matn test")}
-            disabled={isBusy}
-          >
-            <Zap className="w-4 h-4 mr-2" />
-            ESC/POS raw test (BLE Bluetooth)
-          </Button>
-
-          {/* Full label print ESC/POS */}
+          {/* TSPL BLE — asosiy tugma */}
           <Button
             className="w-full h-12 text-base font-bold"
-            onClick={handlePrint}
+            onClick={handleTsplPrint}
             disabled={isBusy}
           >
             {status === "printing"
-              ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Chop etmoqda... ({labelBytes} bayt)</>
+              ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin" />Chop etmoqda... ({labelBytes} bayt)</>
               : status === "done"
-              ? <><CheckCircle2 className="w-5 h-5 mr-2" /> Muvaffaqiyatli chop etildi!</>
-              : <><Printer className="w-5 h-5 mr-2" /> To'liq yorliq chop etish</>
+              ? <><CheckCircle2 className="w-5 h-5 mr-2" />Chop etildi!</>
+              : <><Printer className="w-5 h-5 mr-2" />TSPL chop et (XP-365B BLE)</>
             }
+          </Button>
+
+          {/* Brauzer chop — zaxira */}
+          <Button
+            className="w-full bg-green-600 hover:bg-green-700 text-white"
+            onClick={handleBrowserPrint}
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Brauzer orqali chop et (BLE shart emas)
+          </Button>
+
+          {/* Raw TSPL test */}
+          <Button
+            className="w-full"
+            variant="outline"
+            size="sm"
+            onClick={handleRawTest}
+            disabled={isBusy}
+          >
+            <Zap className="w-4 h-4 mr-2" />
+            TSPL raw baytlar yuborish (diagnostika)
           </Button>
 
           {!isConnected && status === "idle" && (
             <p className="text-xs text-center text-muted-foreground">
-              Avtomatik ulanadi — qurilmani tanlash oynasi ochiladi
+              TSPL tugmasi bosilganda BLE qurilma tanlash oynasi avtomatik ochiladi
             </p>
           )}
         </CardContent>
       </Card>
 
-      {/* PRINT LOG */}
+      {/* ── CHOP TARIXI ── */}
       {printLog.length > 0 && (
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
@@ -412,19 +340,21 @@ export default function BluetoothPrinterPanel() {
         </Card>
       )}
 
-      {/* CHROME HTTPS WARNING */}
+      {/* ── ESLATMA ── */}
       <Card className="border-amber-200 bg-amber-50">
         <CardContent className="p-4">
           <div className="flex gap-3 text-amber-800 text-xs">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <p className="font-semibold">Muhim eslatma</p>
-              <p>Web Bluetooth faqat <strong>Chrome/Edge</strong> brauzerida va <strong>HTTPS</strong> saytida ishlaydi.</p>
-              <p>Replit preview (iframe) da Bluetooth <strong>BLOKLANADI</strong>. To'g'ridan-to'g'ri <strong>zakaz.muhamadyorg.uz</strong> saytiga Chrome orqali kiring.</p>
+              <p className="font-semibold">Muhim</p>
+              <p>Web Bluetooth faqat <strong>Chrome Android</strong> da va <strong>HTTPS</strong> saytida ishlaydi.</p>
+              <p>Replit preview da BLOKLANADI — to'g'ridan-to'g'ri <strong>zakaz.muhamadyorg.uz</strong> ga kiring.</p>
+              <p className="mt-1">Printer: <strong>Xprinter XP-365B</strong> · Protokol: <strong>TSPL</strong> · 58mm × avtomatik balandlik</p>
             </div>
           </div>
         </CardContent>
       </Card>
+
     </div>
   );
 }
