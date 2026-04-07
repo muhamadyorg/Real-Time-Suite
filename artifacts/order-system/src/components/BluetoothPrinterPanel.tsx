@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { flushSync } from "react-dom";
 import { buildReceiptHtml } from "@/lib/printUtils";
 import {
   useBTPrinterContext, PRINTER_PROFILES,
@@ -244,7 +245,11 @@ function LabelEditor({ initialLayout, onSave, onClose }: {
   const [draft,   setDraft]   = useState<TsplLayout>(initialLayout);
   const [selKey,  setSelKey]  = useState<ElKey | null>(null);
   const [history, setHistory] = useState<TsplLayout[]>([]);
+  const [saved,   setSaved]   = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Always keep latest draft in ref so save can read it synchronously
+  const draftRef = useRef<TsplLayout>(draft);
+  useEffect(() => { draftRef.current = draft; }, [draft]);
 
   // Undo
   const pushHistory = useCallback((prev: TsplLayout) => {
@@ -263,7 +268,6 @@ function LabelEditor({ initialLayout, onSave, onClose }: {
     });
   }, [pushHistory]);
 
-  // Called ONCE when finger lifts — zero re-renders during drag
   const handleCommitDrag = useCallback((key: ElKey, newX: number, newY: number) => {
     setDraft(prev => {
       pushHistory(prev);
@@ -276,29 +280,32 @@ function LabelEditor({ initialLayout, onSave, onClose }: {
   useEffect(() => {
     const compute = () => {
       const w = containerRef.current?.clientWidth ?? 340;
-      setScale((w - 24) / (draft.widthMm * DPM));
+      setScale((w - 24) / (draftRef.current.widthMm * DPM));
     };
     compute();
     window.addEventListener("resize", compute);
     return () => window.removeEventListener("resize", compute);
-  }, [draft.widthMm]);
+  }, []);
 
-  const sel = selKey ? draft.elements[selKey] : null;
+  const sel   = selKey ? draft.elements[selKey] : null;
   const isSep = selKey==="sep1"||selKey==="sep2";
   const isQr  = selKey==="qr";
 
-  const rotNext = (): Rotation => {
-    if (!sel) return 0;
-    const order: Rotation[] = [0,90,180,270];
-    return order[(order.indexOf(sel.rotation)+1)%4];
+  // ─── SAVE: flushSync forces context update BEFORE close ───────────────────
+  const handleSave = () => {
+    const latest = draftRef.current;
+    flushSync(() => onSave(latest));   // context + localStorage — synchronous
+    setSaved(true);
+    setTimeout(onClose, 120);          // tiny delay so user sees "Saqlandi ✓"
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex flex-col bg-background" style={{ touchAction:"none" }}>
+    // touchAction:"none" faqat canvas ga, toolbar/controls ga EMAS
+    <div className="fixed inset-0 z-50 flex flex-col bg-background">
 
       {/* ── TOP TOOLBAR ── */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b bg-card shrink-0">
-        <button type="button" onClick={onClose} className="p-2 rounded hover:bg-muted">
+      <div className="flex items-center gap-2 px-3 py-2 border-b bg-card shrink-0" style={{ touchAction:"auto" }}>
+        <button type="button" onPointerDown={e=>e.stopPropagation()} onClick={onClose} className="p-2 rounded hover:bg-muted">
           <X className="w-5 h-5" />
         </button>
         <span className="font-semibold text-sm flex-1">Label tahrirlash</span>
@@ -313,13 +320,17 @@ function LabelEditor({ initialLayout, onSave, onClose }: {
         <button type="button" onClick={undo} disabled={!history.length} className="p-2 rounded hover:bg-muted disabled:opacity-30">
           <RotateCcw className="w-4 h-4" />
         </button>
-        <Button size="sm" onClick={()=>{ onSave(draft); onClose(); }} className="h-8">
-          Saqlash
+        <Button
+          size="sm"
+          onClick={handleSave}
+          className={`h-8 min-w-[80px] transition-colors ${saved ? "bg-green-600 hover:bg-green-600" : ""}`}
+        >
+          {saved ? "Saqlandi ✓" : "Saqlash"}
         </Button>
       </div>
 
-      {/* ── CANVAS ── */}
-      <div ref={containerRef} className="flex-1 overflow-auto bg-gray-100 flex flex-col items-center py-4 gap-3">
+      {/* ── CANVAS — faqat bu joy touchAction:none ── */}
+      <div ref={containerRef} className="flex-1 overflow-auto bg-gray-100 flex flex-col items-center py-4 gap-3" style={{ touchAction:"auto" }}>
         <p className="text-xs text-gray-400 select-none">Elementlarni barmog'ingiz bilan suring • bosib tanlang</p>
         <div className="shadow-2xl border border-gray-200 rounded overflow-hidden" style={{ width: Math.round(draft.widthMm * DPM * scale), lineHeight:0 }}>
           <LabelCanvas
@@ -335,7 +346,7 @@ function LabelEditor({ initialLayout, onSave, onClose }: {
       </div>
 
       {/* ── ELEMENT LIST ── */}
-      <div className="border-t bg-card shrink-0">
+      <div className="border-t bg-card shrink-0" style={{ touchAction:"auto" }}>
         <div className="flex gap-1.5 overflow-x-auto px-3 py-2 scrollbar-hide">
           {(Object.keys(draft.elements) as ElKey[]).map(k => (
             <button
