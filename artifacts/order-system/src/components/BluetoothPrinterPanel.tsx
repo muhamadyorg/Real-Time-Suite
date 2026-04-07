@@ -58,7 +58,7 @@ function getTextMap(order: any): Record<string, string> {
   const qty=[order.quantity,order.unit].filter(Boolean).join(" ");
   return {
     storeName:order.storeName??"DO'KON", orderId:`Buyurtma #${getOrderNum(order)}`,
-    dateTime:`${d}  ${t}`, serviceType:order.serviceTypeName??"Xizmat",
+    dateTime:`${d}  ${t}`, serviceType:order.serviceTypeName?`Xizmat turi: ${order.serviceTypeName}`:"",
     quantity:qty?`Miqdor: ${qty}`:"", shelf:order.shelf?`Qolib: ${order.shelf}`:"",
     clientName:order.clientName?`Mijoz: ${order.clientName}`:"", footer:"Rahmat!",
   };

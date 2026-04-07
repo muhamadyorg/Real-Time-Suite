@@ -38,7 +38,8 @@ export const FONT_H: Record<string, number> = {
   "1": 8, "2": 12, "3": 16, "4": 24, "5": 32, "6": 14, "7": 21, "8": 14,
 };
 export function elHeight(el: TsplElementConfig): number {
-  return (FONT_H[el.font] ?? 12) * el.yScale + 4;
+  // +12: haqiqiy font balandligi FONT_H dan ~8 dot katta + 4 dot pastki uzaytmalar uchun
+  return (FONT_H[el.font] ?? 12) * el.yScale + 12;
 }
 /** QR kod o'lchamlari dots da (taxminiy) */
 export function qrDots(qrSize: number): number {
@@ -136,7 +137,7 @@ export function buildTsplReceipt(order: any, layout: TsplLayout = DEFAULT_TSPL_L
     storeName:   order.storeName ?? "DO'KON",
     orderId:     `Buyurtma #${ordNum}`,
     dateTime:    `${dateStr}  ${timeStr}`,
-    serviceType: order.serviceTypeName ?? "Xizmat",
+    serviceType: order.serviceTypeName ? `Xizmat turi: ${order.serviceTypeName}` : "",
     quantity:    qty ? `Miqdor: ${qty}` : "",
     shelf:       order.shelf ? `Qolib: ${order.shelf}` : "",
     clientName:  order.clientName ? `Mijoz: ${order.clientName}` : "",
