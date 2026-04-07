@@ -15,23 +15,21 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
     printTspl, connect, status, errorMsg,
     printerName, profileName, isConnected, isSupported,
   } = useBTPrinterContext();
+  // layout — context ichida allaqachon saqlanadi, printTspl avtomatik ishlatadi
 
   const hasBluetooth = isSupported && !!(navigator as any).bluetooth;
   const isPrinting   = status === "connecting" || status === "printing";
 
-  /** BLE mavjud bo'lsa TSPL, yo'qsa brauzer print */
+  /** BLE mavjud → TSPL printer; yo'q → brauzer print */
   const handlePrint = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (hasBluetooth) {
-      printTspl(order);
+      printTspl(order);   // ← global layout avtomatik ishlatiladi
     } else {
-      // BLE yo'q — brauzer orqali chop etish
       const html = buildReceiptHtml(order);
       const w = window.open("", "_blank", "width=300,height=600");
       if (!w) return;
-      w.document.open();
-      w.document.write(html);
-      w.document.close();
+      w.document.open(); w.document.write(html); w.document.close();
       w.onload = () => { w.focus(); w.print(); w.onafterprint = () => w.close(); };
     }
   };
@@ -60,9 +58,9 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
           onClick={handlePrint}
           disabled={isPrinting}
           title={
-            isPrinting     ? "Chop etilmoqda..." :
-            !hasBluetooth  ? "Brauzer orqali chop et" :
-            isConnected    ? `Chop et (${printerName ?? "ulangan"})` :
+            isPrinting    ? "Chop etilmoqda..." :
+            !hasBluetooth ? "Brauzer orqali chop et" :
+            isConnected   ? `Chop et (${printerName ?? "ulangan"})` :
             "Chop et (BLE)"
           }
           className={cn(
@@ -114,7 +112,8 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
         )}
       >
         {isPrinting ? (
-          <><Loader2 className="w-4 h-4 animate-spin" />{status === "connecting" ? "Ulanmoqda..." : "Chop etilmoqda..."}</>
+          <><Loader2 className="w-4 h-4 animate-spin" />
+          {status === "connecting" ? "Ulanmoqda..." : "Chop etilmoqda..."}</>
         ) : status === "done" ? (
           <><CheckCircle2 className="w-4 h-4" />Chop etildi!</>
         ) : status === "error" ? (
@@ -123,10 +122,8 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
           <>
             <Printer className="w-4 h-4" />
             {hasBluetooth ? (
-              <>Chek chop et (TSPL){isConnected && printerName && <span className="text-xs opacity-75 ml-1">({printerName})</span>}</>
-            ) : (
-              "Chek chop et (Brauzer)"
-            )}
+              <>Chek chop et{isConnected && printerName && <span className="text-xs opacity-75 ml-1">({printerName})</span>}</>
+            ) : "Chek chop et (Brauzer)"}
           </>
         )}
       </Button>

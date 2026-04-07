@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { buildReceiptHtml } from "@/lib/printUtils";
 import {
   useBTPrinterContext, PRINTER_PROFILES,
@@ -6,28 +6,25 @@ import {
   DEFAULT_TSPL_LAYOUT, type TsplLayout, type HAlign, type TsplRow,
 } from "@/hooks/useBTPrinter";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
   Bluetooth, BluetoothConnected, BluetoothOff, BluetoothSearching,
   Printer, CheckCircle2, XCircle, AlertCircle, RefreshCw, Zap,
-  ChevronDown, ChevronUp, Clock, FileText, Eye, EyeOff, AlignLeft,
-  AlignCenter, AlignRight, Ruler,
+  ChevronDown, ChevronUp, Clock, FileText, Eye, EyeOff,
+  AlignLeft, AlignCenter, AlignRight, Ruler, RotateCcw, GripVertical,
 } from "lucide-react";
 
-// ─── Statuslar ────────────────────────────────────────────────────────────────
+// ─── Meta ─────────────────────────────────────────────────────────────────────
 const STATUS_META = {
-  idle:       { label: "Tayyor",           color: "bg-gray-100 text-gray-700 border-gray-200",                     icon: Bluetooth },
-  connecting: { label: "Ulanmoqda...",     color: "bg-blue-100 text-blue-700 border-blue-200 animate-pulse",       icon: BluetoothSearching },
+  idle:       { label: "Tayyor",           color: "bg-gray-100 text-gray-700 border-gray-200",                    icon: Bluetooth },
+  connecting: { label: "Ulanmoqda...",     color: "bg-blue-100 text-blue-700 border-blue-200 animate-pulse",      icon: BluetoothSearching },
   printing:   { label: "Chop etmoqda...", color: "bg-yellow-100 text-yellow-700 border-yellow-200 animate-pulse", icon: Printer },
-  done:       { label: "✅ Chop etildi!",  color: "bg-green-100 text-green-700 border-green-200",                 icon: CheckCircle2 },
-  error:      { label: "❌ Xatolik",       color: "bg-red-100 text-red-700 border-red-200",                       icon: XCircle },
+  done:       { label: "✅ Chop etildi!",  color: "bg-green-100 text-green-700 border-green-200",                icon: CheckCircle2 },
+  error:      { label: "❌ Xatolik",       color: "bg-red-100 text-red-700 border-red-200",                      icon: XCircle },
 };
 
-// ─── Elementlar meta ──────────────────────────────────────────────────────────
 const ELEMENT_LABELS: Record<string, string> = {
   storeName:   "Do'kon nomi",
   orderId:     "Buyurtma raqami",
@@ -56,80 +53,151 @@ const ELEMENT_COLORS: Record<string, string> = {
   footer:      "#ec4899",
 };
 
-const DEFAULT_TEST_ORDER = {
+const DEMO_ORDER = {
   id: 42,
+  orderId: "00042",
   storeName: "Alshib shop",
   serviceTypeName: "Kimyoviy tozalash",
-  quantity: "3",
+  quantity: 3,
   unit: "dona",
   shelf: "A-12",
   clientName: "Alisher Karimov",
   createdAt: new Date().toISOString(),
 };
 
-// ─── Preview SVG ──────────────────────────────────────────────────────────────
-function LabelPreview({ rows, layout }: { rows: TsplRow[]; layout: TsplLayout }) {
+const PRESETS = [
+  { w: 58, h: 0 },
+  { w: 58, h: 40 },
+  { w: 58, h: 60 },
+  { w: 80, h: 0 },
+  { w: 40, h: 30 },
+];
+
+// ─── Draggable Preview ────────────────────────────────────────────────────────
+function LabelPreview({
+  rows, layout, onDrag,
+}: {
+  rows: TsplRow[];
+  layout: TsplLayout;
+  onDrag: (key: string, newYOffset: number) => void;
+}) {
   const DPM       = 8;
   const widthDots = layout.widthMm * DPM;
-  const leftDots  = layout.leftMarginMm * DPM;
-  const cw        = widthDots - leftDots * 2;
+  const lxDots    = layout.leftMarginMm * DPM;
+  const cw        = widthDots - lxDots * 2;
 
-  const maxY = rows.length ? rows[rows.length - 1].y + rows[rows.length - 1].h + 10 : 100;
+  const maxY      = rows.length ? rows[rows.length - 1].y + rows[rows.length - 1].h + 16 : 120;
   const heightDots = layout.heightMm > 0 ? layout.heightMm * DPM : maxY;
 
-  const PREVIEW_W = 240;
-  const scale     = PREVIEW_W / widthDots;
-  const PREVIEW_H = Math.round(heightDots * scale);
+  const PW    = 240;
+  const scale = PW / widthDots;
+  const PH    = Math.round(heightDots * scale);
 
-  const toX = (d: number) => Math.round(d * scale);
-  const toY = (d: number) => Math.round(d * scale);
-  const toW = (d: number) => Math.max(1, Math.round(d * scale));
-  const toH = (d: number) => Math.max(1, Math.round(d * scale));
+  const tX = (d: number) => Math.round(d * scale);
+  const tY = (d: number) => Math.round(d * scale);
+  const tW = (d: number) => Math.max(1, Math.round(d * scale));
+  const tH = (d: number) => Math.max(1, Math.round(d * scale));
+
+  // Drag state
+  const dragRef = useRef<{ key: string; startClientY: number; startYOffset: number } | null>(null);
+
+  const onPointerDown = (row: TsplRow) => (e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const cfg = (layout.elements as any)[row.key];
+    dragRef.current = { key: row.key, startClientY: e.clientY, startYOffset: cfg?.yOffset ?? 0 };
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!dragRef.current) return;
+    const dy     = e.clientY - dragRef.current.startClientY;
+    const delta  = Math.round(dy / scale);
+    onDrag(dragRef.current.key, dragRef.current.startYOffset + delta);
+  };
+
+  const onPointerUp = () => { dragRef.current = null; };
 
   return (
     <div className="flex flex-col items-center gap-2">
       <p className="text-xs text-muted-foreground font-mono">
-        {layout.widthMm}mm × {layout.heightMm > 0 ? layout.heightMm + "mm" : "auto"} · {widthDots}×{heightDots} dots
+        {layout.widthMm}mm × {layout.heightMm > 0 ? layout.heightMm + "mm" : "auto"} · {widthDots}×{heightDots} dots · ☝ sudrab joylashtiring
       </p>
-      <div className="border-2 border-dashed border-gray-300 rounded overflow-hidden bg-white shadow-md" style={{ width: PREVIEW_W, minHeight: PREVIEW_H }}>
-        <svg width={PREVIEW_W} height={Math.max(PREVIEW_H, 80)} xmlns="http://www.w3.org/2000/svg">
+      <div
+        className="border-2 border-dashed border-primary/40 rounded overflow-hidden bg-white shadow-lg select-none"
+        style={{ width: PW, height: Math.max(PH, 60) }}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        <svg width={PW} height={Math.max(PH, 60)} xmlns="http://www.w3.org/2000/svg" style={{ display: "block" }}>
           {/* background */}
-          <rect x={0} y={0} width={PREVIEW_W} height={Math.max(PREVIEW_H, 80)} fill="white" />
-          {/* margin guides */}
-          <rect x={toX(leftDots)} y={0} width={toW(cw)} height={Math.max(PREVIEW_H,80)} fill="#f8fafc" stroke="none" />
+          <rect x={0} y={0} width={PW} height={Math.max(PH,60)} fill="white" />
+          {/* margin band */}
+          <rect x={tX(lxDots)} y={0} width={tW(cw)} height={Math.max(PH,60)} fill="#f8fafc" />
 
           {rows.map((row, i) => {
             const color = ELEMENT_COLORS[row.key] ?? "#94a3b8";
+            const bh    = Math.max(tH(row.h), row.kind === "bar" ? 2 : 9);
+
             if (row.kind === "bar") {
-              return <rect key={i} x={toX(leftDots)} y={toY(row.y)} width={toW(cw)} height={Math.max(1, toH(2))} fill={color} />;
-            }
-            if (row.kind === "qr") {
-              const qrW = toW(80); const qrH = toW(80);
-              let qx = toX(leftDots);
-              if (row.align === "center") qx = toX(leftDots) + Math.round((toW(cw) - qrW) / 2);
-              if (row.align === "right")  qx = toX(leftDots) + toW(cw) - qrW;
               return (
-                <g key={i}>
-                  <rect x={qx} y={toY(row.y)} width={qrW} height={qrH} fill={color} opacity={0.15} rx={2} />
-                  <text x={qx + qrW/2} y={toY(row.y) + qrH/2 + 4} textAnchor="middle" fontSize={Math.max(7, toH(12))} fill={color} fontFamily="monospace">QR</text>
+                <rect
+                  key={i}
+                  x={tX(lxDots)} y={tY(row.y)} width={tW(cw)} height={Math.max(2, tH(2))}
+                  fill={color}
+                  className="cursor-ns-resize"
+                  onPointerDown={onPointerDown(row)}
+                />
+              );
+            }
+
+            if (row.kind === "qr") {
+              const qsz = tW(80);
+              let qx = tX(lxDots);
+              if (row.align === "center") qx = tX(lxDots) + Math.round((tW(cw) - qsz) / 2);
+              if (row.align === "right")  qx = tX(lxDots) + tW(cw) - qsz;
+              return (
+                <g key={i} className="cursor-ns-resize" onPointerDown={onPointerDown(row)}>
+                  <rect x={qx} y={tY(row.y)} width={qsz} height={qsz} fill={color} opacity={0.18} rx={3} />
+                  {/* QR grid overlay */}
+                  {Array.from({ length: 5 }).map((_, ri) =>
+                    Array.from({ length: 5 }).map((_, ci) =>
+                      (ri + ci) % 2 === 0 ? (
+                        <rect key={`${ri}-${ci}`}
+                          x={qx + ci * Math.round(qsz/5) + 1} y={tY(row.y) + ri * Math.round(qsz/5) + 1}
+                          width={Math.round(qsz/5)-2} height={Math.round(qsz/5)-2}
+                          fill={color} opacity={0.5} rx={1}
+                        />
+                      ) : null
+                    )
+                  )}
+                  <text x={qx+qsz/2} y={tY(row.y)+qsz+9} textAnchor="middle" fontSize={7} fill={color} fontFamily="monospace">QR</text>
                 </g>
               );
             }
-            // block
-            const bh = Math.max(toH(row.h), 8);
+
+            // block — draggable
+            const textX = row.align === "center"
+              ? tX(lxDots) + tW(cw)/2
+              : row.align === "right"
+              ? tX(lxDots) + tW(cw) - 2
+              : tX(lxDots) + 2;
+            const anchor = row.align === "center" ? "middle" : row.align === "right" ? "end" : "start";
+            const fSize  = Math.max(6, Math.min(10, bh - 2));
+
             return (
-              <g key={i}>
-                <rect x={toX(leftDots)} y={toY(row.y)} width={toW(cw)} height={bh} fill={color} opacity={0.12} rx={1} />
+              <g key={i} className="cursor-ns-resize" onPointerDown={onPointerDown(row)}>
+                <rect x={tX(lxDots)} y={tY(row.y)} width={tW(cw)} height={bh} fill={color} opacity={0.13} rx={1} />
+                {/* drag handle icon */}
+                <text x={tX(lxDots) + 2} y={tY(row.y) + bh/2 + 3} fontSize={6} fill={color} opacity={0.6}>⠿</text>
                 <text
-                  x={row.align === "center" ? toX(leftDots) + toW(cw)/2 : row.align === "right" ? toX(leftDots) + toW(cw) - 2 : toX(leftDots) + 2}
-                  y={toY(row.y) + bh/2 + 3}
-                  textAnchor={row.align === "center" ? "middle" : row.align === "right" ? "end" : "start"}
-                  fontSize={Math.max(6, Math.min(9, toH(row.h) - 2))}
+                  x={textX} y={tY(row.y) + bh/2 + Math.round(fSize/3)}
+                  textAnchor={anchor}
+                  fontSize={fSize}
                   fill={color}
                   fontFamily="monospace"
                   fontWeight={row.key === "storeName" ? "bold" : "normal"}
                 >
-                  {(row.text ?? row.label).slice(0, 32)}
+                  {(row.text ?? row.label).slice(0, 30)}
                 </text>
               </g>
             );
@@ -140,37 +208,38 @@ function LabelPreview({ rows, layout }: { rows: TsplRow[]; layout: TsplLayout })
   );
 }
 
-// ─── Element row ──────────────────────────────────────────────────────────────
+// ─── Element row (list) ───────────────────────────────────────────────────────
 function ElementRow({
   elKey, config, onChange,
 }: {
   elKey: string;
-  config: { show: boolean; align: HAlign };
-  onChange: (c: { show: boolean; align: HAlign }) => void;
+  config: { show: boolean; align: HAlign; yOffset: number };
+  onChange: (c: { show: boolean; align: HAlign; yOffset: number }) => void;
 }) {
-  const label = ELEMENT_LABELS[elKey] ?? elKey;
   const color = ELEMENT_COLORS[elKey] ?? "#94a3b8";
   const isSep = elKey.startsWith("sep");
 
   return (
-    <div className={`flex items-center gap-2 py-1.5 px-2 rounded-lg ${config.show ? "bg-muted/40" : "opacity-40"}`}>
-      {/* renkli nuqta */}
+    <div className={`flex items-center gap-2 py-1.5 px-2 rounded-lg transition-opacity ${config.show ? "" : "opacity-40"}`}>
       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+      <span className="text-xs flex-1 truncate">{ELEMENT_LABELS[elKey] ?? elKey}</span>
 
-      {/* nom */}
-      <span className="text-xs flex-1 truncate">{label}</span>
+      {/* yOffset badge */}
+      {config.yOffset !== 0 && (
+        <span className="text-xs font-mono text-muted-foreground">{config.yOffset > 0 ? `+${config.yOffset}` : config.yOffset}px</span>
+      )}
 
-      {/* ko'rsat/yashir */}
+      {/* Ko'rsat/yashir */}
       <button
         type="button"
         onClick={() => onChange({ ...config, show: !config.show })}
         className="p-1 rounded hover:bg-muted transition-colors"
         title={config.show ? "Yashir" : "Ko'rsat"}
       >
-        {config.show ? <Eye className="w-3.5 h-3.5 text-foreground" /> : <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />}
+        {config.show ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />}
       </button>
 
-      {/* hizalash — separator uchun kerak emas */}
+      {/* Hizalash (separator uchun kerak emas) */}
       {!isSep && (
         <div className="flex border rounded overflow-hidden">
           {(["left", "center", "right"] as HAlign[]).map(a => (
@@ -180,11 +249,9 @@ function ElementRow({
               disabled={!config.show}
               onClick={() => onChange({ ...config, align: a })}
               className={`p-1 transition-colors ${config.align === a ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
-              title={a === "left" ? "Chap" : a === "center" ? "Markazda" : "O'ng"}
+              title={a === "left" ? "Chap" : a === "center" ? "Markaz" : "O'ng"}
             >
-              {a === "left"   ? <AlignLeft   className="w-3 h-3" /> :
-               a === "center" ? <AlignCenter className="w-3 h-3" /> :
-                                <AlignRight  className="w-3 h-3" />}
+              {a === "left" ? <AlignLeft className="w-3 h-3" /> : a === "center" ? <AlignCenter className="w-3 h-3" /> : <AlignRight className="w-3 h-3" />}
             </button>
           ))}
         </div>
@@ -193,36 +260,66 @@ function ElementRow({
   );
 }
 
-// ─── Asosiy komponent ─────────────────────────────────────────────────────────
+// ─── Stepper (touch-friendly +/-) ────────────────────────────────────────────
+function Stepper({ label, value, unit = "mm", min = 0, max = 300, step = 1, onChange }: {
+  label: string; value: number; unit?: string; min?: number; max?: number; step?: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          className="w-9 h-9 rounded border text-lg font-bold flex items-center justify-center hover:bg-muted active:scale-95 transition-transform select-none"
+          onClick={() => onChange(Math.max(min, parseFloat((value - step).toFixed(1))))}
+        >−</button>
+        <div className="flex-1 text-center font-mono text-sm font-semibold">
+          {value}{unit}
+        </div>
+        <button
+          type="button"
+          className="w-9 h-9 rounded border text-lg font-bold flex items-center justify-center hover:bg-muted active:scale-95 transition-transform select-none"
+          onClick={() => onChange(Math.min(max, parseFloat((value + step).toFixed(1))))}
+        >+</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Asosiy panel ─────────────────────────────────────────────────────────────
 export default function BluetoothPrinterPanel() {
   const {
     printTspl, printRaw, connect, disconnect,
     status, errorMsg, printerName, profileName,
     serviceUuid, charUuid, allServices, isConnected, isSupported,
     printLog, labelBytes,
+    layout, setLayout, resetLayout,
   } = useBTPrinterContext();
 
-  const [testOrder, setTestOrder] = useState(DEFAULT_TEST_ORDER);
-  const [layout, setLayout]       = useState<TsplLayout>(DEFAULT_TSPL_LAYOUT);
-  const [showServices, setShowServices] = useState(false);
-  const [showLog, setShowLog]       = useState(false);
-  const [showDesigner, setShowDesigner] = useState(true);
+  const [showServices,  setShowServices]  = useState(false);
+  const [showLog,       setShowLog]       = useState(false);
+  const [showDesigner,  setShowDesigner]  = useState(true);
+  const [showElements,  setShowElements]  = useState(true);
 
-  const isBusy = status === "connecting" || status === "printing";
+  const isBusy    = status === "connecting" || status === "printing";
   const StatusIcon = STATUS_META[status].icon;
 
-  const getOrder = () => ({
-    ...testOrder,
-    quantity: parseFloat(testOrder.quantity) || 1,
-    createdAt: new Date().toISOString(),
-  });
+  const rows = computeTsplRows(DEMO_ORDER, layout);
 
-  const rows = computeTsplRows(getOrder(), layout);
+  const setEl = (key: keyof TsplLayout["elements"], cfg: { show: boolean; align: HAlign; yOffset: number }) => {
+    setLayout({ ...layout, elements: { ...layout.elements, [key]: cfg } });
+  };
 
-  const handleTsplPrint = () => printTspl(getOrder(), layout);
+  const handleDrag = (key: string, newYOffset: number) => {
+    const k = key as keyof TsplLayout["elements"];
+    setLayout({ ...layout, elements: { ...layout.elements, [k]: { ...layout.elements[k], yOffset: newYOffset } } });
+  };
+
+  const handleTsplPrint = () => printTspl(DEMO_ORDER);  // demo uchun
 
   const handleBrowserPrint = () => {
-    const html = buildReceiptHtml(getOrder());
+    const html = buildReceiptHtml(DEMO_ORDER);
     const w = window.open("", "_blank", "width=300,height=600");
     if (!w) return;
     w.document.open(); w.document.write(html); w.document.close();
@@ -230,25 +327,9 @@ export default function BluetoothPrinterPanel() {
   };
 
   const handleRawTest = () => {
-    const data = buildTsplReceipt(getOrder(), layout);
+    const data = buildTsplReceipt(DEMO_ORDER, layout);
     printRaw(data, "TSPL raw");
   };
-
-  const setEl = (key: keyof TsplLayout["elements"], cfg: { show: boolean; align: HAlign }) => {
-    setLayout(prev => ({ ...prev, elements: { ...prev.elements, [key]: cfg } }));
-  };
-
-  const numField = (label: string, key: keyof typeof testOrder, placeholder?: string) => (
-    <div className="space-y-1">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Input
-        className="h-8 text-sm"
-        value={testOrder[key]}
-        placeholder={placeholder}
-        onChange={e => setTestOrder(prev => ({ ...prev, [key]: e.target.value }))}
-      />
-    </div>
-  );
 
   if (!isSupported) {
     return (
@@ -294,42 +375,21 @@ export default function BluetoothPrinterPanel() {
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-3">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <div>
-              <span className="text-muted-foreground text-xs">Qurilma</span>
-              <p className="font-medium truncate">{printerName ?? "—"}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground text-xs">Profil</span>
-              <p className="font-mono text-xs">{profileName || "—"}</p>
-            </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+            <div><span className="text-muted-foreground text-xs">Qurilma</span><p className="font-medium truncate">{printerName ?? "—"}</p></div>
+            <div><span className="text-muted-foreground text-xs">Profil</span><p className="font-mono text-xs">{profileName || "—"}</p></div>
             {serviceUuid && <div className="col-span-2"><span className="text-xs text-muted-foreground">Service</span><p className="font-mono text-xs break-all text-blue-600">{serviceUuid}</p></div>}
             {charUuid    && <div className="col-span-2"><span className="text-xs text-muted-foreground">Char</span><p className="font-mono text-xs break-all text-green-600">{charUuid}</p></div>}
           </div>
           <Separator />
           <div className="flex gap-2">
-            <Button
-              className="flex-1"
-              variant={isConnected ? "outline" : "default"}
-              onClick={connect}
-              disabled={isBusy}
-            >
-              {isBusy
-                ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Ulanmoqda...</>
-                : isConnected
-                ? <><RefreshCw className="w-4 h-4 mr-2" />Boshqasini ulash</>
-                : <><Bluetooth className="w-4 h-4 mr-2" />Bluetooth ulash</>}
+            <Button className="flex-1" variant={isConnected ? "outline" : "default"} onClick={connect} disabled={isBusy}>
+              {isBusy ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Ulanmoqda...</> : isConnected ? <><RefreshCw className="w-4 h-4 mr-2" />Boshqasini ulash</> : <><Bluetooth className="w-4 h-4 mr-2" />Bluetooth ulash</>}
             </Button>
-            {isConnected && (
-              <Button variant="destructive" size="icon" onClick={disconnect} disabled={isBusy} title="Uzish">
-                <BluetoothOff className="w-4 h-4" />
-              </Button>
-            )}
+            {isConnected && <Button variant="destructive" size="icon" onClick={disconnect} disabled={isBusy} title="Uzish"><BluetoothOff className="w-4 h-4" /></Button>}
           </div>
           <details className="text-xs">
-            <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
-              Ma'lum profil ({PRINTER_PROFILES.length} ta)
-            </summary>
+            <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">Ma'lum profil ({PRINTER_PROFILES.length} ta)</summary>
             <div className="mt-2 space-y-1">
               {PRINTER_PROFILES.map(p => (
                 <div key={p.char} className="flex items-center gap-2">
@@ -348,7 +408,7 @@ export default function BluetoothPrinterPanel() {
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
             <button className="flex items-center justify-between w-full text-sm font-semibold" onClick={() => setShowServices(v => !v)}>
-              <span className="flex items-center gap-2"><Bluetooth className="w-4 h-4" />UUID lar ({allServices.length})</span>
+              <span className="flex items-center gap-2"><Bluetooth className="w-4 h-4" />Topilgan UUID lar ({allServices.length})</span>
               {showServices ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
           </CardHeader>
@@ -376,53 +436,34 @@ export default function BluetoothPrinterPanel() {
       <Card>
         <CardHeader className="pb-2 pt-4 px-4">
           <button className="flex items-center justify-between w-full text-sm font-semibold" onClick={() => setShowDesigner(v => !v)}>
-            <span className="flex items-center gap-2"><Ruler className="w-4 h-4" />Label dizayneri</span>
+            <span className="flex items-center gap-2"><Ruler className="w-4 h-4" />Label dizayneri <span className="text-xs font-normal text-muted-foreground">(saqlanadi)</span></span>
             {showDesigner ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
         </CardHeader>
+
         {showDesigner && (
           <CardContent className="px-4 pb-4 space-y-5">
 
-            {/* O'lchamlar */}
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground mb-2">O'lchamlar (mm)</p>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Kenglik</Label>
-                  <Input
-                    type="number" className="h-8 text-sm"
-                    value={layout.widthMm}
-                    min={20} max={120}
-                    onChange={e => setLayout(prev => ({ ...prev, widthMm: parseInt(e.target.value) || 58 }))}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Balandlik (0=auto)</Label>
-                  <Input
-                    type="number" className="h-8 text-sm"
-                    value={layout.heightMm}
-                    min={0} max={300}
-                    onChange={e => setLayout(prev => ({ ...prev, heightMm: parseInt(e.target.value) || 0 }))}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Chap chegara</Label>
-                  <Input
-                    type="number" className="h-8 text-sm"
-                    value={layout.leftMarginMm}
-                    min={0} max={20}
-                    step={0.5}
-                    onChange={e => setLayout(prev => ({ ...prev, leftMarginMm: parseFloat(e.target.value) || 3 }))}
-                  />
-                </div>
+            {/* ── O'LCHAMLAR ── */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground">O'lchamlar</p>
+              <div className="grid grid-cols-3 gap-3">
+                <Stepper label="Kenglik" value={layout.widthMm} unit="mm" min={20} max={120}
+                  onChange={v => setLayout({ ...layout, widthMm: v })} />
+                <Stepper label="Balandlik (0=auto)" value={layout.heightMm} unit="mm" min={0} max={300}
+                  onChange={v => setLayout({ ...layout, heightMm: v })} />
+                <Stepper label="Chap chegara" value={layout.leftMarginMm} unit="mm" min={0} max={20} step={0.5}
+                  onChange={v => setLayout({ ...layout, leftMarginMm: v })} />
               </div>
-              <div className="flex gap-2 mt-2 flex-wrap">
-                {[{w:58,h:0},{w:58,h:40},{w:58,h:60},{w:80,h:0},{w:40,h:30}].map(p => (
+
+              {/* Tez presetlar */}
+              <div className="flex gap-2 flex-wrap">
+                {PRESETS.map(p => (
                   <button
                     key={`${p.w}x${p.h}`}
                     type="button"
-                    onClick={() => setLayout(prev => ({ ...prev, widthMm: p.w, heightMm: p.h }))}
-                    className={`text-xs px-2 py-1 rounded border transition-colors ${layout.widthMm===p.w && layout.heightMm===p.h ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted border-border"}`}
+                    onClick={() => setLayout({ ...layout, widthMm: p.w, heightMm: p.h })}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${layout.widthMm === p.w && layout.heightMm === p.h ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted border-border"}`}
                   >
                     {p.w}×{p.h || "auto"}
                   </button>
@@ -432,101 +473,90 @@ export default function BluetoothPrinterPanel() {
 
             <Separator />
 
-            {/* Elementlar */}
+            {/* ── PREVIEW (draggable) ── */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground mb-2">Elementlar (Ko'z=ko'rsat/yashir · L/C/R=hizalash)</p>
-              <div className="space-y-1">
-                {(Object.keys(layout.elements) as Array<keyof TsplLayout["elements"]>).map(key => (
-                  <ElementRow
-                    key={key}
-                    elKey={key}
-                    config={layout.elements[key]}
-                    onChange={cfg => setEl(key, cfg)}
-                  />
-                ))}
-              </div>
+              <p className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1">
+                <GripVertical className="w-3 h-3" /> Chekni sudrab joylashtirishingiz mumkin
+              </p>
+              <LabelPreview rows={rows} layout={layout} onDrag={handleDrag} />
             </div>
 
             <Separator />
 
-            {/* Preview */}
+            {/* ── ELEMENTLAR ── */}
             <div>
-              <p className="text-xs font-semibold text-muted-foreground mb-3">Oldindan ko'rish (preview)</p>
-              <LabelPreview rows={rows} layout={layout} />
+              <button
+                className="flex items-center justify-between w-full text-xs font-semibold text-muted-foreground mb-2"
+                onClick={() => setShowElements(v => !v)}
+              >
+                <span>Elementlar (Ko'z = ko'rsat/yashir · L/C/R = hizalash)</span>
+                {showElements ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+              {showElements && (
+                <div className="space-y-0.5">
+                  {(Object.keys(layout.elements) as Array<keyof TsplLayout["elements"]>).map(key => (
+                    <ElementRow
+                      key={key}
+                      elKey={key}
+                      config={layout.elements[key]}
+                      onChange={cfg => setEl(key, cfg)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
-            <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setLayout(DEFAULT_TSPL_LAYOUT)}>
-              Standart holatga qaytarish
+            {/* Reset */}
+            <Button variant="outline" size="sm" className="w-full gap-2" onClick={resetLayout}>
+              <RotateCcw className="w-3.5 h-3.5" /> Standart holatga qaytarish
             </Button>
           </CardContent>
         )}
       </Card>
 
-      {/* ── TEST CHEK MA'LUMOTLARI ── */}
+      {/* ── CHOP ETISH ── */}
       <Card>
         <CardHeader className="pb-2 pt-4 px-4">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Zap className="w-4 h-4" /> Test buyurtma
+            <Zap className="w-4 h-4" /> Test chop etish
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            {numField("Do'kon", "storeName")}
-            {numField("Xizmat turi", "serviceTypeName")}
-            {numField("Miqdor", "quantity")}
-            {numField("O'lchov", "unit")}
-            {numField("Javon", "shelf")}
-            {numField("Mijoz", "clientName")}
-          </div>
+          <p className="text-xs text-muted-foreground">
+            Haqiqiy buyurtmalar ekranidan bosganda ham xuddi shu nastroyka ishlatiladi.
+          </p>
 
-          <Separator />
-
-          {/* TSPL BLE */}
           <Button className="w-full h-12 text-base font-bold" onClick={handleTsplPrint} disabled={isBusy}>
-            {status === "printing"
-              ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin" />Chop etmoqda... ({labelBytes}B)</>
-              : status === "done"
-              ? <><CheckCircle2 className="w-5 h-5 mr-2" />Chop etildi!</>
-              : <><Printer className="w-5 h-5 mr-2" />TSPL chop et (XP-365B BLE)</>}
+            {status === "printing" ? <><RefreshCw className="w-5 h-5 mr-2 animate-spin" />Chop etmoqda... ({labelBytes}B)</>
+             : status === "done"   ? <><CheckCircle2 className="w-5 h-5 mr-2" />Chop etildi!</>
+             : <><Printer className="w-5 h-5 mr-2" />TSPL test chop et</>}
           </Button>
 
-          {/* Brauzer fallback */}
           <Button className="w-full bg-green-600 hover:bg-green-700 text-white" onClick={handleBrowserPrint}>
-            <FileText className="w-4 h-4 mr-2" />
-            Brauzer orqali chop et (BLE shart emas)
+            <FileText className="w-4 h-4 mr-2" /> Brauzer orqali chop et (BLE shart emas)
           </Button>
 
-          {/* Raw TSPL */}
           <Button className="w-full" variant="outline" size="sm" onClick={handleRawTest} disabled={isBusy}>
-            <Zap className="w-4 h-4 mr-2" />
-            TSPL raw baytlar (diagnostika)
+            <Zap className="w-4 h-4 mr-2" /> TSPL raw baytlar (diagnostika)
           </Button>
-
-          {!isConnected && status === "idle" && (
-            <p className="text-xs text-center text-muted-foreground">TSPL tugmasi bosilganda qurilma tanlash oynasi ochiladi</p>
-          )}
         </CardContent>
       </Card>
 
-      {/* ── CHOP TARIXI ── */}
+      {/* ── TARIXI ── */}
       {printLog.length > 0 && (
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
             <button className="flex items-center justify-between w-full text-sm font-semibold" onClick={() => setShowLog(v => !v)}>
-              <span className="flex items-center gap-2"><Clock className="w-4 h-4" />Tarixi ({printLog.length})</span>
+              <span className="flex items-center gap-2"><Clock className="w-4 h-4" />Chop tarixi ({printLog.length})</span>
               {showLog ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
           </CardHeader>
           {showLog && (
             <CardContent className="px-4 pb-4 space-y-2">
               {printLog.map((e, i) => (
-                <div key={i} className={`flex items-start gap-3 p-2 rounded text-xs ${e.status==="done" ? "bg-green-50 border border-green-100" : "bg-red-50 border border-red-100"}`}>
-                  {e.status==="done" ? <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" /> : <XCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />}
-                  <div>
-                    <span className="font-medium">{e.time}</span>
-                    <span className="text-muted-foreground ml-2">{e.ms}ms</span>
-                    <p className="text-muted-foreground break-all mt-0.5">{e.msg}</p>
-                  </div>
+                <div key={i} className={`flex items-start gap-2 p-2 rounded text-xs ${e.status==="done"?"bg-green-50 border border-green-100":"bg-red-50 border border-red-100"}`}>
+                  {e.status==="done" ? <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5" /> : <XCircle className="w-4 h-4 text-red-600 mt-0.5" />}
+                  <div><span className="font-medium">{e.time}</span><span className="text-muted-foreground ml-2">{e.ms}ms</span><p className="text-muted-foreground break-all mt-0.5">{e.msg}</p></div>
                 </div>
               ))}
             </CardContent>
@@ -541,8 +571,9 @@ export default function BluetoothPrinterPanel() {
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div className="space-y-1">
               <p className="font-semibold">Muhim</p>
-              <p>Web Bluetooth faqat <strong>Chrome Android</strong> da va <strong>HTTPS</strong> saytida ishlaydi. Replit preview da BLOKLANADI.</p>
-              <p>Printer: <strong>Xprinter XP-365B</strong> · Protokol: <strong>TSPL</strong> · 203 DPI</p>
+              <p>Web Bluetooth faqat <strong>Chrome Android</strong> da va <strong>HTTPS</strong> saytida ishlaydi.</p>
+              <p>Printer: <strong>Xprinter XP-365B</strong> · 203 DPI · TSPL protokol</p>
+              <p className="text-green-800 font-medium">✓ Nastroykalar avtomatik saqlanadi va hamma joyda ishlatiladi</p>
             </div>
           </div>
         </CardContent>
