@@ -126,6 +126,93 @@ export function buildSimpleTest(): Uint8Array {
   return new Uint8Array(bytes);
 }
 
+// ─── TSPL — XP-365B label receipt (203 DPI, 58mm) ───────────────────────────
+export function buildTsplReceipt(order: any): Uint8Array {
+  const now   = new Date(order.createdAt ?? Date.now());
+  const utc5  = new Date(now.getTime() + 5 * 60 * 60 * 1000); // Toshkent UTC+5
+  const pad   = (n: number) => String(n).padStart(2, "0");
+  const dateStr = `${pad(utc5.getUTCDate())}.${pad(utc5.getUTCMonth() + 1)}.${utc5.getUTCFullYear()}`;
+  const timeStr = `${pad(utc5.getUTCHours())}:${pad(utc5.getUTCMinutes())}`;
+  const ordNum  = String(order.id).padStart(5, "0");
+  const qty     = [order.quantity, order.unit].filter(Boolean).join(" ");
+  const origin  = typeof window !== "undefined" ? window.location.origin : "";
+  const qrData  = `${origin}/order/${order.id}`;
+  const esc     = (s: unknown) => String(s ?? "").replace(/"/g, "'");
+
+  const L  = 30;   // chap chegara (dots)
+  const W  = 400;  // kenglik (dots)
+  const CX = L + Math.round(W / 2);
+
+  let y = 10;
+  const rows: string[] = [];
+
+  // Do'kon nomi — markazda, katta, bold
+  rows.push(`BLOCK ${L},${y},${W},42,"3",0,1,1,2,"${esc(order.storeName || "DO'KON")}"`);
+  y += 48;
+
+  // Buyurtma raqami
+  rows.push(`BLOCK ${L},${y},${W},30,"2",0,1,1,2,"Buyurtma #${ordNum}"`);
+  y += 34;
+
+  // Sana va vaqt
+  rows.push(`BLOCK ${L},${y},${W},30,"2",0,1,1,2,"${dateStr}  ${timeStr}"`);
+  y += 34;
+
+  // Ajratgich
+  rows.push(`BAR ${L},${y},${W},2`);
+  y += 10;
+
+  // Xizmat turi
+  rows.push(`TEXT ${L},${y},"2",0,1,1,"${esc(order.serviceTypeName ?? "Xizmat")}"`);
+  y += 30;
+
+  // Miqdor
+  if (qty) {
+    rows.push(`TEXT ${L},${y},"2",0,1,1,"Miqdor: ${esc(qty)}"`);
+    y += 28;
+  }
+
+  // Javon
+  if (order.shelf) {
+    rows.push(`TEXT ${L},${y},"2",0,1,1,"Javon: ${esc(order.shelf)}"`);
+    y += 28;
+  }
+
+  // Mijoz
+  if (order.clientName) {
+    rows.push(`TEXT ${L},${y},"2",0,1,1,"Mijoz: ${esc(order.clientName)}"`);
+    y += 28;
+  }
+
+  // Ajratgich
+  rows.push(`BAR ${L},${y},${W},2`);
+  y += 10;
+
+  // QR kod — markazda
+  rows.push(`QRCODE ${CX - 40},${y},L,4,A,0,"${qrData}"`);
+  y += 102;
+
+  // Rahmat
+  rows.push(`BLOCK ${L},${y},${W},30,"2",0,1,1,2,"Rahmat!"`);
+  y += 36;
+
+  // Balandlikni hisoblash (mm ga aylantirish, 8 dots = 1mm)
+  const heightMm = Math.ceil(y / 8 / 2) * 2 + 4;
+
+  const tspl = [
+    `SIZE 58 mm,${heightMm} mm`,
+    "GAP 2 mm,0 mm",
+    "DIRECTION 0",
+    "REFERENCE 0,0",
+    "CLS",
+    ...rows,
+    "PRINT 1",
+    "",
+  ].join("\r\n");
+
+  return new TextEncoder().encode(tspl);
+}
+
 export function buildLabel(order: any, config: LabelConfig = DEFAULT_LABEL_CONFIG): Uint8Array {
   const bytes: number[] = [];
   const ESC = 0x1B;
@@ -322,6 +409,7 @@ export interface PrintLogEntry {
 
 export interface BTPrinterState {
   print: (order: any, config?: LabelConfig) => Promise<void>;
+  printTspl: (order: any) => Promise<void>;
   printRaw: (data: Uint8Array, label?: string) => Promise<void>;
   connect: () => Promise<void>;
   disconnect: () => void;
@@ -460,6 +548,44 @@ export function useBTPrinter(): BTPrinterState {
     }
   }, [isSupported]);
 
+  const printTspl = useCallback(async (order: any) => {
+    if (!isSupported) {
+      setStatus("error");
+      setErrorMsg("Bu brauzer Web Bluetooth'ni qo'llab-quvvatlamaydi. Chrome ishlating.");
+      return;
+    }
+    const t0 = Date.now();
+    try {
+      setStatus("connecting");
+      setErrorMsg(null);
+      const char = await connectDevice();
+      if (_device?.name) setPrinterName(_device.name);
+      setProfileName(_lastProfileName);
+      setServiceUuid(_lastServiceUuid);
+      setCharUuid(_lastCharUuid);
+      setAllServices([..._allServices]);
+      setIsConnected(true);
+      setStatus("printing");
+      const data = buildTsplReceipt(order);
+      setLabelBytes(data.length);
+      console.log(`[BTPrinter] TSPL ${data.length} bytes via ${_lastProfileName}...`);
+      await sendChunked(char, data);
+      console.log("[BTPrinter] ✅ TSPL done!");
+      setStatus("done");
+      addLog({ time: new Date().toLocaleTimeString("uz-UZ"), status: "done", msg: `TSPL | ${data.length} bayt | ${_lastProfileName}`, ms: Date.now() - t0 });
+      setTimeout(() => setStatus("idle"), 3000);
+    } catch (err: unknown) {
+      const msg: string = (err as any)?.message ?? "Noma'lum xatolik";
+      const displayMsg = isCancelled(err) ? "Qurilma tanlanmadi (bekor qilindi)" : msg;
+      setStatus("error");
+      setErrorMsg(displayMsg);
+      _char = null;
+      setIsConnected(false);
+      addLog({ time: new Date().toLocaleTimeString("uz-UZ"), status: "error", msg: displayMsg, ms: Date.now() - t0 });
+      setTimeout(() => setStatus("idle"), 8000);
+    }
+  }, [isSupported]);
+
   const printRaw = useCallback(async (data: Uint8Array, label = "Raw") => {
     if (!isSupported) return;
     const t0 = Date.now();
@@ -513,7 +639,7 @@ export function useBTPrinter(): BTPrinterState {
   }, []);
 
   return {
-    print, printRaw, connect, disconnect,
+    print, printTspl, printRaw, connect, disconnect,
     status, errorMsg,
     printerName, profileName,
     serviceUuid, charUuid,
