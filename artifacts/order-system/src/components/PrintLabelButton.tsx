@@ -81,7 +81,7 @@ export function PrintLabelButton({ order, variant = "full", className }: PrintLa
         className={cn("w-full gap-2 bg-green-600 hover:bg-green-700 text-white", className)}
       >
         <Printer className="w-4 h-4" />
-        Chek chop et (RawBT)
+        Chek chop et
       </Button>
 
       {/* BLE ESC/POS — only if Bluetooth supported */}

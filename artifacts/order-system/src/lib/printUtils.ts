@@ -24,60 +24,67 @@ export function buildReceiptHtml(order: any): string {
     : { dateStr: "--.--.----", timeStr: "--:--" };
 
   const ordNum = String(order.id).padStart(5, "0");
-  const qrData = `${window.location.origin}/order/${order.id}`;
+  const qrData = (typeof window !== "undefined" ? window.location.origin : "") + `/order/${order.id}`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(qrData)}`;
 
   const qty = [order.quantity, order.unit].filter(Boolean).join(" ");
 
   const rows = [
-    `<tr><td>${escHtml(order.serviceTypeName)}</td><td style="text-align:right">${escHtml(qty)}</td></tr>`,
+    `<tr><td style="padding:1px 0">${escHtml(order.serviceTypeName)}</td><td style="text-align:right;padding:1px 0">${escHtml(qty)}</td></tr>`,
     order.shelf
-      ? `<tr><td>Javon</td><td style="text-align:right">${escHtml(order.shelf)}</td></tr>`
+      ? `<tr><td style="padding:1px 0">Javon</td><td style="text-align:right;padding:1px 0">${escHtml(order.shelf)}</td></tr>`
       : "",
     order.clientName
-      ? `<tr><td>Mijoz</td><td style="text-align:right">${escHtml(order.clientName)}</td></tr>`
+      ? `<tr><td style="padding:1px 0">Mijoz</td><td style="text-align:right;padding:1px 0">${escHtml(order.clientName)}</td></tr>`
       : "",
   ].join("");
 
-  return `<html><body style="font-family:monospace;font-size:12px;width:58mm;margin:0;padding:2mm;">
-<div style="text-align:center;font-weight:bold;font-size:14px;">${escHtml(order.storeName || "DO'KON")}</div>
-<div style="text-align:center;">Buyurtma #${ordNum}</div>
-<div style="text-align:center;font-size:11px;">Sana: ${dateStr}&nbsp;&nbsp;Vaqt: ${timeStr}</div>
-<div>--------------------------------</div>
-<table style="width:100%;font-size:11px;border-collapse:collapse;">
-${rows}
-</table>
-<div>--------------------------------</div>
-<div style="text-align:center;margin-top:4px;">
-<img src="${qrUrl}" style="width:80px;height:80px;">
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  @page { size: 58mm auto; margin: 2mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Courier New', monospace; font-size: 11px; width: 54mm; margin: 0; padding: 0; }
+  .c { text-align: center; }
+  .b { font-weight: bold; }
+  .hr { border-top: 1px dashed #000; margin: 3px 0; }
+  table { width: 100%; border-collapse: collapse; }
+</style>
+</head><body>
+<div class="c b" style="font-size:13px">${escHtml(order.storeName || "DO'KON")}</div>
+<div class="c">Buyurtma #${ordNum}</div>
+<div class="c" style="font-size:10px">Sana: ${dateStr} &nbsp; Vaqt: ${timeStr}</div>
+<div class="hr"></div>
+<table>${rows}</table>
+<div class="hr"></div>
+<div class="c" style="margin-top:4px">
+  <img src="${qrUrl}" style="width:70px;height:70px;display:block;margin:0 auto">
 </div>
-<div style="text-align:center;font-size:10px;">/order/${order.id}</div>
-<div style="text-align:center;margin-top:6px;font-weight:bold;">Rahmat!</div>
+<div class="c" style="font-size:9px">/order/${order.id}</div>
+<div class="c b" style="margin-top:5px">Rahmat!</div>
 <br><br><br><br>
 </body></html>`;
 }
 
-// ─── UTF-8 → Base64 (TextEncoder usuli, btoa xavfsiz) ────────────────────────
-function utf8ToBase64(str: string): string {
-  const bytes = new TextEncoder().encode(str);
-  let binary = "";
-  bytes.forEach((b) => (binary += String.fromCharCode(b)));
-  return btoa(binary);
-}
-
-// ─── RawBT orqali chop etish ─────────────────────────────────────────────────
+// ─── Brauzer orqali chop etish (sozlash talab qilmaydi) ──────────────────────
 export function printReceiptRawBT(order: any): void {
   const html = buildReceiptHtml(order);
-  const base64 = utf8ToBase64(html);
-  const url = "rawbt:html:base64," + base64;
+  const blob = new Blob([html], { type: "text/html; charset=utf-8" });
+  const url = URL.createObjectURL(blob);
 
-  // Android da window.location.href ba'zan ishlamaydi — <a> click usuli
-  const a = document.createElement("a");
-  a.href = url;
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => document.body.removeChild(a), 300);
+  const iframe = document.createElement("iframe");
+  iframe.style.cssText =
+    "position:fixed;right:0;bottom:0;width:1px;height:1px;border:none;opacity:0;pointer-events:none;";
+
+  iframe.onload = () => {
+    try { iframe.contentWindow?.print(); } catch { /* ignore */ }
+    setTimeout(() => {
+      try { document.body.removeChild(iframe); } catch { /* ignore */ }
+      URL.revokeObjectURL(url);
+    }, 3000);
+  };
+
+  iframe.src = url;
+  document.body.appendChild(iframe);
 }
 
 // ─── Eski label HTML (saqlanadi) ─────────────────────────────────────────────
