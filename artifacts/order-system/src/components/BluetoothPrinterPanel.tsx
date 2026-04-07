@@ -66,19 +66,29 @@ function getTextMap(order: any): Record<string, string> {
 
 // ─── Label SVG Canvas ─────────────────────────────────────────────────────────
 interface CanvasProps {
-  layout: TsplLayout;
-  order:  any;
-  scale:  number;
-  selectedKey?: ElKey | null;
-  onSelect?:    (k: ElKey) => void;
-  onDrag?:      (k: ElKey, dx: number, dy: number) => void;  // dots delta
-  interactive?: boolean;
+  layout:        TsplLayout;
+  order:         any;
+  scale:         number;
+  selectedKey?:  ElKey | null;
+  onSelect?:     (k: ElKey) => void;
+  onCommitDrag?: (k: ElKey, newX: number, newY: number) => void; // called ONCE on pointer up
+  interactive?:  boolean;
 }
 
-function LabelCanvas({ layout, order, scale, selectedKey, onSelect, onDrag, interactive=false }: CanvasProps) {
-  const wDots = layout.widthMm * DPM;
+function LabelCanvas({ layout, order, scale, selectedKey, onSelect, onCommitDrag, interactive=false }: CanvasProps) {
+  const wDots  = layout.widthMm * DPM;
   const texts  = getTextMap(order);
-  const dragRef = useRef<{ key:ElKey; startCX:number; startCY:number; startX:number; startY:number } | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  // Drag state — all in refs, ZERO React re-renders during drag
+  const drag = useRef<{
+    key:      ElKey;
+    startCX:  number; startCY:  number;
+    startX:   number; startY:   number;
+    rafId:    number;
+    pendingX: number; pendingY: number;
+    el:       SVGGElement | null;
+  } | null>(null);
 
   // Compute auto height
   let maxY = 60;
@@ -87,34 +97,64 @@ function LabelCanvas({ layout, order, scale, selectedKey, onSelect, onDrag, inte
     const h = (k==="sep1"||k==="sep2") ? el.height : k==="qr" ? qrDots(el.qrSize) : elHeight(el);
     maxY = Math.max(maxY, el.y + h + 10);
   }
-  const hDots  = layout.heightMm > 0 ? layout.heightMm * DPM : maxY;
+  const hDots = layout.heightMm > 0 ? layout.heightMm * DPM : maxY;
   const W = Math.round(wDots * scale);
   const H = Math.round(hDots * scale);
-
   const toS = (d: number) => d * scale;
 
   const handlePD = (k: ElKey) => (e: React.PointerEvent<SVGGElement>) => {
-    if (!interactive || !onSelect || !onDrag) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    onSelect(k);
-    dragRef.current = { key:k, startCX:e.clientX, startCY:e.clientY, startX:layout.elements[k].x, startY:layout.elements[k].y };
+    if (!interactive) return;
     e.stopPropagation();
+    e.preventDefault();
+    onSelect?.(k);
+    const svgEl = e.currentTarget as SVGGElement;
+    svgEl.setPointerCapture(e.pointerId);
+    const startX = layout.elements[k].x;
+    const startY = layout.elements[k].y;
+    drag.current = {
+      key: k, startCX: e.clientX, startCY: e.clientY,
+      startX, startY, rafId: 0,
+      pendingX: startX, pendingY: startY, el: svgEl,
+    };
   };
+
   const handlePM = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!dragRef.current || !onDrag) return;
-    const dx = Math.round((e.clientX - dragRef.current.startCX) / scale);
-    const dy = Math.round((e.clientY - dragRef.current.startCY) / scale);
-    onDrag(dragRef.current.key, dx, dy);
+    if (!drag.current) return;
+    e.preventDefault();
+    const d = drag.current;
+    // Raw new position in dots
+    d.pendingX = Math.max(0, Math.round(d.startX + (e.clientX - d.startCX) / scale));
+    d.pendingY = Math.max(0, Math.round(d.startY + (e.clientY - d.startCY) / scale));
+    if (d.rafId) return; // RAF already scheduled
+    d.rafId = requestAnimationFrame(() => {
+      d.rafId = 0;
+      if (!d.el || !drag.current) return;
+      // Move ONLY via CSS transform — no React re-render
+      const tx = (d.pendingX - d.startX) * scale;
+      const ty = (d.pendingY - d.startY) * scale;
+      d.el.style.transform = `translate(${tx}px,${ty}px)`;
+    });
   };
-  const handlePU = () => { dragRef.current = null; };
+
+  const commitDrag = () => {
+    if (!drag.current) return;
+    const { el, rafId, key, pendingX, pendingY, startX, startY } = drag.current;
+    if (rafId) { cancelAnimationFrame(rafId); }
+    if (el) el.style.transform = ""; // React will re-render with new positions
+    drag.current = null;
+    if (pendingX !== startX || pendingY !== startY) {
+      onCommitDrag?.(key, pendingX, pendingY);
+    }
+  };
 
   return (
     <svg
+      ref={svgRef}
       width={W} height={H}
       style={{ display:"block", background:"white", userSelect:"none", touchAction:"none" }}
       onPointerMove={handlePM}
-      onPointerUp={handlePU}
-      onPointerCancel={handlePU}
+      onPointerUp={commitDrag}
+      onPointerCancel={commitDrag}
     >
       {/* label background */}
       <rect x={0} y={0} width={W} height={H} fill="white" />
@@ -223,13 +263,13 @@ function LabelEditor({ initialLayout, onSave, onClose }: {
     });
   }, [pushHistory]);
 
-  // Drag handler — x,y dots delta
-  const handleDrag = useCallback((key: ElKey, dx: number, dy: number) => {
+  // Called ONCE when finger lifts — zero re-renders during drag
+  const handleCommitDrag = useCallback((key: ElKey, newX: number, newY: number) => {
     setDraft(prev => {
-      const el = prev.elements[key];
-      return { ...prev, elements: { ...prev.elements, [key]: { ...el, x: Math.max(0, el.x + dx), y: Math.max(0, el.y + dy) } } };
+      pushHistory(prev);
+      return { ...prev, elements: { ...prev.elements, [key]: { ...prev.elements[key], x: newX, y: newY } } };
     });
-  }, []);
+  }, [pushHistory]);
 
   // Compute canvas scale from container width
   const [scale, setScale] = useState(0.7);
@@ -288,7 +328,7 @@ function LabelEditor({ initialLayout, onSave, onClose }: {
             scale={scale}
             selectedKey={selKey}
             onSelect={setSelKey}
-            onDrag={handleDrag}
+            onCommitDrag={handleCommitDrag}
             interactive
           />
         </div>
