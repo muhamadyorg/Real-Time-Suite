@@ -32,7 +32,7 @@ export function buildReceiptHtml(order: any): string {
   const rows = [
     `<tr><td style="padding:1px 0">${escHtml(order.serviceTypeName)}</td><td style="text-align:right;padding:1px 0">${escHtml(qty)}</td></tr>`,
     order.shelf
-      ? `<tr><td style="padding:1px 0">Javon</td><td style="text-align:right;padding:1px 0">${escHtml(order.shelf)}</td></tr>`
+      ? `<tr><td style="padding:1px 0">Qolib</td><td style="text-align:right;padding:1px 0">${escHtml(order.shelf)}</td></tr>`
       : "",
     order.clientName
       ? `<tr><td style="padding:1px 0">Mijoz</td><td style="text-align:right;padding:1px 0">${escHtml(order.clientName)}</td></tr>`
@@ -116,7 +116,7 @@ export function buildLabelHtml(order: any, widthMm = 58): string {
   <div class="row"><span class="lbl">Xizmat:</span><span class="val">${escHtml(order.serviceTypeName)}</span></div>
   <div class="row"><span class="lbl">Mahsulot:</span><span class="val">${escHtml(order.product)}</span></div>
   <div class="row"><span class="lbl">Miqdor:</span><span class="val bold">${escHtml(order.quantity)} ${escHtml(order.unit)}</span></div>
-  <div class="row"><span class="lbl">Javon:</span><span class="val bold">${escHtml(order.shelf)}</span></div>
+  <div class="row"><span class="lbl">Qolib:</span><span class="val bold">${escHtml(order.shelf)}</span></div>
   <hr class="hr"/>
   <div class="row"><span class="lbl">Mijoz:</span><span class="val">${escHtml(order.clientName)}</span></div>
   <div class="center" style="font-size:9px;margin-top:3px;color:#666">${escHtml(dateStr)}</div>

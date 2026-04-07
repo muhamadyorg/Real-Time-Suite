@@ -33,7 +33,7 @@ const STATUS_META = {
 const EL_LABELS: Record<string, string> = {
   storeName:"Do'kon nomi", orderId:"Buyurtma #", dateTime:"Sana/vaqt",
   sep1:"Chiziq 1", serviceType:"Xizmat turi", quantity:"Miqdor",
-  shelf:"Javon", clientName:"Mijoz", sep2:"Chiziq 2", qr:"QR kod", footer:"Rahmat!",
+  shelf:"Qolib", clientName:"Mijoz", sep2:"Chiziq 2", qr:"QR kod", footer:"Rahmat!",
 };
 const EL_COLORS: Record<string, string> = {
   storeName:"#3b82f6", orderId:"#8b5cf6", dateTime:"#6b7280",
@@ -59,7 +59,7 @@ function getTextMap(order: any): Record<string, string> {
   return {
     storeName:order.storeName??"DO'KON", orderId:`Buyurtma #${getOrderNum(order)}`,
     dateTime:`${d}  ${t}`, serviceType:order.serviceTypeName??"Xizmat",
-    quantity:qty?`Miqdor: ${qty}`:"", shelf:order.shelf?`Javon: ${order.shelf}`:"",
+    quantity:qty?`Miqdor: ${qty}`:"", shelf:order.shelf?`Qolib: ${order.shelf}`:"",
     clientName:order.clientName?`Mijoz: ${order.clientName}`:"", footer:"Rahmat!",
   };
 }

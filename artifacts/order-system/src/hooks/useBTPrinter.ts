@@ -138,7 +138,7 @@ export function buildTsplReceipt(order: any, layout: TsplLayout = DEFAULT_TSPL_L
     dateTime:    `${dateStr}  ${timeStr}`,
     serviceType: order.serviceTypeName ?? "Xizmat",
     quantity:    qty ? `Miqdor: ${qty}` : "",
-    shelf:       order.shelf ? `Javon: ${order.shelf}` : "",
+    shelf:       order.shelf ? `Qolib: ${order.shelf}` : "",
     clientName:  order.clientName ? `Mijoz: ${order.clientName}` : "",
     footer:      "Rahmat!",
   };
@@ -197,7 +197,7 @@ export function buildLabel(order: any, config: LabelConfig = DEFAULT_LABEL_CONFI
   const b: number[] = []; const ESC=0x1B;const GS=0x1D;const LF=0x0A;
   const push=(...n:number[])=>b.push(...n);const str=(s:string)=>{for(const c of s)push(c.charCodeAt(0)<128?c.charCodeAt(0):63);};const line=(s:string)=>{str(s);push(LF);};
   push(ESC,0x40);push(ESC,0x61,0x01);push(ESC,0x45,0x01);push(GS,0x21,0x11);str(getOrderNum(order));push(LF);push(GS,0x21,0x00);push(ESC,0x45,0x00);
-  line("-".repeat(config.separatorLen));push(ESC,0x61,0x00);if(order.shelf)line(`Javon: ${order.shelf}`);if(order.clientName)line(`Mijoz: ${(order.clientName??"").slice(0,20)}`);
+  line("-".repeat(config.separatorLen));push(ESC,0x61,0x00);if(order.shelf)line(`Qolib: ${order.shelf}`);if(order.clientName)line(`Mijoz: ${(order.clientName??"").slice(0,20)}`);
   push(ESC,0x64,Math.max(1,config.feedLines));return new Uint8Array(b);
 }
 
