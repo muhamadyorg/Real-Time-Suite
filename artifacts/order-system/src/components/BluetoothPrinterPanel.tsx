@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { flushSync } from "react-dom";
 import { buildReceiptHtml } from "@/lib/printUtils";
 import {
   useBTPrinterContext, PRINTER_PROFILES,
@@ -247,9 +246,6 @@ function LabelEditor({ initialLayout, onSave, onClose }: {
   const [history, setHistory] = useState<TsplLayout[]>([]);
   const [saved,   setSaved]   = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  // Always keep latest draft in ref so save can read it synchronously
-  const draftRef = useRef<TsplLayout>(draft);
-  useEffect(() => { draftRef.current = draft; }, [draft]);
 
   // Undo
   const pushHistory = useCallback((prev: TsplLayout) => {
@@ -291,12 +287,12 @@ function LabelEditor({ initialLayout, onSave, onClose }: {
   const isSep = selKey==="sep1"||selKey==="sep2";
   const isQr  = selKey==="qr";
 
-  // ─── SAVE: flushSync forces context update BEFORE close ───────────────────
+  // ─── SAVE ─────────────────────────────────────────────────────────────────
+  // draft — bu renderning oxirgi qiymati, har doim yangi
   const handleSave = () => {
-    const latest = draftRef.current;
-    flushSync(() => onSave(latest));   // context + localStorage — synchronous
+    onSave(draft);         // context va localStorage ga yozadi
     setSaved(true);
-    setTimeout(onClose, 120);          // tiny delay so user sees "Saqlandi ✓"
+    setTimeout(onClose, 150);
   };
 
   return createPortal(
