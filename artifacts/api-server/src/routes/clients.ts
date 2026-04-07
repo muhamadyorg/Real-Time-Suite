@@ -125,12 +125,16 @@ router.post("/:id/approve", async (req, res) => {
     const id = parseInt(req.params.id);
     const [client] = await db.update(clientsTable).set({ status: "approved" }).where(eq(clientsTable.id, id)).returning();
 
-    // Notify via telegram
+    // Notify via telegram — client qaysi bot bilan ro'yxatdan o'tgan bo'lsa, o'sha bot orqali
     if (client.telegramUserId) {
       try {
         await sendTelegramNotification(
           client.telegramUserId,
-          `Hurmatli ${client.firstName} ${client.lastName}!\n\nSiz tasdiqlandingiz va bizning do'konimiz xaridoriga aylandingiz!`
+          `🎉 <b>Tabriklaymiz, ${client.firstName} ${client.lastName}!</b>\n\n` +
+          `✅ Siz <b>tasdiqlandingiz</b> va endi bizning rasmiy mijozimiz bo'ldingiz!\n\n` +
+          `💎 Buyurtma bersangiz, buyurtmangiz holati haqida sizga xabar berib boramiz.\n` +
+          `🛍 Xizmatimizdan foydalanganingiz uchun rahmat!`,
+          client.botStoreId ?? undefined
         );
       } catch (_e) { /* Telegram not configured */ }
     }
@@ -156,7 +160,10 @@ router.post("/:id/reject", async (req, res) => {
       try {
         await sendTelegramNotification(
           client.telegramUserId,
-          `Hurmatli ${client.firstName} ${client.lastName}!\n\nAfsuski, ma'lumotlaringiz tasdiqlanmadi. Iltimos, botimizga /start bosing va ma'lumotlaringizni qaytadan kiriting.`
+          `❌ <b>Hurmatli ${client.firstName} ${client.lastName},</b>\n\n` +
+          `Afsuski, ma'lumotlaringiz <b>tasdiqlanmadi</b>.\n\n` +
+          `🔄 Qayta ro'yxatdan o'tish uchun botga <b>/start</b> bosing va ma'lumotlaringizni qaytadan kiriting.`,
+          client.botStoreId ?? undefined
         );
       } catch (_e) { /* Telegram not configured */ }
     }

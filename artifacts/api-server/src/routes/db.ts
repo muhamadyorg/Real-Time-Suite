@@ -78,10 +78,19 @@ router.get("/stats", async (req, res) => {
 router.get("/export", async (req, res) => {
   if (!isSudo(req)) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
   try {
-    const date = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const now = new Date();
+    // Toshkent vaqti UTC+5
+    const tashkentOffset = 5 * 60;
+    const tashkentMs = now.getTime() + tashkentOffset * 60 * 1000;
+    const t = new Date(tashkentMs);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const dateLabel = `${t.getUTCFullYear()}-${pad(t.getUTCMonth()+1)}-${pad(t.getUTCDate())}`;
+    const timeLabel = `${pad(t.getUTCHours())}-${pad(t.getUTCMinutes())}`;
+    const date = `${dateLabel}_${timeLabel}`;
+    const datePretty = `${pad(t.getUTCDate())}.${pad(t.getUTCMonth()+1)}.${t.getUTCFullYear()} ${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())} (Toshkent vaqti)`;
     let totalRows = 0;
     let out = `-- Buyurtma tizimi DB backup\n`;
-    out += `-- Sana: ${new Date().toISOString()}\n`;
+    out += `-- Sana: ${datePretty}\n`;
     out += `-- Versiya: 1.0\n\n`;
 
     // DELETE in reverse FK order (children first) — no superuser needed
