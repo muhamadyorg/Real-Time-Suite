@@ -57,11 +57,27 @@ ${rows}
 </body></html>`;
 }
 
+// ─── UTF-8 → Base64 (TextEncoder usuli, btoa xavfsiz) ────────────────────────
+function utf8ToBase64(str: string): string {
+  const bytes = new TextEncoder().encode(str);
+  let binary = "";
+  bytes.forEach((b) => (binary += String.fromCharCode(b)));
+  return btoa(binary);
+}
+
 // ─── RawBT orqali chop etish ─────────────────────────────────────────────────
 export function printReceiptRawBT(order: any): void {
   const html = buildReceiptHtml(order);
-  const base64 = btoa(unescape(encodeURIComponent(html)));
-  window.location.href = "rawbt:html:base64," + base64;
+  const base64 = utf8ToBase64(html);
+  const url = "rawbt:html:base64," + base64;
+
+  // Android da window.location.href ba'zan ishlamaydi — <a> click usuli
+  const a = document.createElement("a");
+  a.href = url;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => document.body.removeChild(a), 300);
 }
 
 // ─── Eski label HTML (saqlanadi) ─────────────────────────────────────────────
