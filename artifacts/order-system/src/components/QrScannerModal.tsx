@@ -13,25 +13,14 @@ interface QrScannerModalProps {
 
 type ScanState = "scanning" | "confirmed" | "wrong";
 
-// Scan one crop region of the video at a target output size for sensitivity
-function scanRegion(
-  ctx: CanvasRenderingContext2D,
-  canvas: HTMLCanvasElement,
-  video: HTMLVideoElement,
-  srcX: number, srcY: number, srcW: number, srcH: number,
-  outW = 640, outH = 480
-): string | null {
-  canvas.width = outW;
-  canvas.height = outH;
-  ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
-  const imageData = ctx.getImageData(0, 0, outW, outH);
-  const result = jsQR(imageData.data, outW, outH, { inversionAttempts: "attemptBoth" });
-  return result?.data ?? null;
-}
+// Small fixed output — jsQR is O(pixels), 320×240 is 6× faster than 640×480
+const SCAN_W = 320;
+const SCAN_H = 240;
 
 export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animRef = useRef<number | null>(null);
   const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -43,6 +32,7 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
   const stopCamera = useCallback(() => {
     if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null; }
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+    ctxRef.current = null;
   }, []);
 
   const matchesOrder = useCallback((text: string): boolean => {
@@ -58,29 +48,35 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
       animRef.current = requestAnimationFrame(scanFrame);
       return;
     }
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+    // Cache canvas context once
+    if (!ctxRef.current) {
+      canvas.width = SCAN_W;
+      canvas.height = SCAN_H;
+      ctxRef.current = canvas.getContext("2d", { willReadFrequently: true });
+    }
+    const ctx = ctxRef.current;
     if (!ctx) return;
 
     const vw = video.videoWidth;
     const vh = video.videoHeight;
 
-    // Multi-scale scanning: full frame, 50% center crop, 25% center crop
-    // This catches QR codes both near (large) and far (small center area)
-    const regions = [
-      { sx: 0,         sy: 0,         sw: vw,      sh: vh      }, // full frame
-      { sx: vw * 0.25, sy: vh * 0.25, sw: vw * 0.5, sh: vh * 0.5 }, // center 50%
-      { sx: vw * 0.375, sy: vh * 0.375, sw: vw * 0.25, sh: vh * 0.25 }, // center 25%
-    ];
+    // 1) Full frame → 320×240 (catches near/large QR)
+    ctx.drawImage(video, 0, 0, vw, vh, 0, 0, SCAN_W, SCAN_H);
+    let imageData = ctx.getImageData(0, 0, SCAN_W, SCAN_H);
+    let result = jsQR(imageData.data, SCAN_W, SCAN_H, { inversionAttempts: "dontInvert" });
 
-    let found: string | null = null;
-    for (const r of regions) {
-      const data = scanRegion(ctx, canvas, video, r.sx, r.sy, r.sw, r.sh, 640, 480);
-      if (data) { found = data; break; }
+    // 2) Center 50% crop → 320×240 = 2× zoom (catches far/small QR)
+    if (!result) {
+      const cx = vw * 0.25, cy = vh * 0.25, cw = vw * 0.5, ch = vh * 0.5;
+      ctx.drawImage(video, cx, cy, cw, ch, 0, 0, SCAN_W, SCAN_H);
+      imageData = ctx.getImageData(0, 0, SCAN_W, SCAN_H);
+      result = jsQR(imageData.data, SCAN_W, SCAN_H, { inversionAttempts: "dontInvert" });
     }
 
-    if (found) {
-      setScannedText(found);
-      if (matchesOrder(found)) {
+    if (result?.data) {
+      setScannedText(result.data);
+      if (matchesOrder(result.data)) {
         setScanState("confirmed");
         stopCamera();
         setTimeout(() => { onConfirmed(); onClose(); }, 1800);
