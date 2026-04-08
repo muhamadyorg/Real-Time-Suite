@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { QRCodeSVG } from "qrcode.react";
 import { useMyPermissions } from "@/hooks/useMyPermissions";
 import { useBTPrinterContext } from "@/hooks/useBTPrinter";
+import { QrScannerModal } from "@/components/QrScannerModal";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   new: { label: "Yangi", color: "text-blue-600 bg-blue-50 border border-blue-200" },
@@ -515,6 +516,7 @@ export default function WorkerDashboard() {
   const [splitLockPin, setSplitLockPin] = useState("");
   const [splitPending, setSplitPending] = useState(false);
   const [justAcceptedIds, setJustAcceptedIds] = useState<Set<number>>(new Set());
+  const [qrDeliverOrder, setQrDeliverOrder] = useState<any>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { has: hasPerm } = useMyPermissions(token, role);
@@ -586,7 +588,11 @@ export default function WorkerDashboard() {
     );
   };
 
-  const handleDeliver = (orderId: number) => {
+  const handleDeliver = (order: any) => {
+    setQrDeliverOrder(order);
+  };
+
+  const doDeliver = (orderId: number) => {
     updateStatus.mutate(
       { id: orderId, data: { status: "topshirildi" } as any },
       {
@@ -815,7 +821,7 @@ export default function WorkerDashboard() {
               hasPerm("can_mark_delivered") ? (
                 <Button
                   className="w-full h-12 text-base font-bold bg-green-600 hover:bg-green-700 text-white"
-                  onClick={() => handleDeliver(order.id)}
+                  onClick={() => handleDeliver(order)}
                   disabled={updateStatus.isPending}
                 >
                   <Truck className="w-4 h-4 mr-2" />
@@ -922,6 +928,17 @@ export default function WorkerDashboard() {
         onClose={() => setLockPinOrder(null)}
         onConfirm={(pin) => doAccept(lockPinOrder, pin)}
         isPending={updateStatus.isPending}
+      />
+
+      {/* QR skaner — olib ketildi tasdiqlash */}
+      <QrScannerModal
+        open={!!qrDeliverOrder}
+        order={qrDeliverOrder}
+        onClose={() => setQrDeliverOrder(null)}
+        onConfirmed={() => {
+          if (qrDeliverOrder) doDeliver(qrDeliverOrder.id);
+          setQrDeliverOrder(null);
+        }}
       />
 
       {/* Bo'lib qabul qilish dialog */}
