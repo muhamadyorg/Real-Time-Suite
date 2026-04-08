@@ -61,18 +61,24 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
     const vw = video.videoWidth;
     const vh = video.videoHeight;
 
-    // 1) Full frame → 320×240 (catches near/large QR)
-    ctx.drawImage(video, 0, 0, vw, vh, 0, 0, SCAN_W, SCAN_H);
-    let imageData = ctx.getImageData(0, 0, SCAN_W, SCAN_H);
-    let result = jsQR(imageData.data, SCAN_W, SCAN_H, { inversionAttempts: "dontInvert" });
+    // Helper: draw region → 320×240 and scan
+    const tryRegion = (sx: number, sy: number, sw: number, sh: number) => {
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, SCAN_W, SCAN_H);
+      const d = ctx.getImageData(0, 0, SCAN_W, SCAN_H);
+      return jsQR(d.data, SCAN_W, SCAN_H, { inversionAttempts: "dontInvert" });
+    };
 
-    // 2) Center 50% crop → 320×240 = 2× zoom (catches far/small QR)
-    if (!result) {
-      const cx = vw * 0.25, cy = vh * 0.25, cw = vw * 0.5, ch = vh * 0.5;
-      ctx.drawImage(video, cx, cy, cw, ch, 0, 0, SCAN_W, SCAN_H);
-      imageData = ctx.getImageData(0, 0, SCAN_W, SCAN_H);
-      result = jsQR(imageData.data, SCAN_W, SCAN_H, { inversionAttempts: "dontInvert" });
-    }
+    // 1) Full frame → 320×240 (large/near QR)
+    let result = tryRegion(0, 0, vw, vh);
+
+    // 2) Center 50% → 320×240 = 2× zoom (medium QR)
+    if (!result) result = tryRegion(vw * 0.25, vh * 0.25, vw * 0.5, vh * 0.5);
+
+    // 3) Center 25% → 320×240 = 4× zoom (small/far QR)
+    if (!result) result = tryRegion(vw * 0.375, vh * 0.375, vw * 0.25, vh * 0.25);
+
+    // 4) Center 12.5% → 320×240 = 8× zoom (very tiny QR at distance)
+    if (!result) result = tryRegion(vw * 0.4375, vh * 0.4375, vw * 0.125, vh * 0.125);
 
     if (result?.data) {
       setScannedText(result.data);
