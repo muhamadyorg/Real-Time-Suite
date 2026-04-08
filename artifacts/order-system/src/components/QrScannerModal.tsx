@@ -46,7 +46,7 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const result = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+    const result = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
     if (result?.data) {
       setScannedText(result.data);
       if (matchesOrder(result.data)) {
@@ -67,9 +67,24 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
     setScanState("scanning");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        }
       });
       streamRef.current = stream;
+
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        const caps = (track as any).getCapabilities?.() ?? {};
+        const adv: any[] = [];
+        if (caps.focusMode?.includes?.("continuous"))       adv.push({ focusMode: "continuous" });
+        if (caps.exposureMode?.includes?.("continuous"))    adv.push({ exposureMode: "continuous" });
+        if (caps.whiteBalanceMode?.includes?.("continuous")) adv.push({ whiteBalanceMode: "continuous" });
+        if (adv.length) await (track as any).applyConstraints({ advanced: adv }).catch(() => {});
+      }
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play();
