@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { QRCodeSVG } from "qrcode.react";
 import { useMyPermissions } from "@/hooks/useMyPermissions";
+import { useBTPrinterContext } from "@/hooks/useBTPrinter";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   new: { label: "Yangi", color: "text-blue-600 bg-blue-50 border border-blue-200" },
@@ -517,6 +518,7 @@ export default function WorkerDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { has: hasPerm } = useMyPermissions(token, role);
+  const { printTspl, isConnected: isPrinterConnected, isSupported: isPrinterSupported } = useBTPrinterContext();
 
   useSocket(token, storeId);
 
@@ -540,16 +542,22 @@ export default function WorkerDashboard() {
       setLockPinOrder(order);
       return;
     }
-    doAccept(order.id, undefined);
+    doAccept(order, undefined);
   };
 
-  const doAccept = (orderId: number, lockPin?: string) => {
+  const doAccept = (order: any, lockPin?: string) => {
+    const orderId: number = typeof order === "number" ? order : order.id;
+    const orderObj: any  = typeof order === "number" ? null : order;
     setJustAcceptedIds(prev => new Set([...prev, orderId]));
     updateStatus.mutate(
       { id: orderId, data: { status: "accepted", lockPin } as any },
       {
         onSuccess: () => {
           toast({ title: "Qabul qilindi!" });
+          // Auto-print if BLE printer is connected
+          if (orderObj && isPrinterSupported && isPrinterConnected) {
+            printTspl(orderObj).catch(() => {});
+          }
           setTimeout(() => {
             queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
             setJustAcceptedIds(prev => { const n = new Set(prev); n.delete(orderId); return n; });
@@ -633,6 +641,10 @@ export default function WorkerDashboard() {
         return;
       }
       toast({ title: "Bo'lib qabul qilindi!", description: `Siz: ${qty}, Qoldi: ${parseFloat(splitOrder.quantity) - qty} ${splitOrder.unit || ""}` });
+      // Auto-print the accepted portion if BLE printer is connected
+      if (data.accepted && isPrinterSupported && isPrinterConnected) {
+        printTspl(data.accepted).catch(() => {});
+      }
       queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
       setSplitOrder(null);
     } catch {
@@ -908,7 +920,7 @@ export default function WorkerDashboard() {
         order={lockPinOrder}
         open={!!lockPinOrder}
         onClose={() => setLockPinOrder(null)}
-        onConfirm={(pin) => doAccept(lockPinOrder.id, pin)}
+        onConfirm={(pin) => doAccept(lockPinOrder, pin)}
         isPending={updateStatus.isPending}
       />
 
