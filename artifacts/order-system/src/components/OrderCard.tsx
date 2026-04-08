@@ -1,7 +1,8 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { PrintLabelButton } from "./PrintLabelButton";
-import { Truck } from "lucide-react";
+import { Truck, PackageCheck } from "lucide-react";
 
 export function HighlightText({ text, search }: { text?: string | null, search?: string }) {
   if (!text) return null;
@@ -27,6 +28,7 @@ interface OrderCardProps {
   canPrint?: boolean;
   canMarkDelivered?: boolean;
   onDeliver?: () => void;
+  onOutputQty?: () => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -36,7 +38,7 @@ const STATUS_COLORS: Record<string, string> = {
   topshirildi: "border-l-purple-500",
 };
 
-export function OrderCard({ order, search = "", actionButton, onOrderClick, canPrint, canMarkDelivered, onDeliver }: OrderCardProps) {
+export function OrderCard({ order, search = "", actionButton, onOrderClick, canPrint, canMarkDelivered, onDeliver, onOutputQty }: OrderCardProps) {
   return (
     <Card className={`shadow-sm border-l-4 transition-all hover:shadow-md ${STATUS_COLORS[order.status] ?? "border-l-primary"}`}>
       <CardContent className="p-4 flex flex-col gap-3">
@@ -70,10 +72,23 @@ export function OrderCard({ order, search = "", actionButton, onOrderClick, canP
 
         <div className="flex justify-between items-center bg-secondary/50 p-3 rounded-lg border border-secondary">
           <span className="font-medium text-muted-foreground text-sm uppercase tracking-wider">Miqdor</span>
-          <span className="text-xl font-black">
-            <HighlightText text={String(order.quantity)} search={search} />
-            {order.unit && <span className="text-muted-foreground text-base ml-1"><HighlightText text={order.unit} search={search} /></span>}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xl font-black">
+              <HighlightText text={String(order.quantity)} search={search} />
+              {order.unit && <span className="text-muted-foreground text-base ml-1"><HighlightText text={order.unit} search={search} /></span>}
+            </span>
+            {onOutputQty && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-2 text-green-600 border-green-300 hover:bg-green-50 hover:border-green-500 shrink-0"
+                onClick={(e) => { e.stopPropagation(); onOutputQty(); }}
+                title="Chiqish miqdorini kiriting"
+              >
+                <PackageCheck className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="grid gap-2 text-sm">

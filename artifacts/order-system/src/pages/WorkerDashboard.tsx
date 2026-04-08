@@ -62,7 +62,7 @@ function OrderDetailModal({ order, open, onClose }: { order: any, open: boolean,
               <span className="font-bold text-primary">{order.serviceTypeName}</span>
             </div>
             <div className="flex justify-between items-center border-t border-border/50 pt-2">
-              <span className="text-sm text-muted-foreground">Kirish miqdori</span>
+              <span className="text-sm text-muted-foreground">Miqdor</span>
               <span className="font-black text-xl">{order.quantity}{order.unit ? <span className="text-muted-foreground text-base ml-1">{order.unit}</span> : ""}</span>
             </div>
             {order.outputQuantity != null && (
@@ -592,13 +592,21 @@ export default function WorkerDashboard() {
 
   const doReady = () => {
     if (!readyQtyOrder) return;
+    if (!readyQtyInput || readyQtyInput.trim() === "") {
+      toast({ title: "Chiqish miqdorini kiriting", description: "Tayyorga o'tkazish uchun miqdor majburiy", variant: "destructive" });
+      return;
+    }
     const qty = parseFloat(readyQtyInput);
+    if (isNaN(qty) || qty <= 0) {
+      toast({ title: "To'g'ri miqdor kiriting", variant: "destructive" });
+      return;
+    }
     updateStatus.mutate(
       {
         id: readyQtyOrder.id,
         data: {
           status: "ready",
-          outputQuantity: isNaN(qty) ? undefined : qty,
+          outputQuantity: qty,
           outputUnit: readyQtyUnit || undefined,
         } as any
       },
@@ -801,6 +809,7 @@ export default function WorkerDashboard() {
             order={order}
             search={search}
             onOrderClick={() => setSelectedOrder(order)}
+            onOutputQty={() => handleReady(order)}
             actionButton={
               <Button
                 className="w-full h-12 text-lg font-bold"

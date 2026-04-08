@@ -103,7 +103,7 @@ export default function PublicOrderPage() {
 
               {/* Quantity */}
               <div className="flex justify-between items-center border-t pt-3">
-                <span className="text-sm text-gray-500">Kirish miqdori</span>
+                <span className="text-sm text-gray-500">Miqdor</span>
                 <span className="font-bold text-gray-900">
                   {Number.isInteger(order.quantity) ? order.quantity : order.quantity} {order.unit ?? ""}
                 </span>
