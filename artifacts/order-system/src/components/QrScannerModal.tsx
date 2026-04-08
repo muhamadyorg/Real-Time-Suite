@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import jsQR from "jsqr";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, AlertCircle, Camera, Loader2, X } from "lucide-react";
+import { CheckCircle2, AlertCircle, Camera, X } from "lucide-react";
 
 interface QrScannerModalProps {
   open: boolean;
@@ -160,11 +160,6 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
             </div>
           )}
 
-          {!cameraError && scanState === "scanning" && !streamRef.current && (
-            <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-              <Loader2 className="w-10 h-10 text-white animate-spin" />
-            </div>
-          )}
         </div>
 
         <div className="p-4">
