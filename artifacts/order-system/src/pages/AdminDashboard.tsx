@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { QRCodeSVG } from "qrcode.react";
+import { QrScannerModal } from "@/components/QrScannerModal";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   new:          { label: "Yangi",          color: "text-blue-600 bg-blue-50 border border-blue-200" },
@@ -978,30 +979,17 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!deliveringOrder} onOpenChange={() => setDeliveringOrder(null)}>
-        <DialogContent className="w-full max-w-sm mx-4">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-purple-600">
-              <Truck className="w-5 h-5" />
-              Topshirildi deb belgilash
-            </DialogTitle>
-            <DialogDescription>
-              <span className="font-mono font-bold">{deliveringOrder?.orderId}</span> zakazi mijozga topshirildimi?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeliveringOrder(null)}>Bekor qilish</Button>
-            <Button
-              className="bg-purple-600 hover:bg-purple-700 text-white"
-              disabled={deliverOrderMutation.isPending}
-              onClick={() => deliveringOrder && deliverOrderMutation.mutate({ id: deliveringOrder.id, data: { status: "topshirildi" } })}
-            >
-              {deliverOrderMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Ha, topshirildi
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <QrScannerModal
+        open={!!deliveringOrder}
+        order={deliveringOrder}
+        onClose={() => setDeliveringOrder(null)}
+        onConfirmed={() => {
+          if (deliveringOrder) {
+            deliverOrderMutation.mutate({ id: deliveringOrder.id, data: { status: "topshirildi" } as any });
+          }
+          setDeliveringOrder(null);
+        }}
+      />
     </div>
   );
 }
