@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, ordersTable, serviceTypesTable, clientsTable, storesTable, accountsTable, accountPermissionsTable, storePermissionModesTable } from "@workspace/db";
-import { eq, and, asc, desc, sql, isNull, lt } from "drizzle-orm";
+import { eq, and, asc, desc, sql, isNull, lt, ne } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 import type { Server as SocketServer } from "socket.io";
 
@@ -727,6 +727,20 @@ router.post("/:id/split", async (req, res) => {
 
     io?.to(`store:${order.storeId}`).emit("order:updated", mapOrder(acceptedOrder, true));
     io?.to(`store:${order.storeId}`).emit("order:created", mapOrder(remainingOrder, true));
+
+    // Auto-unlock the next oldest "new" order (excluding the new split remainder)
+    const nextToUnlock = await db.query.ordersTable.findFirst({
+      where: and(
+        eq(ordersTable.storeId, order.storeId),
+        eq(ordersTable.status, "new"),
+        ne(ordersTable.id, remainingOrder.id)
+      ),
+      orderBy: [asc(ordersTable.createdAt)],
+    });
+    if (nextToUnlock && nextToUnlock.lockPin) {
+      await db.update(ordersTable).set({ lockPin: null }).where(eq(ordersTable.id, nextToUnlock.id));
+      io?.to(`store:${order.storeId}`).emit("order:updated", mapOrder({ ...nextToUnlock, lockPin: null }, true));
+    }
 
     res.json({ accepted: mapOrder(acceptedOrder, true), remaining: mapOrder(remainingOrder, true) });
   } catch (err) {

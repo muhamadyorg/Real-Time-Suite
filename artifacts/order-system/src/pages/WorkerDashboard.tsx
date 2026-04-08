@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
 import { PrintLabelButton } from "@/components/PrintLabelButton";
-import { Search, Loader2, X, QrCode, Clock, CheckCircle, Package, Hash, User, Phone, FileText, Building2, Plus, Users, Lock, Split, Truck } from "lucide-react";
+import { Search, Loader2, X, QrCode, Clock, CheckCircle, Package, Hash, User, Phone, FileText, Building2, Plus, Users, Lock, Split, Truck, Check } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { QRCodeSVG } from "qrcode.react";
+import { useMyPermissions } from "@/hooks/useMyPermissions";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   new: { label: "Yangi", color: "text-blue-600 bg-blue-50 border border-blue-200" },
@@ -500,7 +501,7 @@ function LockPinModal({ order, open, onClose, onConfirm, isPending }: {
 }
 
 export default function WorkerDashboard() {
-  const { accountName, storeId, accountId, serviceTypeId: workerServiceTypeId, clearPinAuth, token } = useAuth();
+  const { accountName, storeId, accountId, serviceTypeId: workerServiceTypeId, clearPinAuth, token, role } = useAuth();
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("new");
   const [search, setSearch] = useState("");
@@ -512,8 +513,10 @@ export default function WorkerDashboard() {
   const [splitQty, setSplitQty] = useState("");
   const [splitLockPin, setSplitLockPin] = useState("");
   const [splitPending, setSplitPending] = useState(false);
+  const [justAcceptedIds, setJustAcceptedIds] = useState<Set<number>>(new Set());
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { has: hasPerm } = useMyPermissions(token, role);
 
   useSocket(token, storeId);
 
@@ -541,15 +544,20 @@ export default function WorkerDashboard() {
   };
 
   const doAccept = (orderId: number, lockPin?: string) => {
+    setJustAcceptedIds(prev => new Set([...prev, orderId]));
     updateStatus.mutate(
       { id: orderId, data: { status: "accepted", lockPin } as any },
       {
         onSuccess: () => {
           toast({ title: "Qabul qilindi!" });
-          queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
+            setJustAcceptedIds(prev => { const n = new Set(prev); n.delete(orderId); return n; });
+          }, 1200);
           setLockPinOrder(null);
         },
         onError: (err: any) => {
+          setJustAcceptedIds(prev => { const n = new Set(prev); n.delete(orderId); return n; });
           toast({ title: "Xatolik", description: err.data?.error || "Xatolik", variant: "destructive" });
           setLockPinOrder(null);
         }
@@ -705,25 +713,32 @@ export default function WorkerDashboard() {
             search={search}
             onOrderClick={() => setSelectedOrder(order)}
             actionButton={
-              <div className="flex gap-2">
-                <Button
-                  className="flex-1 h-12 text-base font-bold"
-                  variant="default"
-                  onClick={() => handleAccept(order)}
-                  disabled={updateStatus.isPending}
-                >
-                  {order.isLocked ? <><Lock className="w-4 h-4 mr-1.5" />QABUL</> : "QABUL QILISH"}
-                </Button>
-                <Button
-                  className="h-12 px-3 font-semibold text-xs border-dashed"
-                  variant="outline"
-                  onClick={() => openSplit(order)}
-                  disabled={updateStatus.isPending}
-                  title="Bo'lib qabul qilish"
-                >
-                  <Split className="w-4 h-4" />
-                </Button>
-              </div>
+              justAcceptedIds.has(order.id) ? (
+                <div className="flex-1 h-12 flex items-center justify-center gap-2 rounded-md bg-green-500 text-white font-bold text-base animate-pulse">
+                  <Check className="w-5 h-5" />
+                  QABUL QILINDI
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1 h-12 text-base font-bold"
+                    variant="default"
+                    onClick={() => handleAccept(order)}
+                    disabled={updateStatus.isPending}
+                  >
+                    {order.isLocked ? <><Lock className="w-4 h-4 mr-1.5" />QABUL</> : "QABUL QILISH"}
+                  </Button>
+                  <Button
+                    className="h-12 px-3 font-semibold text-xs border-dashed"
+                    variant="outline"
+                    onClick={() => openSplit(order)}
+                    disabled={updateStatus.isPending}
+                    title="Bo'lib qabul qilish"
+                  >
+                    <Split className="w-4 h-4" />
+                  </Button>
+                </div>
+              )
             }
           />
         ))}
@@ -785,14 +800,16 @@ export default function WorkerDashboard() {
             search={search}
             onOrderClick={() => setSelectedOrder(order)}
             actionButton={
-              <Button
-                className="w-full h-12 text-base font-bold bg-green-600 hover:bg-green-700 text-white"
-                onClick={() => handleDeliver(order.id)}
-                disabled={updateStatus.isPending}
-              >
-                <Truck className="w-4 h-4 mr-2" />
-                OLIB KETILDI
-              </Button>
+              hasPerm("can_mark_delivered") ? (
+                <Button
+                  className="w-full h-12 text-base font-bold bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => handleDeliver(order.id)}
+                  disabled={updateStatus.isPending}
+                >
+                  <Truck className="w-4 h-4 mr-2" />
+                  OLIB KETILDI
+                </Button>
+              ) : undefined
             }
           />
         ))}
