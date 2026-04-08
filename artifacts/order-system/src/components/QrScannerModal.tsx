@@ -18,9 +18,11 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animRef = useRef<number | null>(null);
+  const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [scanState, setScanState] = useState<ScanState>("scanning");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [scannedText, setScannedText] = useState<string>("");
+  const [focusPt, setFocusPt] = useState<{ x: number; y: number } | null>(null);
 
   const stopCamera = useCallback(() => {
     if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null; }
@@ -62,9 +64,19 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
     animRef.current = requestAnimationFrame(scanFrame);
   }, [matchesOrder, stopCamera, onConfirmed, onClose]);
 
+  const applyAutoFocus = useCallback(async (track: MediaStreamTrack) => {
+    const caps = (track as any).getCapabilities?.() ?? {};
+    const adv: any[] = [];
+    if (caps.focusMode?.includes?.("continuous"))        adv.push({ focusMode: "continuous" });
+    if (caps.exposureMode?.includes?.("continuous"))     adv.push({ exposureMode: "continuous" });
+    if (caps.whiteBalanceMode?.includes?.("continuous")) adv.push({ whiteBalanceMode: "continuous" });
+    if (adv.length) await (track as any).applyConstraints({ advanced: adv }).catch(() => {});
+  }, []);
+
   const startCamera = useCallback(async () => {
     setCameraError(null);
     setScanState("scanning");
+    setFocusPt(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -74,32 +86,55 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
         }
       });
       streamRef.current = stream;
-
       const track = stream.getVideoTracks()[0];
-      if (track) {
-        const caps = (track as any).getCapabilities?.() ?? {};
-        const adv: any[] = [];
-        if (caps.focusMode?.includes?.("continuous"))       adv.push({ focusMode: "continuous" });
-        if (caps.exposureMode?.includes?.("continuous"))    adv.push({ exposureMode: "continuous" });
-        if (caps.whiteBalanceMode?.includes?.("continuous")) adv.push({ whiteBalanceMode: "continuous" });
-        if (adv.length) await (track as any).applyConstraints({ advanced: adv }).catch(() => {});
-      }
-
+      if (track) await applyAutoFocus(track);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play();
         animRef.current = requestAnimationFrame(scanFrame);
       }
-    } catch (err: any) {
+    } catch {
       setCameraError("Kameraga ruxsat berilmadi. Brauzer sozlamalaridan kameraga ruxsat bering.");
     }
-  }, [scanFrame]);
+  }, [scanFrame, applyAutoFocus]);
+
+  const handleTapFocus = useCallback(async (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (!streamRef.current) return;
+    const track = streamRef.current.getVideoTracks()[0];
+    if (!track) return;
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const clientX = "touches" in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+    const relX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const relY = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+
+    setFocusPt({ x: relX * 100, y: relY * 100 });
+    if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
+    focusTimerRef.current = setTimeout(() => setFocusPt(null), 1600);
+
+    const caps = (track as any).getCapabilities?.() ?? {};
+    const supportsFocusPoint = caps.focusMode?.includes?.("manual") && "pointsOfInterest" in caps;
+
+    try {
+      if (supportsFocusPoint) {
+        await (track as any).applyConstraints({
+          advanced: [{ focusMode: "manual", pointsOfInterest: [{ x: relX, y: relY }] }]
+        });
+        focusTimerRef.current = setTimeout(async () => {
+          setFocusPt(null);
+          await applyAutoFocus(track);
+        }, 2000);
+      }
+    } catch { /* unsupported silently */ }
+  }, [applyAutoFocus]);
 
   useEffect(() => {
     if (open) {
       setScanState("scanning");
       setCameraError(null);
       setScannedText("");
+      setFocusPt(null);
       startCamera();
     } else {
       stopCamera();
@@ -120,7 +155,12 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
           </DialogDescription>
         </DialogHeader>
 
-        <div className="relative bg-black" style={{ aspectRatio: "4/3" }}>
+        <div
+          className="relative bg-black select-none"
+          style={{ aspectRatio: "4/3", cursor: "crosshair" }}
+          onClick={handleTapFocus}
+          onTouchStart={handleTapFocus}
+        >
           <video
             ref={videoRef}
             className="w-full h-full object-cover"
@@ -129,9 +169,24 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
           />
           <canvas ref={canvasRef} className="hidden" />
 
-          {/* Overlay frames */}
+          {/* Tap-to-focus ring */}
+          {focusPt && scanState === "scanning" && !cameraError && (
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                left: `${focusPt.x}%`,
+                top: `${focusPt.y}%`,
+                transform: "translate(-50%, -50%)",
+              }}
+            >
+              <div className="w-12 h-12 rounded-full border-2 border-yellow-300 animate-ping opacity-60" />
+              <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-yellow-400" />
+            </div>
+          )}
+
+          {/* Scanning overlay */}
           {scanState === "scanning" && !cameraError && (
-            <div className="absolute inset-0 flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="relative w-48 h-48">
                 <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white rounded-tl" />
                 <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr" />
@@ -174,7 +229,6 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
               </Button>
             </div>
           )}
-
         </div>
 
         <div className="p-4">
