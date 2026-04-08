@@ -271,6 +271,7 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
   const [clientName, setClientName] = useState("");
   const [clientPhone, setClientPhone] = useState("");
   const [products, setProducts] = useState<any[]>([]);
+  const [requireOutputQty, setRequireOutputQty] = useState(false);
 
   const { data: serviceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId] } });
   const { data: clients } = useGetClients({ status: 'approved' }, { query: { queryKey: ["getClients", { status: 'approved' }] } });
@@ -294,7 +295,7 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
     setServiceTypeId(workerServiceTypeId ? String(workerServiceTypeId) : "");
     setQuantity("1"); setUnit(""); setShelf(""); setProduct(""); setNotes("");
     setIsClientManual(false); setClientId(""); setClientName(""); setClientPhone("");
-    setProducts([]);
+    setProducts([]); setRequireOutputQty(false);
   };
 
   const onSubmit = (e: React.FormEvent) => {
@@ -316,6 +317,7 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
           clientId: !isClientManual && clientId ? Number(clientId) : null,
           clientName: isClientManual ? clientName : null,
           clientPhone: isClientManual ? clientPhone : null,
+          requireOutputQty,
         }
       },
       {
@@ -368,13 +370,29 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Soni *</Label>
-                  <Input type="number" min="1" step="1" value={quantity} onChange={e => setQuantity(e.target.value)} className="h-12 bg-card font-semibold text-lg" required />
+                  <div className="flex gap-2">
+                    <Input type="number" min="1" step="1" value={quantity} onChange={e => setQuantity(e.target.value)} className="h-12 bg-card font-semibold text-lg" required />
+                    <button
+                      type="button"
+                      onClick={() => setRequireOutputQty(v => !v)}
+                      title="Chiqish miqdori talab qilinsinmi?"
+                      className={`h-12 px-3 rounded-lg border text-sm font-bold transition-all shrink-0 ${requireOutputQty ? "bg-green-500 text-white border-green-500 shadow-sm" : "bg-card border-border text-muted-foreground hover:border-green-400 hover:text-green-600"}`}
+                    >
+                      ⚖
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>O'lchov</Label>
                   <Input placeholder="dona, m2..." value={unit} onChange={e => setUnit(e.target.value)} className="h-12 bg-card" />
                 </div>
               </div>
+              {requireOutputQty && (
+                <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2 text-sm text-green-700 dark:text-green-400">
+                  <span className="text-base">⚖</span>
+                  <span>Ishchi <b>TAYYOR</b> bosishdan oldin chiqish miqdorini kiritishi shart bo'ladi</span>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>Qolib (joylashuv)</Label>
@@ -585,6 +603,20 @@ export default function WorkerDashboard() {
   };
 
   const handleReady = (order: any) => {
+    if (!order.requireOutputQty) {
+      // no output qty needed — mark ready directly
+      updateStatus.mutate(
+        { id: order.id, data: { status: "ready" } as any },
+        {
+          onSuccess: () => {
+            toast({ title: "✅ Tayyor deb belgilandi!" });
+            queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
+          },
+          onError: () => toast({ title: "Xatolik", variant: "destructive" })
+        }
+      );
+      return;
+    }
     setReadyQtyInput("");
     setReadyQtyUnit(order.unit ?? "");
     setReadyQtyOrder(order);
@@ -809,7 +841,7 @@ export default function WorkerDashboard() {
             order={order}
             search={search}
             onOrderClick={() => setSelectedOrder(order)}
-            onOutputQty={() => handleReady(order)}
+            onOutputQty={order.requireOutputQty ? () => handleReady(order) : undefined}
             actionButton={
               <Button
                 className="w-full h-12 text-lg font-bold"

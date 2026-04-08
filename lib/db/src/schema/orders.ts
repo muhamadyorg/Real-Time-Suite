@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp, pgEnum, numeric } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, pgEnum, numeric, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { storesTable } from "./stores";
@@ -32,6 +32,7 @@ export const ordersTable = pgTable("orders", {
   readyAt: timestamp("ready_at"),
   outputQuantity: numeric("output_quantity", { precision: 10, scale: 2 }),
   outputUnit: text("output_unit"),
+  requireOutputQty: boolean("require_output_qty").notNull().default(false),
   lockPin: text("lock_pin"),
   splitGroup: text("split_group"),
   splitPart: integer("split_part"),
