@@ -30,6 +30,8 @@ export const ordersTable = pgTable("orders", {
   acceptedByName: text("accepted_by_name"),
   acceptedAt: timestamp("accepted_at"),
   readyAt: timestamp("ready_at"),
+  outputQuantity: numeric("output_quantity", { precision: 10, scale: 2 }),
+  outputUnit: text("output_unit"),
   lockPin: text("lock_pin"),
   splitGroup: text("split_group"),
   splitPart: integer("split_part"),

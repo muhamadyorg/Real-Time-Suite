@@ -48,6 +48,8 @@ function mapOrder(o: typeof ordersTable.$inferSelect, showLockPin = true) {
     acceptedByName: o.acceptedByName,
     acceptedAt: o.acceptedAt,
     readyAt: o.readyAt,
+    outputQuantity: o.outputQuantity ? parseFloat(o.outputQuantity) : null,
+    outputUnit: o.outputUnit,
     deliveredAt: o.deliveredAt,
     deliveredByName: o.deliveredByName,
     lockPin: showLockPin ? o.lockPin : undefined,
@@ -388,7 +390,12 @@ router.patch("/:id/status", async (req, res) => {
     }
 
     const id = parseInt(req.params.id);
-    const { status, lockPin: providedLockPin } = req.body as { status: "new" | "accepted" | "ready" | "topshirildi"; lockPin?: string };
+    const { status, lockPin: providedLockPin, outputQuantity, outputUnit } = req.body as {
+      status: "new" | "accepted" | "ready" | "topshirildi";
+      lockPin?: string;
+      outputQuantity?: number;
+      outputUnit?: string;
+    };
 
     const order = await db.query.ordersTable.findFirst({ where: eq(ordersTable.id, id) });
     if (!order) {
@@ -450,6 +457,8 @@ router.patch("/:id/status", async (req, res) => {
       updates.readyAt = new Date();
       updates.deliveredAt = null;
       updates.deliveredByName = null;
+      if (outputQuantity !== undefined) updates.outputQuantity = String(outputQuantity);
+      if (outputUnit !== undefined) updates.outputUnit = outputUnit;
     } else if (status === "new") {
       updates.deliveredAt = null;
       updates.deliveredByName = null;
@@ -758,7 +767,7 @@ router.put("/:id", async (req, res) => {
       return;
     }
     const id = parseInt(req.params.id);
-    const { quantity, unit, shelf, product, notes, clientId, clientName, clientPhone, status, serviceTypeId } = req.body as {
+    const { quantity, unit, shelf, product, notes, clientId, clientName, clientPhone, status, serviceTypeId, outputQuantity, outputUnit } = req.body as {
       quantity?: number;
       unit?: string;
       shelf?: string;
@@ -769,6 +778,8 @@ router.put("/:id", async (req, res) => {
       clientPhone?: string;
       status?: string;
       serviceTypeId?: number;
+      outputQuantity?: number | null;
+      outputUnit?: string | null;
     };
 
     const updates: Record<string, unknown> = {};
@@ -777,6 +788,13 @@ router.put("/:id", async (req, res) => {
     if (shelf !== undefined) updates.shelf = shelf;
     if (product !== undefined) updates.product = product;
     if (notes !== undefined) updates.notes = notes;
+    // Only superadmin/sudo can edit outputQuantity
+    if (outputQuantity !== undefined && ["sudo", "superadmin"].includes(payload.role)) {
+      updates.outputQuantity = outputQuantity !== null ? String(outputQuantity) : null;
+    }
+    if (outputUnit !== undefined && ["sudo", "superadmin"].includes(payload.role)) {
+      updates.outputUnit = outputUnit;
+    }
     if (clientId !== undefined) updates.clientId = clientId;
     if (clientName !== undefined) updates.clientName = clientName;
     if (clientPhone !== undefined) updates.clientPhone = clientPhone;

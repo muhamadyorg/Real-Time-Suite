@@ -103,11 +103,21 @@ export default function PublicOrderPage() {
 
               {/* Quantity */}
               <div className="flex justify-between items-center border-t pt-3">
-                <span className="text-sm text-gray-500">Miqdor</span>
+                <span className="text-sm text-gray-500">Kirish miqdori</span>
                 <span className="font-bold text-gray-900">
                   {Number.isInteger(order.quantity) ? order.quantity : order.quantity} {order.unit ?? ""}
                 </span>
               </div>
+
+              {/* Output Quantity */}
+              {order.outputQuantity != null && (
+                <div className="flex justify-between items-center border-t pt-3">
+                  <span className="text-sm text-gray-500">Chiqish miqdori</span>
+                  <span className="font-bold text-green-600 text-lg">
+                    {order.outputQuantity} {order.outputUnit ?? ""}
+                  </span>
+                </div>
+              )}
 
               {/* Qolib */}
               {order.shelf && (

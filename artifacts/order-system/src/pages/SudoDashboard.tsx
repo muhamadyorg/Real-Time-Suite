@@ -743,6 +743,8 @@ function OrdersView() {
   const [editShelf, setEditShelf] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editStatus, setEditStatus] = useState("new");
+  const [editOutputQty, setEditOutputQty] = useState("");
+  const [editOutputQtyUnit, setEditOutputQtyUnit] = useState("");
 
   const openEdit = (o: any) => {
     setEditOrder(o);
@@ -752,6 +754,8 @@ function OrdersView() {
     setEditShelf(o.shelf ?? "");
     setEditNotes(o.notes ?? "");
     setEditStatus(o.status ?? "new");
+    setEditOutputQty(o.outputQuantity != null ? String(o.outputQuantity) : "");
+    setEditOutputQtyUnit(o.outputUnit ?? "");
   };
 
   const editMutation = useMutation({
@@ -971,6 +975,19 @@ function OrdersView() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-xl border border-green-200 dark:border-green-800 space-y-2">
+              <Label className="text-green-700 dark:text-green-400 font-semibold text-sm">Chiqish miqdori</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Miqdor</Label>
+                  <Input type="number" min="0" step="0.01" placeholder="0.00" value={editOutputQty} onChange={e => setEditOutputQty(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">O'lchov</Label>
+                  <Input placeholder="kg, ta, m..." value={editOutputQtyUnit} onChange={e => setEditOutputQtyUnit(e.target.value)} />
+                </div>
+              </div>
+            </div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setEditOrder(null)}>Bekor qilish</Button>
@@ -983,6 +1000,8 @@ function OrdersView() {
                 shelf: editShelf || null,
                 notes: editNotes || null,
                 status: editStatus,
+                outputQuantity: editOutputQty !== "" ? Number(editOutputQty) : null,
+                outputUnit: editOutputQtyUnit || null,
               })}
             >
               {editMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}

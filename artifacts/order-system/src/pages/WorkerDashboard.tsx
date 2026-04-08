@@ -62,9 +62,15 @@ function OrderDetailModal({ order, open, onClose }: { order: any, open: boolean,
               <span className="font-bold text-primary">{order.serviceTypeName}</span>
             </div>
             <div className="flex justify-between items-center border-t border-border/50 pt-2">
-              <span className="text-sm text-muted-foreground">Miqdor</span>
+              <span className="text-sm text-muted-foreground">Kirish miqdori</span>
               <span className="font-black text-xl">{order.quantity}{order.unit ? <span className="text-muted-foreground text-base ml-1">{order.unit}</span> : ""}</span>
             </div>
+            {order.outputQuantity != null && (
+              <div className="flex justify-between items-center border-t border-border/50 pt-2">
+                <span className="text-sm text-muted-foreground">Chiqish miqdori</span>
+                <span className="font-black text-xl text-green-600">{order.outputQuantity}{order.outputUnit ? <span className="text-green-500 text-base ml-1">{order.outputUnit}</span> : ""}</span>
+              </div>
+            )}
             {order.shelf && (
               <div className="flex justify-between items-center border-t border-border/50 pt-2">
                 <span className="text-sm text-muted-foreground">Qolib</span>
@@ -517,6 +523,9 @@ export default function WorkerDashboard() {
   const [splitPending, setSplitPending] = useState(false);
   const [justAcceptedIds, setJustAcceptedIds] = useState<Set<number>>(new Set());
   const [qrDeliverOrder, setQrDeliverOrder] = useState<any>(null);
+  const [readyQtyOrder, setReadyQtyOrder] = useState<any>(null);
+  const [readyQtyInput, setReadyQtyInput] = useState("");
+  const [readyQtyUnit, setReadyQtyUnit] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { has: hasPerm } = useMyPermissions(token, role);
@@ -575,13 +584,29 @@ export default function WorkerDashboard() {
     );
   };
 
-  const handleReady = (orderId: number) => {
+  const handleReady = (order: any) => {
+    setReadyQtyInput("");
+    setReadyQtyUnit(order.unit ?? "");
+    setReadyQtyOrder(order);
+  };
+
+  const doReady = () => {
+    if (!readyQtyOrder) return;
+    const qty = parseFloat(readyQtyInput);
     updateStatus.mutate(
-      { id: orderId, data: { status: "ready" } },
+      {
+        id: readyQtyOrder.id,
+        data: {
+          status: "ready",
+          outputQuantity: isNaN(qty) ? undefined : qty,
+          outputUnit: readyQtyUnit || undefined,
+        } as any
+      },
       {
         onSuccess: () => {
-          toast({ title: "Tayyor deb belgilandi!" });
+          toast({ title: "✅ Tayyor deb belgilandi!" });
           queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
+          setReadyQtyOrder(null);
         },
         onError: () => toast({ title: "Xatolik", variant: "destructive" })
       }
@@ -780,7 +805,7 @@ export default function WorkerDashboard() {
               <Button
                 className="w-full h-12 text-lg font-bold"
                 variant="secondary"
-                onClick={() => handleReady(order.id)}
+                onClick={() => handleReady(order)}
                 disabled={updateStatus.isPending}
               >
                 TAYYOR
@@ -940,6 +965,61 @@ export default function WorkerDashboard() {
           setQrDeliverOrder(null);
         }}
       />
+
+      {/* Chiqish miqdori — TAYYOR bosilganda */}
+      <Dialog open={!!readyQtyOrder} onOpenChange={(v) => { if (!v) setReadyQtyOrder(null); }}>
+        <DialogContent className="w-full max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <Check className="w-5 h-5" />
+              Tayyor — chiqish miqdori
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-mono font-bold">{readyQtyOrder?.orderId}</span> zakazidan nechta mahsulot chiqdi?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="bg-muted/50 rounded-lg p-3 text-sm flex justify-between">
+              <span className="text-muted-foreground">Kirish miqdori</span>
+              <span className="font-bold">{readyQtyOrder?.quantity}{readyQtyOrder?.unit ? ` ${readyQtyOrder.unit}` : ""}</span>
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1 space-y-1">
+                <Label className="text-xs">Chiqish miqdori *</Label>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={readyQtyInput}
+                  onChange={(e) => setReadyQtyInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && readyQtyInput) doReady(); }}
+                  autoFocus
+                  className="text-lg font-bold h-12"
+                />
+              </div>
+              <div className="w-24 space-y-1">
+                <Label className="text-xs">Birlik</Label>
+                <Input
+                  placeholder="dona"
+                  value={readyQtyUnit}
+                  onChange={(e) => setReadyQtyUnit(e.target.value)}
+                  className="h-12"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setReadyQtyOrder(null)}>Bekor</Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white gap-2"
+              disabled={!readyQtyInput || updateStatus.isPending}
+              onClick={doReady}
+            >
+              {updateStatus.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Tayyor!
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Bo'lib qabul qilish dialog */}
       <Dialog open={!!splitOrder} onOpenChange={(v) => { if (!v) setSplitOrder(null); }}>

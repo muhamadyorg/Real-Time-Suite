@@ -310,6 +310,7 @@ function EditOrderModal({ order, open, onClose, storeId }: { order: any, open: b
   const { data: serviceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId] } });
   const { data: clients } = useGetClients({ status: 'approved' }, { query: { queryKey: ["getClients", { status: 'approved' }] } });
 
+  const { role } = useAuth();
   const [serviceTypeId, setServiceTypeId] = useState<string>("");
   const [quantity, setQuantity] = useState("1");
   const [unit, setUnit] = useState("");
@@ -317,6 +318,8 @@ function EditOrderModal({ order, open, onClose, storeId }: { order: any, open: b
   const [product, setProduct] = useState("");
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<string>("new");
+  const [outputQty, setOutputQty] = useState("");
+  const [outputQtyUnit, setOutputQtyUnit] = useState("");
   const [isClientManual, setIsClientManual] = useState(false);
   const [clientId, setClientId] = useState<string>("");
   const [clientName, setClientName] = useState("");
@@ -331,6 +334,8 @@ function EditOrderModal({ order, open, onClose, storeId }: { order: any, open: b
       setProduct(order.product ?? "");
       setNotes(order.notes ?? "");
       setStatus(order.status ?? "new");
+      setOutputQty(order.outputQuantity != null ? String(order.outputQuantity) : "");
+      setOutputQtyUnit(order.outputUnit ?? "");
       if (order.clientId) {
         setIsClientManual(false);
         setClientId(String(order.clientId));
@@ -382,6 +387,10 @@ function EditOrderModal({ order, open, onClose, storeId }: { order: any, open: b
     if (serviceTypeId) body.serviceTypeId = Number(serviceTypeId);
     if (clientId) { body.clientId = Number(clientId); }
     else { body.clientName = clientName || null; body.clientPhone = clientPhone || null; body.clientId = null; }
+    if (role === "superadmin" || role === "sudo") {
+      body.outputQuantity = outputQty !== "" ? Number(outputQty) : null;
+      body.outputUnit = outputQtyUnit || null;
+    }
     updateMutation.mutate(body);
   };
 
@@ -462,6 +471,23 @@ function EditOrderModal({ order, open, onClose, storeId }: { order: any, open: b
               <Label>Izoh</Label>
               <Input placeholder="Buyurtma haqida izoh..." value={notes} onChange={e => setNotes(e.target.value)} className="h-12 bg-card" />
             </div>
+            {(role === "superadmin" || role === "sudo") && (
+              <div className="p-4 bg-green-50 dark:bg-green-950/30 rounded-xl border border-green-200 dark:border-green-800 space-y-3">
+                <Label className="flex items-center gap-2 text-green-700 dark:text-green-400 font-semibold">
+                  Chiqish miqdori (ishchilar tomonidan)
+                </Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Miqdor</Label>
+                    <Input type="number" min="0" step="0.01" placeholder="0.00" value={outputQty} onChange={e => setOutputQty(e.target.value)} className="h-12 bg-card" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">O'lchov</Label>
+                    <Input placeholder="kg, ta, m..." value={outputQtyUnit} onChange={e => setOutputQtyUnit(e.target.value)} className="h-12 bg-card" />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter className="px-6 pb-6 pt-4 border-t shrink-0">
             <Button type="submit" size="lg" className="w-full h-14 text-lg font-bold" disabled={updateMutation.isPending}>
