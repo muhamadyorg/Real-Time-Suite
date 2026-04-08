@@ -13,9 +13,16 @@ interface QrScannerModalProps {
 
 type ScanState = "scanning" | "confirmed" | "wrong";
 
-// Small fixed output — jsQR is O(pixels), 320×240 is 6× faster than 640×480
 const SCAN_W = 320;
 const SCAN_H = 240;
+
+// Zoom step labels and their crop fractions (when no hardware zoom)
+const ZOOM_LEVELS = [
+  { label: "1×", frac: 1 },
+  { label: "2×", frac: 0.5 },
+  { label: "3×", frac: 0.33 },
+  { label: "4×", frac: 0.25 },
+];
 
 export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -24,10 +31,14 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
   const streamRef = useRef<MediaStream | null>(null);
   const animRef = useRef<number | null>(null);
   const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const zoomRef = useRef(0); // index into ZOOM_LEVELS
+  const hwZoomRef = useRef(false); // whether hardware zoom is supported
+
   const [scanState, setScanState] = useState<ScanState>("scanning");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [scannedText, setScannedText] = useState<string>("");
   const [focusPt, setFocusPt] = useState<{ x: number; y: number } | null>(null);
+  const [zoomIdx, setZoomIdx] = useState(0); // for UI re-render
 
   const stopCamera = useCallback(() => {
     if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null; }
@@ -48,8 +59,6 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
       animRef.current = requestAnimationFrame(scanFrame);
       return;
     }
-
-    // Cache canvas context once
     if (!ctxRef.current) {
       canvas.width = SCAN_W;
       canvas.height = SCAN_H;
@@ -61,24 +70,30 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
     const vw = video.videoWidth;
     const vh = video.videoHeight;
 
-    // Helper: draw region → 320×240 and scan
     const tryRegion = (sx: number, sy: number, sw: number, sh: number) => {
       ctx.drawImage(video, sx, sy, sw, sh, 0, 0, SCAN_W, SCAN_H);
       const d = ctx.getImageData(0, 0, SCAN_W, SCAN_H);
       return jsQR(d.data, SCAN_W, SCAN_H, { inversionAttempts: "dontInvert" });
     };
 
-    // 1) Full frame → 320×240 (large/near QR)
-    let result = tryRegion(0, 0, vw, vh);
+    let result: ReturnType<typeof jsQR> | null = null;
 
-    // 2) Center 50% → 320×240 = 2× zoom (medium QR)
-    if (!result) result = tryRegion(vw * 0.25, vh * 0.25, vw * 0.5, vh * 0.5);
+    if (hwZoomRef.current) {
+      // Hardware zoom active — camera already zoomed, just scan full frame
+      result = tryRegion(0, 0, vw, vh);
+      // Also try full frame as fallback
+      if (!result) result = tryRegion(0, 0, vw, vh);
+    } else {
+      // Software zoom — crop the frame to match what user sees at current zoom
+      const frac = ZOOM_LEVELS[zoomRef.current].frac;
+      const sw = vw * frac, sh = vh * frac;
+      const sx = (vw - sw) / 2, sy = (vh - sh) / 2;
 
-    // 3) Center 25% → 320×240 = 4× zoom (small/far QR)
-    if (!result) result = tryRegion(vw * 0.375, vh * 0.375, vw * 0.25, vh * 0.25);
-
-    // 4) Center 12.5% → 320×240 = 8× zoom (very tiny QR at distance)
-    if (!result) result = tryRegion(vw * 0.4375, vh * 0.4375, vw * 0.125, vh * 0.125);
+      // Primary: current zoom crop
+      result = tryRegion(sx, sy, sw, sh);
+      // Fallback: full frame (catches QR if it's outside zoom area)
+      if (!result && zoomRef.current > 0) result = tryRegion(0, 0, vw, vh);
+    }
 
     if (result?.data) {
       setScannedText(result.data);
@@ -109,6 +124,9 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
     setCameraError(null);
     setScanState("scanning");
     setFocusPt(null);
+    zoomRef.current = 0;
+    setZoomIdx(0);
+    hwZoomRef.current = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -119,7 +137,12 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
       });
       streamRef.current = stream;
       const track = stream.getVideoTracks()[0];
-      if (track) await applyAutoFocus(track);
+      if (track) {
+        await applyAutoFocus(track);
+        // Check if hardware zoom is supported
+        const caps = (track as any).getCapabilities?.() ?? {};
+        hwZoomRef.current = "zoom" in caps;
+      }
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play();
@@ -130,7 +153,29 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
     }
   }, [scanFrame, applyAutoFocus]);
 
-  // Tap-to-focus: sets pointsOfInterest on the track then reverts to continuous
+  // Change zoom level
+  const changeZoom = useCallback(async (idx: number) => {
+    zoomRef.current = idx;
+    setZoomIdx(idx);
+    if (!streamRef.current) return;
+    const track = streamRef.current.getVideoTracks()[0];
+    if (!track) return;
+
+    if (hwZoomRef.current) {
+      // Apply hardware zoom: map idx 0-3 to device's min-max range
+      const caps = (track as any).getCapabilities?.() ?? {};
+      const minZ = caps.zoom?.min ?? 1;
+      const maxZ = Math.min(caps.zoom?.max ?? 4, 8);
+      const targetZ = minZ + idx * (maxZ - minZ) / 3;
+      await (track as any).applyConstraints({ advanced: [{ zoom: targetZ }] }).catch(() => {});
+    }
+    // (Software zoom: video CSS scale is applied in JSX via zoomIdx)
+
+    // Re-apply auto-focus after zoom change so focus adapts
+    await applyAutoFocus(track);
+  }, [applyAutoFocus]);
+
+  // Tap-to-focus
   const handleTapFocus = useCallback(async (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if (!streamRef.current) return;
     const track = streamRef.current.getVideoTracks()[0];
@@ -142,23 +187,19 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
     const relX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const relY = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
 
-    // Show focus ring at tapped position
     setFocusPt({ x: relX * 100, y: relY * 100 });
     if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
 
     const caps = (track as any).getCapabilities?.() ?? {};
     const canFocusPoint = caps.focusMode?.includes?.("manual") && "pointsOfInterest" in caps;
-
     if (canFocusPoint) {
       try {
-        // Lock focus on tapped point
         await (track as any).applyConstraints({
           advanced: [{ focusMode: "manual", pointsOfInterest: [{ x: relX, y: relY }] }]
         });
-      } catch { /* silently ignore */ }
+      } catch { /* unsupported */ }
     }
 
-    // After 2s clear ring and return to continuous auto-focus
     focusTimerRef.current = setTimeout(async () => {
       setFocusPt(null);
       if (streamRef.current) {
@@ -181,6 +222,11 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
     return () => stopCamera();
   }, [open]);
 
+  // CSS scale for software zoom (hardware zoom doesn't need this)
+  const videoScale = (!hwZoomRef.current && zoomIdx > 0)
+    ? 1 / ZOOM_LEVELS[zoomIdx].frac
+    : 1;
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) { stopCamera(); onClose(); } }}>
       <DialogContent className="w-full max-w-sm mx-4 p-0 overflow-hidden">
@@ -195,12 +241,18 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
         </DialogHeader>
 
         <div
-          className="relative bg-black select-none"
+          className="relative bg-black select-none overflow-hidden"
           style={{ aspectRatio: "4/3", cursor: "crosshair" }}
           onClick={handleTapFocus}
           onTouchStart={handleTapFocus}
         >
-          <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+          <video
+            ref={videoRef}
+            className="w-full h-full object-cover transition-transform duration-200"
+            style={{ transform: `scale(${videoScale})`, transformOrigin: "center" }}
+            playsInline
+            muted
+          />
           <canvas ref={canvasRef} className="hidden" />
 
           {/* Tap-to-focus ring */}
@@ -211,7 +263,6 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
             >
               <div className="w-14 h-14 rounded-full border-2 border-yellow-300 animate-ping opacity-70 absolute inset-0" />
               <div className="w-14 h-14 rounded-full border-2 border-yellow-400" />
-              {/* crosshair lines */}
               <div className="absolute top-1/2 left-0 right-0 h-px bg-yellow-400/60" />
               <div className="absolute left-1/2 top-0 bottom-0 w-px bg-yellow-400/60" />
             </div>
@@ -227,11 +278,32 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
                 <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white rounded-br" />
                 <div className="absolute inset-x-0 top-1/2 h-0.5 bg-red-400 opacity-70 animate-pulse" />
               </div>
-              <div className="absolute bottom-4 left-0 right-0 text-center">
+              <div className="absolute bottom-12 left-0 right-0 text-center">
                 <span className="text-white text-xs bg-black/50 px-3 py-1 rounded-full">
                   #{order?.orderId?.replace(/^#/, "")} — QR kodni skanerlang
                 </span>
               </div>
+            </div>
+          )}
+
+          {/* Zoom buttons — bottom of camera */}
+          {scanState === "scanning" && !cameraError && (
+            <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-2 pointer-events-auto">
+              {ZOOM_LEVELS.map((z, i) => (
+                <button
+                  key={i}
+                  onClick={(e) => { e.stopPropagation(); changeZoom(i); }}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  className={[
+                    "w-9 h-9 rounded-full text-xs font-bold border transition-all",
+                    zoomIdx === i
+                      ? "bg-yellow-400 text-black border-yellow-400 scale-110"
+                      : "bg-black/50 text-white border-white/40 hover:bg-black/70"
+                  ].join(" ")}
+                >
+                  {z.label}
+                </button>
+              ))}
             </div>
           )}
 
