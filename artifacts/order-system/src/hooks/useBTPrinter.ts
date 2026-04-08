@@ -163,13 +163,8 @@ export function buildTsplReceipt(order: any, layout: TsplLayout = DEFAULT_TSPL_L
       const text = textMap[key] ?? "";
       if (!text) continue;
       const h = elHeight(el);
-      if (rotation === 0) {
-        // BLOCK — hizalashni qo'llab-quvvatlaydi
-        cmds.push(`BLOCK ${x},${y},${width},${h},"${font}",0,${xScale},${yScale},${ALIGN_NUM[align]},"${esc(text)}"`);
-      } else {
-        // TEXT — rotatsiya uchun
-        cmds.push(`TEXT ${x},${y},"${font}",${rotation},${xScale},${yScale},"${esc(text)}"`);
-      }
+      // TEXT — BLOCK dan farqli: chegarasiz, qora nuqtalar yo'q, to'liq matn chiqadi
+      cmds.push(`TEXT ${x},${y},"${font}",${rotation},${xScale},${yScale},"${esc(text)}"`);
       maxY = Math.max(maxY, y + h + 2);
     }
   }
