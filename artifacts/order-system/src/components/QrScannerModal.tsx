@@ -13,6 +13,22 @@ interface QrScannerModalProps {
 
 type ScanState = "scanning" | "confirmed" | "wrong";
 
+// Scan one crop region of the video at a target output size for sensitivity
+function scanRegion(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  video: HTMLVideoElement,
+  srcX: number, srcY: number, srcW: number, srcH: number,
+  outW = 640, outH = 480
+): string | null {
+  canvas.width = outW;
+  canvas.height = outH;
+  ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
+  const imageData = ctx.getImageData(0, 0, outW, outH);
+  const result = jsQR(imageData.data, outW, outH, { inversionAttempts: "attemptBoth" });
+  return result?.data ?? null;
+}
+
 export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -42,16 +58,29 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
       animRef.current = requestAnimationFrame(scanFrame);
       return;
     }
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const result = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
-    if (result?.data) {
-      setScannedText(result.data);
-      if (matchesOrder(result.data)) {
+
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+
+    // Multi-scale scanning: full frame, 50% center crop, 25% center crop
+    // This catches QR codes both near (large) and far (small center area)
+    const regions = [
+      { sx: 0,         sy: 0,         sw: vw,      sh: vh      }, // full frame
+      { sx: vw * 0.25, sy: vh * 0.25, sw: vw * 0.5, sh: vh * 0.5 }, // center 50%
+      { sx: vw * 0.375, sy: vh * 0.375, sw: vw * 0.25, sh: vh * 0.25 }, // center 25%
+    ];
+
+    let found: string | null = null;
+    for (const r of regions) {
+      const data = scanRegion(ctx, canvas, video, r.sx, r.sy, r.sw, r.sh, 640, 480);
+      if (data) { found = data; break; }
+    }
+
+    if (found) {
+      setScannedText(found);
+      if (matchesOrder(found)) {
         setScanState("confirmed");
         stopCamera();
         setTimeout(() => { onConfirmed(); onClose(); }, 1800);
@@ -61,6 +90,7 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
         setTimeout(() => setScanState("scanning"), 1500);
       }
     }
+
     animRef.current = requestAnimationFrame(scanFrame);
   }, [matchesOrder, stopCamera, onConfirmed, onClose]);
 
@@ -98,6 +128,7 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
     }
   }, [scanFrame, applyAutoFocus]);
 
+  // Tap-to-focus: sets pointsOfInterest on the track then reverts to continuous
   const handleTapFocus = useCallback(async (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if (!streamRef.current) return;
     const track = streamRef.current.getVideoTracks()[0];
@@ -109,24 +140,30 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
     const relX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const relY = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
 
+    // Show focus ring at tapped position
     setFocusPt({ x: relX * 100, y: relY * 100 });
     if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
-    focusTimerRef.current = setTimeout(() => setFocusPt(null), 1600);
 
     const caps = (track as any).getCapabilities?.() ?? {};
-    const supportsFocusPoint = caps.focusMode?.includes?.("manual") && "pointsOfInterest" in caps;
+    const canFocusPoint = caps.focusMode?.includes?.("manual") && "pointsOfInterest" in caps;
 
-    try {
-      if (supportsFocusPoint) {
+    if (canFocusPoint) {
+      try {
+        // Lock focus on tapped point
         await (track as any).applyConstraints({
           advanced: [{ focusMode: "manual", pointsOfInterest: [{ x: relX, y: relY }] }]
         });
-        focusTimerRef.current = setTimeout(async () => {
-          setFocusPt(null);
-          await applyAutoFocus(track);
-        }, 2000);
+      } catch { /* silently ignore */ }
+    }
+
+    // After 2s clear ring and return to continuous auto-focus
+    focusTimerRef.current = setTimeout(async () => {
+      setFocusPt(null);
+      if (streamRef.current) {
+        const t = streamRef.current.getVideoTracks()[0];
+        if (t) await applyAutoFocus(t);
       }
-    } catch { /* unsupported silently */ }
+    }, 2000);
   }, [applyAutoFocus]);
 
   useEffect(() => {
@@ -161,30 +198,24 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
           onClick={handleTapFocus}
           onTouchStart={handleTapFocus}
         >
-          <video
-            ref={videoRef}
-            className="w-full h-full object-cover"
-            playsInline
-            muted
-          />
+          <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
           <canvas ref={canvasRef} className="hidden" />
 
           {/* Tap-to-focus ring */}
           {focusPt && scanState === "scanning" && !cameraError && (
             <div
               className="absolute pointer-events-none"
-              style={{
-                left: `${focusPt.x}%`,
-                top: `${focusPt.y}%`,
-                transform: "translate(-50%, -50%)",
-              }}
+              style={{ left: `${focusPt.x}%`, top: `${focusPt.y}%`, transform: "translate(-50%,-50%)" }}
             >
-              <div className="w-12 h-12 rounded-full border-2 border-yellow-300 animate-ping opacity-60" />
-              <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-yellow-400" />
+              <div className="w-14 h-14 rounded-full border-2 border-yellow-300 animate-ping opacity-70 absolute inset-0" />
+              <div className="w-14 h-14 rounded-full border-2 border-yellow-400" />
+              {/* crosshair lines */}
+              <div className="absolute top-1/2 left-0 right-0 h-px bg-yellow-400/60" />
+              <div className="absolute left-1/2 top-0 bottom-0 w-px bg-yellow-400/60" />
             </div>
           )}
 
-          {/* Scanning overlay */}
+          {/* Scanning frame */}
           {scanState === "scanning" && !cameraError && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="relative w-48 h-48">
@@ -224,9 +255,7 @@ export function QrScannerModal({ open, order, onClose, onConfirmed }: QrScannerM
             <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-3 p-4">
               <AlertCircle className="w-12 h-12 text-red-400" />
               <p className="text-white text-sm text-center">{cameraError}</p>
-              <Button size="sm" onClick={startCamera} className="mt-2">
-                Qayta urinish
-              </Button>
+              <Button size="sm" onClick={startCamera} className="mt-2">Qayta urinish</Button>
             </div>
           )}
         </div>
