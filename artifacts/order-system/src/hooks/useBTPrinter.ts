@@ -58,6 +58,7 @@ export interface TsplLayout {
     quantity:    TsplElementConfig;
     shelf:       TsplElementConfig;
     clientName:  TsplElementConfig;
+    product:     TsplElementConfig;
     sep2:        TsplElementConfig;
     qr:          TsplElementConfig;
     footer:      TsplElementConfig;
@@ -87,13 +88,14 @@ export const DEFAULT_TSPL_LAYOUT: TsplLayout = {
     quantity:    makeDefault(24, 104,  {}),
     shelf:       makeDefault(24, 120,  {}),
     clientName:  makeDefault(24, 136,  {}),
-    sep2:        makeDefault(24, 154,  { height:2 }),
-    qr:          makeDefault(190, 162, { qrSize:4, width:84, height:84 }),
-    footer:      makeDefault(24, 260,  { align:"center" }),
+    product:     makeDefault(24, 154,  { font:"2", xScale:1, yScale:1 }),
+    sep2:        makeDefault(24, 174,  { height:2 }),
+    qr:          makeDefault(190, 182, { qrSize:4, width:84, height:84 }),
+    footer:      makeDefault(24, 280,  { align:"center" }),
   },
 };
 
-const LAYOUT_KEY = "tspl-layout-v3";
+const LAYOUT_KEY = "tspl-layout-v4";
 
 function loadLayout(): TsplLayout {
   try {
@@ -141,6 +143,7 @@ export function buildTsplReceipt(order: any, layout: TsplLayout = DEFAULT_TSPL_L
     quantity:    qty ? `Miqdor: ${qty}` : "",
     shelf:       order.shelf ? `Qolib: ${order.shelf}` : "",
     clientName:  order.clientName ? `Mijoz: ${order.clientName}` : "",
+    product:     order.product ? `Mahsulot: ${order.product}` : "",
     footer:      "Rahmat!",
   };
 
