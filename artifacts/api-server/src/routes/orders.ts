@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, ordersTable, serviceTypesTable, clientsTable, storesTable, accountsTable, accountPermissionsTable, storePermissionModesTable } from "@workspace/db";
-import { eq, and, asc, desc, sql, isNull, lt, ne } from "drizzle-orm";
+import { db, ordersTable, serviceTypesTable, clientsTable, storesTable, accountsTable, accountPermissionsTable, storePermissionModesTable, adminAllowedServiceTypesTable } from "@workspace/db";
+import { eq, and, asc, desc, sql, isNull, lt, ne, inArray } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 import type { Server as SocketServer } from "socket.io";
 
@@ -94,11 +94,20 @@ router.get("/summary", async (req, res) => {
     today.setHours(0, 0, 0, 0);
 
     let workerServiceTypeId: number | null = null;
-    if (payload.role === "worker" && payload.accountId) {
-      const account = await db.query.accountsTable.findFirst({
-        where: eq(accountsTable.id, payload.accountId),
-      });
-      workerServiceTypeId = account?.serviceTypeId ?? null;
+    let adminAllowedIds: number[] | null = null;
+
+    if (payload.accountId) {
+      if (payload.role === "worker") {
+        const account = await db.query.accountsTable.findFirst({
+          where: eq(accountsTable.id, payload.accountId),
+        });
+        workerServiceTypeId = account?.serviceTypeId ?? null;
+      } else if (payload.role === "admin" || payload.role === "viewer") {
+        const rows = await db.query.adminAllowedServiceTypesTable.findMany({
+          where: eq(adminAllowedServiceTypesTable.accountId, payload.accountId),
+        });
+        if (rows.length > 0) adminAllowedIds = rows.map((r) => r.serviceTypeId);
+      }
     }
 
     if (payload.role === "worker" && !workerServiceTypeId) {
@@ -106,12 +115,15 @@ router.get("/summary", async (req, res) => {
       return;
     }
 
-    const conditions: ReturnType<typeof eq>[] = [];
+    const conditions: any[] = [];
     if (payload.role !== "sudo" && payload.storeId) {
       conditions.push(eq(ordersTable.storeId, payload.storeId));
     }
     if (payload.role === "worker" && workerServiceTypeId) {
       conditions.push(eq(ordersTable.serviceTypeId, workerServiceTypeId));
+    }
+    if (adminAllowedIds && adminAllowedIds.length > 0) {
+      conditions.push(inArray(ordersTable.serviceTypeId, adminAllowedIds));
     }
 
     const all = await db.query.ordersTable.findMany({
@@ -148,11 +160,20 @@ router.get("/", async (req, res) => {
     };
 
     let workerServiceTypeId: number | null = null;
-    if (payload.role === "worker" && payload.accountId) {
-      const account = await db.query.accountsTable.findFirst({
-        where: eq(accountsTable.id, payload.accountId),
-      });
-      workerServiceTypeId = account?.serviceTypeId ?? null;
+    let adminAllowedIds: number[] | null = null;
+
+    if (payload.accountId) {
+      if (payload.role === "worker") {
+        const account = await db.query.accountsTable.findFirst({
+          where: eq(accountsTable.id, payload.accountId),
+        });
+        workerServiceTypeId = account?.serviceTypeId ?? null;
+      } else if (payload.role === "admin" || payload.role === "viewer") {
+        const rows = await db.query.adminAllowedServiceTypesTable.findMany({
+          where: eq(adminAllowedServiceTypesTable.accountId, payload.accountId),
+        });
+        if (rows.length > 0) adminAllowedIds = rows.map((r) => r.serviceTypeId);
+      }
     }
 
     if (payload.role === "worker" && !workerServiceTypeId) {
@@ -160,7 +181,7 @@ router.get("/", async (req, res) => {
       return;
     }
 
-    const conditions: ReturnType<typeof eq>[] = [];
+    const conditions: any[] = [];
 
     if (payload.role !== "sudo") {
       if (payload.storeId) {
@@ -172,6 +193,9 @@ router.get("/", async (req, res) => {
 
     if (payload.role === "worker" && workerServiceTypeId) {
       conditions.push(eq(ordersTable.serviceTypeId, workerServiceTypeId));
+    }
+    if (adminAllowedIds && adminAllowedIds.length > 0) {
+      conditions.push(inArray(ordersTable.serviceTypeId, adminAllowedIds));
     }
 
     if (status && ["new", "accepted", "ready", "topshirildi"].includes(status)) {

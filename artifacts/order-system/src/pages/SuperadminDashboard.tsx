@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil, Users, Save } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import AdminDashboard from "./AdminDashboard";
 import ProductsView from "@/components/ProductsView";
@@ -691,6 +691,139 @@ function PermissionsView({ token, storeId }: { token: string | null; storeId: nu
   );
 }
 
+function AdminPermissionsView({ token, storeId }: { token: string | null; storeId: number }) {
+  const { toast } = useToast();
+  const [admins, setAdmins] = useState<any[]>([]);
+  const [serviceTypes, setServiceTypes] = useState<any[]>([]);
+  const [saving, setSaving] = useState<number | null>(null);
+  const [localAllowed, setLocalAllowed] = useState<Record<number, number[]>>({});
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const [aRes, sRes] = await Promise.all([
+        fetch(`/api/accounts`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/service-types`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (aRes.ok) {
+        const all = await aRes.json();
+        const filtered = (all as any[]).filter(a => a.storeId === storeId && a.role === "admin");
+        setAdmins(filtered);
+        const map: Record<number, number[]> = {};
+        for (const a of filtered) map[a.id] = a.allowedServiceTypeIds ?? [];
+        setLocalAllowed(map);
+      }
+      if (sRes.ok) {
+        const types = await sRes.json();
+        setServiceTypes((types as any[]).filter((s: any) => s.storeId === storeId || !s.storeId));
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [token, storeId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const toggleServiceType = (adminId: number, stId: number) => {
+    setLocalAllowed(prev => {
+      const cur = prev[adminId] ?? [];
+      const next = cur.includes(stId) ? cur.filter(x => x !== stId) : [...cur, stId];
+      return { ...prev, [adminId]: next };
+    });
+  };
+
+  const saveAdmin = async (adminId: number) => {
+    if (!token) return;
+    setSaving(adminId);
+    try {
+      const r = await fetch(`/api/accounts/${adminId}/service-types`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ serviceTypeIds: localAllowed[adminId] ?? [] }),
+      });
+      if (!r.ok) throw new Error();
+      toast({ title: "✅ Saqlandi" });
+    } catch {
+      toast({ title: "Xatolik", variant: "destructive" });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+
+  return (
+    <div className="space-y-4 max-w-2xl mx-auto">
+      <div className="flex items-center gap-2 mb-2">
+        <Users className="w-5 h-5 text-primary" />
+        <h2 className="text-lg font-bold">Adminlar ruxsatlari</h2>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">Har bir admin faqat ruxsat berilgan xizmat turlarini ko'radi va ularga zakaz bera oladi. Agar hech narsa tanlanmagan bo'lsa — admin hamma xizmatlarni ko'radi.</p>
+
+      {admins.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p>Adminlar mavjud emas</p>
+        </div>
+      )}
+
+      {admins.map(admin => {
+        const allowed = localAllowed[admin.id] ?? [];
+        const allSelected = allowed.length === 0;
+        return (
+          <Card key={admin.id}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="font-semibold">{admin.name}</p>
+                  <p className="text-xs text-muted-foreground">PIN: {admin.pin || "—"}</p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => saveAdmin(admin.id)}
+                  disabled={saving === admin.id}
+                  className="gap-1"
+                >
+                  {saving === admin.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                  Saqlash
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Ruxsat berilgan xizmatlar:</p>
+                {allSelected && (
+                  <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">Hozircha hamma xizmatlar ko'rinadi</p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {serviceTypes.map(st => {
+                    const isAllowed = allowed.includes(st.id);
+                    return (
+                      <button
+                        key={st.id}
+                        onClick={() => toggleServiceType(admin.id, st.id)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
+                          isAllowed
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-muted text-muted-foreground border-border"
+                        }`}
+                      >
+                        {isAllowed ? <CheckCircle className="w-3 h-3 inline mr-1" /> : <X className="w-3 h-3 inline mr-1 opacity-50" />}
+                        {st.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function SuperadminDashboard() {
   const { accountName, storeId, token } = useAuth();
   
@@ -705,6 +838,9 @@ export default function SuperadminDashboard() {
           <TabsList className="flex w-max min-w-full h-10 gap-0.5">
             <TabsTrigger value="orders"   className="text-xs sm:text-sm px-3 shrink-0">Zakazlar</TabsTrigger>
             <TabsTrigger value="accounts" className="text-xs sm:text-sm px-3 shrink-0">Ishchilar</TabsTrigger>
+            <TabsTrigger value="admins"   className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
+              <Users className="w-3 h-3 hidden sm:block" />Adminlar
+            </TabsTrigger>
             <TabsTrigger value="services" className="text-xs sm:text-sm px-3 shrink-0">Xizmatlar</TabsTrigger>
             <TabsTrigger value="products" className="text-xs sm:text-sm px-3 shrink-0">Mahsulot</TabsTrigger>
             <TabsTrigger value="clients"  className="text-xs sm:text-sm px-3 shrink-0">Mijozlar</TabsTrigger>
@@ -723,6 +859,10 @@ export default function SuperadminDashboard() {
         
         <TabsContent value="accounts" className="p-5 max-w-4xl mx-auto focus-visible:outline-none">
           <AccountsView storeId={storeId} />
+        </TabsContent>
+
+        <TabsContent value="admins" className="p-5 focus-visible:outline-none">
+          <AdminPermissionsView token={token} storeId={storeId} />
         </TabsContent>
         
         <TabsContent value="services" className="p-5 max-w-4xl mx-auto focus-visible:outline-none">

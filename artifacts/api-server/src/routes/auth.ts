@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, accountsTable, storesTable } from "@workspace/db";
+import { db, accountsTable, storesTable, adminAllowedServiceTypesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { hashPassword, comparePassword, createToken, verifyToken, authenticateToken } from "../lib/auth";
 import { logger } from "../lib/logger";
@@ -100,6 +100,11 @@ router.post("/pin-login", async (req, res) => {
       where: eq(storesTable.id, storeId),
     });
 
+    const allowedRows = await db.query.adminAllowedServiceTypesTable.findMany({
+      where: eq(adminAllowedServiceTypesTable.accountId, account.id),
+    });
+    const allowedServiceTypeIds = allowedRows.map((r) => r.serviceTypeId);
+
     const token = createToken({
       accountId: account.id,
       storeId: account.storeId ?? undefined,
@@ -117,6 +122,7 @@ router.post("/pin-login", async (req, res) => {
         pin: account.pin,
         storeId: account.storeId,
         serviceTypeId: account.serviceTypeId,
+        allowedServiceTypeIds,
         storeName: store?.name ?? null,
         createdAt: account.createdAt,
       },

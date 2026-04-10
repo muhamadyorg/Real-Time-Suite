@@ -10,11 +10,12 @@ interface AuthState {
   accountName: string | null;
   role: string | null;
   serviceTypeId: number | null;
+  allowedServiceTypeIds: number[];
 }
 
 interface AuthContextType extends AuthState {
   setStoreAuth: (token: string, storeId: number, storeUsername: string, storeName: string, role: string) => void;
-  setPinAuth: (token: string, accountId: number, accountName: string, role: string, serviceTypeId?: number | null) => void;
+  setPinAuth: (token: string, accountId: number, accountName: string, role: string, serviceTypeId?: number | null, allowedServiceTypeIds?: number[]) => void;
   clearPinAuth: () => void;
   clearStoreAuth: () => void;
 }
@@ -28,6 +29,7 @@ const defaultState: AuthState = {
   accountName: null,
   role: null,
   serviceTypeId: null,
+  allowedServiceTypeIds: [],
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,6 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        if (!parsed.allowedServiceTypeIds) parsed.allowedServiceTypeIds = [];
         setAuthTokenGetter(() => parsed.token);
         return parsed;
       } catch (e) {
@@ -63,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const setPinAuth = (token: string, accountId: number, accountName: string, role: string, serviceTypeId?: number | null) => {
+  const setPinAuth = (token: string, accountId: number, accountName: string, role: string, serviceTypeId?: number | null, allowedServiceTypeIds?: number[]) => {
     setState((prev) => ({
       ...prev,
       token,
@@ -71,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accountName,
       role,
       serviceTypeId: serviceTypeId ?? null,
+      allowedServiceTypeIds: allowedServiceTypeIds ?? [],
     }));
   };
 
@@ -81,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accountName: null,
       role: 'store',
       serviceTypeId: null,
+      allowedServiceTypeIds: [],
     }));
   };
 

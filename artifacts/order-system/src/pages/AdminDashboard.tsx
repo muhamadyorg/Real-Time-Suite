@@ -501,7 +501,7 @@ function EditOrderModal({ order, open, onClose, storeId }: { order: any, open: b
 }
 
 function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, open: boolean, onOpenChange: (v: boolean) => void }) {
-  const { token } = useAuth();
+  const { token, allowedServiceTypeIds } = useAuth();
   const [serviceTypeId, setServiceTypeId] = useState<string>("");
   const [quantity, setQuantity] = useState("1");
   const [unit, setUnit] = useState("");
@@ -516,12 +516,23 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
   const [products, setProducts] = useState<any[]>([]);
   const [requireOutputQty, setRequireOutputQty] = useState(false);
 
-  const { data: serviceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId] } });
+  const { data: allServiceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId] } });
+  const serviceTypes = allServiceTypes
+    ? (allowedServiceTypeIds && allowedServiceTypeIds.length > 0
+        ? allServiceTypes.filter((s: any) => allowedServiceTypeIds.includes(s.id))
+        : allServiceTypes)
+    : [];
   const { data: clients } = useGetClients({ status: 'approved' }, { query: { queryKey: ["getClients", { status: 'approved' }] } });
   
   const createOrder = useCreateOrder();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (serviceTypes && serviceTypes.length === 1 && !serviceTypeId) {
+      setServiceTypeId(String(serviceTypes[0].id));
+    }
+  }, [serviceTypes]);
 
   useEffect(() => {
     setProduct("");

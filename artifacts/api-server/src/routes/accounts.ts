@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, accountsTable, storesTable, ordersTable } from "@workspace/db";
-import { eq, and, sql, ne } from "drizzle-orm";
+import { db, accountsTable, storesTable, ordersTable, adminAllowedServiceTypesTable, serviceTypesTable } from "@workspace/db";
+import { eq, and, sql, ne, inArray } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 
 const router = Router();
@@ -35,6 +35,19 @@ router.get("/", async (req, res) => {
       : [];
     const storeMap = new Map(stores.map((s) => [s.id, s.name]));
 
+    const accountIds = accounts.map((a) => a.id);
+    const allowedRows = accountIds.length
+      ? await db.query.adminAllowedServiceTypesTable.findMany({
+          where: inArray(adminAllowedServiceTypesTable.accountId, accountIds),
+        })
+      : [];
+    const allowedMap = new Map<number, number[]>();
+    for (const row of allowedRows) {
+      const arr = allowedMap.get(row.accountId) ?? [];
+      arr.push(row.serviceTypeId);
+      allowedMap.set(row.accountId, arr);
+    }
+
     res.json(
       accounts.map((a) => ({
         id: a.id,
@@ -44,6 +57,7 @@ router.get("/", async (req, res) => {
         storeId: a.storeId,
         storeName: a.storeId ? (storeMap.get(a.storeId) ?? null) : null,
         serviceTypeId: a.serviceTypeId,
+        allowedServiceTypeIds: allowedMap.get(a.id) ?? [],
         createdAt: a.createdAt,
       }))
     );
@@ -97,7 +111,7 @@ router.post("/", async (req, res) => {
       storeName = store?.name ?? null;
     }
 
-    res.status(201).json({ ...account, storeName });
+    res.status(201).json({ ...account, storeName, allowedServiceTypeIds: [] });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Server xatosi" });
@@ -149,7 +163,11 @@ router.put("/:id", async (req, res) => {
       storeName = store?.name ?? null;
     }
 
-    res.json({ ...account, storeName });
+    const allowedRows = await db.query.adminAllowedServiceTypesTable.findMany({
+      where: eq(adminAllowedServiceTypesTable.accountId, id),
+    });
+
+    res.json({ ...account, storeName, allowedServiceTypeIds: allowedRows.map((r) => r.serviceTypeId) });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Server xatosi" });
@@ -164,11 +182,55 @@ router.delete("/:id", async (req, res) => {
       return;
     }
     const id = parseInt(req.params.id);
-    // Nullify order references to allow deletion (name fields are preserved)
     await db.update(ordersTable).set({ createdById: sql`NULL` }).where(eq(ordersTable.createdById, id));
     await db.update(ordersTable).set({ acceptedById: sql`NULL` }).where(eq(ordersTable.acceptedById, id));
     await db.delete(accountsTable).where(eq(accountsTable.id, id));
     res.json({ success: true, message: "O'chirildi" });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server xatosi" });
+  }
+});
+
+// GET /accounts/:id/service-types — get allowed service types for an admin
+router.get("/:id/service-types", async (req, res) => {
+  try {
+    const payload = await authenticateToken(req.headers.authorization);
+    if (!payload || (payload.role !== "sudo" && payload.role !== "superadmin")) {
+      res.status(403).json({ error: "Ruxsat yo'q" });
+      return;
+    }
+    const id = parseInt(req.params.id);
+    const rows = await db.query.adminAllowedServiceTypesTable.findMany({
+      where: eq(adminAllowedServiceTypesTable.accountId, id),
+    });
+    res.json(rows.map((r) => r.serviceTypeId));
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server xatosi" });
+  }
+});
+
+// PUT /accounts/:id/service-types — replace all allowed service types for an admin
+router.put("/:id/service-types", async (req, res) => {
+  try {
+    const payload = await authenticateToken(req.headers.authorization);
+    if (!payload || (payload.role !== "sudo" && payload.role !== "superadmin")) {
+      res.status(403).json({ error: "Ruxsat yo'q" });
+      return;
+    }
+    const id = parseInt(req.params.id);
+    const { serviceTypeIds } = req.body as { serviceTypeIds: number[] };
+
+    await db.delete(adminAllowedServiceTypesTable).where(eq(adminAllowedServiceTypesTable.accountId, id));
+
+    if (serviceTypeIds && serviceTypeIds.length > 0) {
+      await db.insert(adminAllowedServiceTypesTable).values(
+        serviceTypeIds.map((stid) => ({ accountId: id, serviceTypeId: stid }))
+      );
+    }
+
+    res.json({ success: true, allowedServiceTypeIds: serviceTypeIds ?? [] });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Server xatosi" });
