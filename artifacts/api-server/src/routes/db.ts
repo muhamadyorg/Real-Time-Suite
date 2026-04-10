@@ -18,6 +18,7 @@ const TABLES_ORDERED = [
   "stores",
   "service_types",
   "accounts",
+  "admin_allowed_service_types",
   "clients",
   "products",
   "orders",
