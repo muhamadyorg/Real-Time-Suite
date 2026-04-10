@@ -24,7 +24,6 @@ import { Switch } from "@/components/ui/switch";
 import { QRCodeSVG } from "qrcode.react";
 import { useMyPermissions } from "@/hooks/useMyPermissions";
 import { useBTPrinterContext } from "@/hooks/useBTPrinter";
-import { QrScannerModal } from "@/components/QrScannerModal";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   new: { label: "Yangi", color: "text-blue-600 bg-blue-50 border border-blue-200" },
@@ -996,16 +995,31 @@ export default function WorkerDashboard() {
         isPending={updateStatus.isPending}
       />
 
-      {/* QR skaner — olib ketildi tasdiqlash */}
-      <QrScannerModal
-        open={!!qrDeliverOrder}
-        order={qrDeliverOrder}
-        onClose={() => setQrDeliverOrder(null)}
-        onConfirmed={() => {
-          if (qrDeliverOrder) doDeliver(qrDeliverOrder.id);
-          setQrDeliverOrder(null);
-        }}
-      />
+      {/* Olib ketildi — tasdiqlash */}
+      <Dialog open={!!qrDeliverOrder} onOpenChange={(v) => { if (!v) setQrDeliverOrder(null); }}>
+        <DialogContent className="w-full max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-purple-600">
+              <Truck className="w-5 h-5" />
+              Olib ketildi
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-mono font-bold">{qrDeliverOrder?.orderId}</span> zakazini olib ketildi deb belgilaysizmi?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setQrDeliverOrder(null)}>Bekor</Button>
+            <Button
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+              disabled={updateStatus.isPending}
+              onClick={() => { if (qrDeliverOrder) { doDeliver(qrDeliverOrder.id); setQrDeliverOrder(null); } }}
+            >
+              {updateStatus.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Tasdiqlayman
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Chiqish miqdori — TAYYOR bosilganda */}
       <Dialog open={!!readyQtyOrder} onOpenChange={(v) => { if (!v) setReadyQtyOrder(null); }}>
