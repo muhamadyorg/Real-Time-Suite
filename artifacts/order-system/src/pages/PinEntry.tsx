@@ -89,9 +89,6 @@ export default function PinEntry() {
 
       {/* Store name badge */}
       <div className="z-10 flex flex-col items-center mb-8">
-        <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-lg mb-4">
-          <img src="/icon-192.png" alt="Logo" className="w-full h-full object-cover" />
-        </div>
         <div className="flex items-center gap-2 text-primary font-semibold mb-4 bg-primary/10 px-5 py-2 rounded-full border border-primary/20 shadow-sm">
           <Store className="w-4 h-4" />
           {storeName}

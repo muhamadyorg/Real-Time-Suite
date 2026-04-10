@@ -67,8 +67,8 @@ export default function StoreLogin() {
         <div className="bg-card border border-border/60 rounded-b-2xl shadow-2xl p-8">
           {/* Logo & title */}
           <div className="text-center mb-8">
-            <div className="mx-auto w-20 h-20 rounded-2xl overflow-hidden mb-4 shadow-lg">
-              <img src="/icon-192.png" alt="Logo" className="w-full h-full object-cover" />
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center mb-4 shadow-lg">
+              <Building2 className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">Buyurtma tizimi</h1>
             <p className="text-muted-foreground text-sm mt-1.5">Do'kon loginini kiriting</p>
