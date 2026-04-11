@@ -60,18 +60,24 @@ io.on("connection", async (socket) => {
 // Seed SUDO account on startup
 seedSudo().catch((err) => logger.error({ err }, "Seed error"));
 
-// Init store bots (per-store tokens)
-initStoreBots().catch((err) => logger.error({ err }, "Store bots init error"));
+// Init store bots first, then global bot (to detect token conflicts)
+const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+initStoreBots()
+  .then(() => {
+    if (telegramToken) {
+      initTelegramBot(telegramToken);
+    }
+  })
+  .catch((err) => {
+    logger.error({ err }, "Store bots init error");
+    if (telegramToken) {
+      initTelegramBot(telegramToken);
+    }
+  });
 
 // Check all bots on startup and every 5 minutes
-setTimeout(() => checkAllBots().catch(() => {}), 5000);
+setTimeout(() => checkAllBots().catch(() => {}), 8000);
 setInterval(() => checkAllBots().catch(() => {}), 5 * 60 * 1000);
-
-// Init global Telegram bot if token provided
-const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
-if (telegramToken) {
-  initTelegramBot(telegramToken);
-}
 
 function startServer(listenPort: number) {
   httpServer.listen(listenPort, (err?: Error) => {

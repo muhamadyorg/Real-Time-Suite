@@ -4,17 +4,57 @@ import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
 let globalBot: TelegramBot | null = null;
+let globalBotToken: string | null = null;
 const storeBots = new Map<number, TelegramBot>();
+const storeTokens = new Map<number, string>(); // storeId -> token
+
+// Bot status uchun
+export function getBotStatus(): { global: boolean; stores: { storeId: number; active: boolean }[] } {
+  return {
+    global: globalBot !== null,
+    stores: Array.from(storeTokens.keys()).map((storeId) => ({
+      storeId,
+      active: storeBots.has(storeId),
+    })),
+  };
+}
 
 // Shared registration handler — global bot yoki har bir do'kon boti uchun
-function setupBotHandlers(bot: TelegramBot, storeId: number | null, storeName = "Do'kon") {
+function setupBotHandlers(bot: TelegramBot, storeId: number | null, storeName = "Do'kon", token: string) {
+  let restartTimer: NodeJS.Timeout | null = null;
+  let restartDelay = 5000;
+
+  const scheduleRestart = () => {
+    if (restartTimer) return;
+    restartTimer = setTimeout(async () => {
+      restartTimer = null;
+      try {
+        await bot.startPolling({ restart: false });
+        restartDelay = 5000;
+        logger.info({ storeId }, "Bot polling qayta boshlandi");
+      } catch (e: any) {
+        logger.warn({ storeId, err: e?.message }, "Bot polling qayta boshlash muvaffaqiyatsiz");
+        restartDelay = Math.min(restartDelay * 2, 120_000);
+        scheduleRestart();
+      }
+    }, restartDelay);
+  };
+
   bot.on("polling_error", (err: any) => {
-    const is401 = err?.code === "ETELEGRAM" && (err?.response?.statusCode === 401 || err?.message?.includes("401"));
+    const statusCode = err?.response?.statusCode ?? 0;
+    const msg = err?.message ?? "";
+    const is401 = err?.code === "ETELEGRAM" && (statusCode === 401 || msg.includes("401"));
+
     if (is401) {
       logger.warn({ storeId }, "Telegram bot token yaroqsiz (401) — polling to'xtatildi");
       try { bot.stopPolling(); } catch (_) {}
-      if (storeId !== null) storeBots.delete(storeId);
-      else globalBot = null;
+      if (storeId !== null) { storeBots.delete(storeId); storeTokens.delete(storeId); }
+      else { globalBot = null; globalBotToken = null; }
+      if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
+    } else {
+      logger.warn({ storeId, statusCode, err: msg }, "Bot polling xatosi — qayta uriniladi");
+      restartDelay = Math.min(restartDelay * 2, 120_000);
+      scheduleRestart();
     }
   });
 
@@ -140,7 +180,7 @@ function setupBotHandlers(bot: TelegramBot, storeId: number | null, storeName = 
         }
       }
     } catch (err) {
-      logger.error({ err }, "Telegram bot error");
+      logger.error({ err }, "Telegram bot message handler error");
     }
   });
 }
@@ -149,15 +189,20 @@ export async function initStoreBots() {
   try {
     const stores = await db.query.storesTable.findMany();
     for (const store of stores) {
-      if (store.telegramBotToken) {
-        try {
-          const bot = new TelegramBot(store.telegramBotToken, { polling: true });
-          storeBots.set(store.id, bot);
-          setupBotHandlers(bot, store.id, store.name);
-          logger.info({ storeId: store.id, storeName: store.name }, "Store bot initialized");
-        } catch (_e) {
-          logger.warn({ storeId: store.id }, "Failed to init store bot");
-        }
+      if (!store.telegramBotToken) continue;
+      // Skip if already initialized with same token
+      if (storeTokens.get(store.id) === store.telegramBotToken && storeBots.has(store.id)) continue;
+      // Stop existing bot if token changed
+      const existing = storeBots.get(store.id);
+      if (existing) { try { existing.stopPolling(); } catch (_) {} storeBots.delete(store.id); }
+      try {
+        const bot = new TelegramBot(store.telegramBotToken, { polling: true });
+        storeBots.set(store.id, bot);
+        storeTokens.set(store.id, store.telegramBotToken);
+        setupBotHandlers(bot, store.id, store.name, store.telegramBotToken);
+        logger.info({ storeId: store.id, storeName: store.name }, "Store bot initialized");
+      } catch (_e) {
+        logger.warn({ storeId: store.id }, "Failed to init store bot");
       }
     }
   } catch (err) {
@@ -189,18 +234,26 @@ export function updateStoreBot(storeId: number, token: string | null) {
   if (existing) {
     try { existing.stopPolling(); } catch (_) {}
     storeBots.delete(storeId);
+    storeTokens.delete(storeId);
   }
   if (token) {
+    // Don't start if this token is the same as global bot token
+    if (globalBotToken && token === globalBotToken) {
+      logger.warn({ storeId }, "Store bot token is same as global bot — skipping duplicate polling");
+      return;
+    }
     try {
       db.query.storesTable.findFirst({ where: (t, { eq: e }) => e(t.id, storeId) }).then((store) => {
         const bot = new TelegramBot(token, { polling: true });
         storeBots.set(storeId, bot);
-        setupBotHandlers(bot, storeId, store?.name ?? "Do'kon");
+        storeTokens.set(storeId, token);
+        setupBotHandlers(bot, storeId, store?.name ?? "Do'kon", token);
         logger.info({ storeId }, "Store bot updated");
       }).catch(() => {
         const bot = new TelegramBot(token, { polling: true });
         storeBots.set(storeId, bot);
-        setupBotHandlers(bot, storeId, "Do'kon");
+        storeTokens.set(storeId, token);
+        setupBotHandlers(bot, storeId, "Do'kon", token);
         logger.info({ storeId }, "Store bot updated");
       });
     } catch (_e) {
@@ -237,10 +290,19 @@ export function sendTelegramNotification(chatId: string, message: string, storeI
 }
 
 export function initTelegramBot(token: string) {
+  // Don't start global bot if same token is already used by a store bot
+  for (const [sid, storeToken] of storeTokens.entries()) {
+    if (storeToken === token) {
+      logger.warn({ storeId: sid }, "Global bot token same as store bot token — skipping global bot to avoid conflict");
+      return;
+    }
+  }
   try {
+    if (globalBot) { try { globalBot.stopPolling(); } catch (_) {} }
     globalBot = new TelegramBot(token, { polling: true });
-    setupBotHandlers(globalBot, null, "Do'kon");
-    logger.info("Telegram bot initialized successfully");
+    globalBotToken = token;
+    setupBotHandlers(globalBot, null, "Do'kon", token);
+    logger.info("Global Telegram bot initialized successfully");
   } catch (err) {
     logger.error({ err }, "Failed to initialize Telegram bot");
   }
