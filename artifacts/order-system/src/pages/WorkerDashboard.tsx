@@ -570,6 +570,8 @@ export default function WorkerDashboard() {
   const { data: readyOrders, isLoading: isReadyLoading } = useGetOrders({ status: "ready", storeId: storeId! }, { query: { queryKey: [...getGetOrdersQueryKey({ status: "ready", storeId: storeId! }), accountId], refetchInterval: 60000, enabled: !!storeId && !!accountId } });
   const { data: historyOrders, isLoading: isHistoryLoading } = useGetOrders({ storeId: storeId!, date }, { query: { queryKey: [...getGetOrdersQueryKey({ storeId: storeId!, date }), accountId], refetchInterval: 60000, enabled: !!storeId && !!accountId } });
 
+  const { data: serviceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId], enabled: !!storeId } });
+
   const updateStatus = useUpdateOrderStatus();
 
   const handleAccept = (order: any) => {
