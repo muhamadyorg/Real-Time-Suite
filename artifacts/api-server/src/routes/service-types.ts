@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, serviceTypesTable, storesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, or, isNull } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 
 const router = Router();
@@ -13,7 +13,10 @@ router.get("/", async (req, res) => {
       types = await db.query.serviceTypesTable.findMany({ orderBy: (t, { asc }) => asc(t.createdAt) });
     } else if (payload && payload.storeId) {
       types = await db.query.serviceTypesTable.findMany({
-        where: eq(serviceTypesTable.storeId, payload.storeId),
+        where: or(
+          eq(serviceTypesTable.storeId, payload.storeId),
+          isNull(serviceTypesTable.storeId)
+        ),
         orderBy: (t, { asc }) => asc(t.createdAt),
       });
     } else {
