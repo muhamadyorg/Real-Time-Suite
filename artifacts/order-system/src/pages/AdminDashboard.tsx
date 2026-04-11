@@ -890,15 +890,25 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
     const filtered = filterBySearch(orders);
     if (!filtered.length) return <div className="text-center p-12 text-muted-foreground bg-muted/20 rounded-xl mt-4 border border-dashed">Malumot topilmadi</div>;
 
-    // Queue lock: oldest order (smallest createdAt) stays open, rest are locked
-    const oldestId = queueLocked && filtered.length > 0
-      ? filtered.reduce((a: any, b: any) => new Date(a.createdAt) <= new Date(b.createdAt) ? a : b).id
-      : null;
+    // Queue lock: per service type — oldest order of each service type stays open
+    const oldestIdSet = new Set<number>();
+    if (queueLocked && filtered.length > 0) {
+      const byType: Record<string, any[]> = {};
+      for (const o of filtered) {
+        const key = String(o.serviceTypeId ?? o.serviceTypeName ?? "");
+        if (!byType[key]) byType[key] = [];
+        byType[key].push(o);
+      }
+      for (const group of Object.values(byType)) {
+        const oldest = group.reduce((a: any, b: any) => new Date(a.createdAt) <= new Date(b.createdAt) ? a : b);
+        oldestIdSet.add(oldest.id);
+      }
+    }
     
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
         {filtered.map(order => {
-          const isLocked = queueLocked && order.id !== oldestId;
+          const isLocked = queueLocked && !oldestIdSet.has(order.id);
           return (
             <OrderCard key={order.id} order={order} search={search} onOrderClick={isLocked ? undefined : () => setSelectedOrder(order)} canPrint={isLocked ? false : canPrint} canMarkDelivered={isLocked ? false : canMarkDelivered} onDeliver={isLocked ? undefined : () => setDeliveringOrder(order)} locked={isLocked} />
           );
