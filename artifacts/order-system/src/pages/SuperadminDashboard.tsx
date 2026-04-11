@@ -842,9 +842,10 @@ function TelegramView({ token }: { token: string | null }) {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await r.json();
+      if (data.error) throw new Error(data.error);
       setStatus(data);
-    } catch {
-      toast({ title: "Xato", description: "Status yuklashda xato", variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: "Xato", description: e?.message ?? "Status yuklashda xato", variant: "destructive" });
     } finally {
       setLoading(false);
     }

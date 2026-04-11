@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, clientsTable } from "@workspace/db";
+import { db, clientsTable, ordersTable } from "@workspace/db";
 import { eq, ilike, or } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 import { sendTelegramNotification } from "./telegram";
@@ -107,6 +107,8 @@ router.delete("/:id", async (req, res) => {
       return;
     }
     const id = parseInt(req.params.id);
+    // Avval orderlar client referensini null qilamiz (FK constraint)
+    await db.update(ordersTable).set({ clientId: null }).where(eq(ordersTable.clientId, id));
     await db.delete(clientsTable).where(eq(clientsTable.id, id));
     res.json({ success: true, message: "O'chirildi" });
   } catch (err) {

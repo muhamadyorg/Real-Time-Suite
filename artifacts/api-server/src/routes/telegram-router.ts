@@ -11,7 +11,7 @@ const router = Router();
 router.get("/status", async (req, res) => {
   try {
     const payload = await authenticateToken(req.headers.authorization);
-    if (!payload || (payload.role !== "sudo" && payload.role !== "admin")) {
+    if (!payload || !["sudo", "superadmin", "admin"].includes(payload.role)) {
       res.status(401).json({ error: "Ruxsat yo'q" });
       return;
     }
