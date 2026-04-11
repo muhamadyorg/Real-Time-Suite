@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil, Users, Save } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil, Users, Save, Send, RefreshCw, Bot } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import AdminDashboard from "./AdminDashboard";
 import ProductsView from "@/components/ProductsView";
@@ -824,6 +824,177 @@ function AdminPermissionsView({ token, storeId }: { token: string | null; storeI
   );
 }
 
+function TelegramView({ token }: { token: string | null }) {
+  const { toast } = useToast();
+  const [status, setStatus] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [testChatId, setTestChatId] = useState("");
+  const [testToken, setTestToken] = useState("");
+  const [testMsg, setTestMsg] = useState("✅ Test xabari muvaffaqiyatli!");
+  const [testLoading, setTestLoading] = useState(false);
+
+  const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+
+  const loadStatus = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`${apiBase}/api/telegram/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await r.json();
+      setStatus(data);
+    } catch {
+      toast({ title: "Xato", description: "Status yuklashda xato", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadStatus(); }, []);
+
+  const sendTest = async () => {
+    if (!testChatId) { toast({ title: "Chat ID kiritilmagan", variant: "destructive" }); return; }
+    setTestLoading(true);
+    try {
+      const r = await fetch(`${apiBase}/api/telegram/test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ chatId: testChatId, token: testToken || undefined, message: testMsg }),
+      });
+      const data = await r.json();
+      if (data.success) {
+        toast({ title: "✅ Yuborildi!", description: `Chat ID ${testChatId} ga xabar ketdi` });
+      } else {
+        toast({ title: "❌ Xato", description: data.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Server xatosi", variant: "destructive" });
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 max-w-2xl mx-auto">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Bot className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-bold">Telegram botlar holati</h2>
+        </div>
+        <Button size="sm" variant="outline" onClick={loadStatus} disabled={loading}>
+          <RefreshCw className={`w-4 h-4 mr-1 ${loading ? "animate-spin" : ""}`} />
+          Yangilash
+        </Button>
+      </div>
+
+      {loading && !status && (
+        <div className="flex justify-center p-8"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+      )}
+
+      {status && (
+        <div className="space-y-4">
+          {/* Global bot */}
+          <Card>
+            <CardContent className="p-4 space-y-2">
+              <div className="flex items-center gap-2 font-semibold text-sm">
+                <Bot className="w-4 h-4" />
+                Global bot (TELEGRAM_BOT_TOKEN)
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="text-muted-foreground">Token bor:</div>
+                <div>{status.globalBot.hasToken ? <span className="text-green-600 font-medium">✅ Ha</span> : <span className="text-red-500">❌ Yo'q</span>}</div>
+                <div className="text-muted-foreground">Token to'g'ri:</div>
+                <div>{status.globalBot.tokenValid ? <span className="text-green-600 font-medium">✅ Ha</span> : <span className="text-red-500">❌ Xato/Yo'q</span>}</div>
+                <div className="text-muted-foreground">Polling:</div>
+                <div>{status.globalBot.isPolling ? <span className="text-green-600 font-medium">✅ Ishlayapti</span> : <span className="text-yellow-600">⏸ To'xtatilgan</span>}</div>
+                {status.globalBot.botUsername && (
+                  <>
+                    <div className="text-muted-foreground">Bot username:</div>
+                    <div className="font-mono text-xs">@{status.globalBot.botUsername}</div>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Store bots */}
+          {status.stores?.map((s: any) => (
+            <Card key={s.storeId}>
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-center gap-2 font-semibold text-sm">
+                  <Bot className="w-4 h-4" />
+                  {s.storeName} (Do'kon #{s.storeId})
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="text-muted-foreground">Bot token:</div>
+                  <div>{s.hasToken ? <span className="text-green-600 font-medium">✅ Bor</span> : <span className="text-red-500">❌ Yo'q</span>}</div>
+                  <div className="text-muted-foreground">Chat ID:</div>
+                  <div>{s.hasChatId ? <span className="text-green-600 font-medium">✅ {s.chatId}</span> : <span className="text-red-500">❌ Yo'q</span>}</div>
+                  <div className="text-muted-foreground">Token to'g'ri:</div>
+                  <div>{s.hasToken ? (s.tokenValid ? <span className="text-green-600 font-medium">✅ Ha</span> : <span className="text-red-500">❌ Xato/Yaroqsiz</span>) : <span className="text-muted-foreground">—</span>}</div>
+                  <div className="text-muted-foreground">Polling:</div>
+                  <div>{s.isPolling ? <span className="text-green-600 font-medium">✅ Ishlayapti</span> : <span className="text-yellow-600">⏸ To'xtatilgan</span>}</div>
+                  {s.botUsername && (
+                    <>
+                      <div className="text-muted-foreground">Bot username:</div>
+                      <div className="font-mono text-xs">@{s.botUsername}</div>
+                    </>
+                  )}
+                </div>
+                {s.hasToken && !s.tokenValid && (
+                  <div className="text-xs text-red-500 bg-red-50 dark:bg-red-950 rounded p-2 mt-1">
+                    ⚠️ Token yaroqsiz — Sudo panelidagi do'kon sozlamalarida yangi token kiriting
+                  </div>
+                )}
+                {!s.hasChatId && (
+                  <div className="text-xs text-yellow-600 bg-yellow-50 dark:bg-yellow-950 rounded p-2 mt-1">
+                    ⚠️ Chat ID yo'q — Zakaz xabarlari yuborilmaydi. Sudo panelidagi do'kon sozlamalarida Chat ID kiriting
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Test xabar */}
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center gap-2 font-semibold text-sm">
+            <Send className="w-4 h-4" />
+            Test xabar yuborish
+          </div>
+          <p className="text-xs text-muted-foreground">Chat ID va token kiriting, test xabar yuboring</p>
+          <div className="space-y-2">
+            <Label className="text-xs">Chat ID <span className="text-red-500">*</span></Label>
+            <Input placeholder="123456789 yoki -1001234567890" value={testChatId} onChange={e => setTestChatId(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Bot Token (bo'sh qolsa global token ishlatiladi)</Label>
+            <Input placeholder="1234567890:AAF..." value={testToken} onChange={e => setTestToken(e.target.value)} className="font-mono text-xs" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Xabar matni</Label>
+            <Input value={testMsg} onChange={e => setTestMsg(e.target.value)} />
+          </div>
+          <Button onClick={sendTest} disabled={testLoading} className="w-full">
+            {testLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+            Xabar yuborish
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="text-xs text-muted-foreground space-y-1 bg-muted/30 rounded p-3">
+        <p className="font-medium">Qanday sozlash kerak (VPS uchun):</p>
+        <p>1. Telegram'da @BotFather dan yangi bot token oling</p>
+        <p>2. @userinfobot ga yozing — Chat ID ni bilib oling</p>
+        <p>3. Sudo panelidagi do'kon sozlamalarida token va Chat ID saqlang</p>
+        <p>4. VPS'da: <code className="bg-muted px-1 rounded">pm2 restart zakaz-api</code> buyrug'ini bajaring</p>
+      </div>
+    </div>
+  );
+}
+
 export default function SuperadminDashboard() {
   const { accountName, storeId, token } = useAuth();
   
@@ -846,6 +1017,9 @@ export default function SuperadminDashboard() {
             <TabsTrigger value="clients"  className="text-xs sm:text-sm px-3 shrink-0">Mijozlar</TabsTrigger>
             <TabsTrigger value="printer"  className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
               <Bluetooth className="w-3 h-3 hidden sm:block" />Printer
+            </TabsTrigger>
+            <TabsTrigger value="telegram" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
+              <Bot className="w-3 h-3 hidden sm:block" />Telegram
             </TabsTrigger>
             <TabsTrigger value="settings" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
               <ShieldCheck className="w-3 h-3" />Ruxsatlar
@@ -879,6 +1053,10 @@ export default function SuperadminDashboard() {
 
         <TabsContent value="printer" className="p-5 focus-visible:outline-none">
           <BluetoothPrinterPanel />
+        </TabsContent>
+
+        <TabsContent value="telegram" className="p-5 focus-visible:outline-none">
+          <TelegramView token={token} />
         </TabsContent>
 
         <TabsContent value="settings" className="p-5 focus-visible:outline-none">
