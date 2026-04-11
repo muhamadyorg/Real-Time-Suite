@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
 import { PrintLabelButton } from "@/components/PrintLabelButton";
-import { Search, Loader2, X, QrCode, Clock, CheckCircle, Package, Hash, User, Phone, FileText, Building2, Plus, Users, Lock, Split, Truck, Check } from "lucide-react";
+import { Search, Loader2, X, QrCode, Clock, CheckCircle, Package, Hash, User, Phone, FileText, Building2, Plus, Users, Lock, Split, Truck, Check, CreditCard, Wallet } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -543,6 +543,14 @@ export default function WorkerDashboard() {
   const [readyQtyOrder, setReadyQtyOrder] = useState<any>(null);
   const [readyQtyInput, setReadyQtyInput] = useState("");
   const [readyQtyUnit, setReadyQtyUnit] = useState("");
+  // Payment modal
+  const [paymentOrder, setPaymentOrder] = useState<any>(null);
+  const [paymentMode, setPaymentMode] = useState<"naqd" | "qarz">("naqd");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [clientBalance, setClientBalance] = useState<number>(0);
+  const [clientInfo, setClientInfo] = useState<any>(null);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [clientBalanceLoading, setClientBalanceLoading] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { has: hasPerm } = useMyPermissions(token, role);
@@ -601,7 +609,34 @@ export default function WorkerDashboard() {
     );
   };
 
-  const handleReady = (order: any) => {
+  const handleReady = async (order: any) => {
+    // Nasiya tekshiruvi: service type nasiyaEnabled va clientId bo'lsa payment modal
+    const st = serviceTypes?.find((s: any) => s.id === order.serviceTypeId);
+    const needsPayment = st?.nasiyaEnabled && order.clientId;
+
+    if (needsPayment) {
+      // Client balance yuklash
+      setClientBalanceLoading(true);
+      try {
+        const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+        const r = await fetch(`${apiBase}/api/client-accounts/${order.clientId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await r.json();
+        setClientBalance(data.balance ?? 0);
+        setClientInfo(data.client ?? null);
+      } catch {
+        setClientBalance(0);
+        setClientInfo(null);
+      } finally {
+        setClientBalanceLoading(false);
+      }
+      setPaymentMode("naqd");
+      setPaymentAmount("");
+      setPaymentOrder(order);
+      return;
+    }
+
     if (!order.requireOutputQty) {
       // no output qty needed — mark ready directly
       updateStatus.mutate(
@@ -619,6 +654,55 @@ export default function WorkerDashboard() {
     setReadyQtyInput("");
     setReadyQtyUnit(order.unit ?? "");
     setReadyQtyOrder(order);
+  };
+
+  const doPaymentAndReady = async () => {
+    if (!paymentOrder || !storeId) return;
+    const amount = parseFloat(paymentAmount);
+    if (paymentMode === "qarz" && (!paymentAmount || isNaN(amount) || amount <= 0)) {
+      toast({ title: "Summa kiriting", variant: "destructive" }); return;
+    }
+    setPaymentLoading(true);
+    try {
+      const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+      // Tranzaksiya faqat qarz bo'lsa yaratiladi
+      if (paymentMode === "qarz" && paymentOrder.clientId) {
+        const txRes = await fetch(`${apiBase}/api/client-accounts/${paymentOrder.clientId}/transaction`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            type: "qarz",
+            amount,
+            serviceTypeId: paymentOrder.serviceTypeId,
+            orderId: paymentOrder.id,
+            orderCode: paymentOrder.orderId,
+            note: `Zakaz ${paymentOrder.orderId} uchun nasiya`,
+            storeId,
+          }),
+        });
+        if (!txRes.ok) {
+          const err = await txRes.json();
+          toast({ title: "Tranzaksiya xatosi", description: err.error, variant: "destructive" });
+          setPaymentLoading(false); return;
+        }
+      }
+      // Zakaz tayyor deb belgilash
+      updateStatus.mutate(
+        { id: paymentOrder.id, data: { status: "ready" } as any },
+        {
+          onSuccess: () => {
+            toast({ title: paymentMode === "qarz" ? "✅ Tayyor! Qarz yozildi" : "✅ Tayyor! Naqd to'landi" });
+            queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
+            setPaymentOrder(null);
+          },
+          onError: () => toast({ title: "Xatolik", variant: "destructive" })
+        }
+      );
+    } catch {
+      toast({ title: "Tarmoq xatosi", variant: "destructive" });
+    } finally {
+      setPaymentLoading(false);
+    }
   };
 
   const doReady = () => {
@@ -1071,6 +1155,123 @@ export default function WorkerDashboard() {
             >
               {updateStatus.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               Tayyor!
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Nasiya Payment Modal — TAYYOR bosilganda */}
+      <Dialog open={!!paymentOrder} onOpenChange={(v) => { if (!v) setPaymentOrder(null); }}>
+        <DialogContent className="w-full max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-primary" />
+              To'lov holati
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-mono font-bold">{paymentOrder?.orderId}</span> — to'lov turini tanlang
+            </DialogDescription>
+          </DialogHeader>
+
+          {clientBalanceLoading ? (
+            <div className="flex justify-center py-6"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+          ) : (
+            <div className="space-y-4 py-1">
+              {/* Mijoz ma'lumotlari + balans */}
+              {clientInfo && (
+                <div className="bg-muted/40 rounded-xl p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <User className="w-4 h-4 text-muted-foreground" />
+                    {clientInfo.firstName} {clientInfo.lastName}
+                  </div>
+                  {clientInfo.phone && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Phone className="w-3.5 h-3.5" />
+                      {clientInfo.phone}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between pt-1 border-t border-border/50">
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Wallet className="w-3.5 h-3.5" />Hozirgi holat:
+                    </span>
+                    <span className={`text-base font-bold tabular-nums ${clientBalance < 0 ? "text-red-500" : clientBalance > 0 ? "text-green-600" : "text-muted-foreground"}`}>
+                      {clientBalance < 0 ? `−${Math.abs(clientBalance).toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm qarz` : clientBalance > 0 ? `+${clientBalance.toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm haq` : "0"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Naqd / Qarz tanlash */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setPaymentMode("naqd")}
+                  className={`h-14 rounded-xl font-bold text-base border-2 transition-all ${paymentMode === "naqd" ? "bg-green-500 text-white border-green-500 shadow" : "border-border bg-card text-muted-foreground hover:border-green-400"}`}
+                >
+                  💵 NAQD
+                </button>
+                <button
+                  onClick={() => setPaymentMode("qarz")}
+                  className={`h-14 rounded-xl font-bold text-base border-2 transition-all ${paymentMode === "qarz" ? "bg-red-500 text-white border-red-500 shadow" : "border-border bg-card text-muted-foreground hover:border-red-400"}`}
+                >
+                  📋 QARZ
+                </button>
+              </div>
+
+              {/* Qarz bo'lsa — summa kiriting */}
+              {paymentMode === "qarz" && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Qarz summasi (so'm)</Label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="0"
+                    min="0"
+                    step="0.1"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    autoFocus
+                    className="text-xl font-bold h-14 text-center"
+                  />
+                  {paymentAmount && !isNaN(parseFloat(paymentAmount)) && parseFloat(paymentAmount) > 0 && (
+                    <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-3 text-sm space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Hozir:</span>
+                        <span className={`font-semibold ${clientBalance < 0 ? "text-red-500" : "text-green-600"}`}>
+                          {clientBalance >= 0 ? "+" : ""}{clientBalance.toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Qo'shiladi:</span>
+                        <span className="text-red-500 font-semibold">−{parseFloat(paymentAmount).toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm</span>
+                      </div>
+                      <div className="flex justify-between border-t border-border/50 pt-1">
+                        <span className="font-medium">Yangi holat:</span>
+                        <span className={`font-bold tabular-nums ${(clientBalance - parseFloat(paymentAmount)) < 0 ? "text-red-500" : "text-green-600"}`}>
+                          {(clientBalance - parseFloat(paymentAmount)) >= 0 ? "+" : ""}{(clientBalance - parseFloat(paymentAmount)).toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {paymentMode === "naqd" && (
+                <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-3 text-sm text-green-700 dark:text-green-400 text-center">
+                  Naqd to'lov — hisobga ta'sir etmaydi
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPaymentOrder(null)} disabled={paymentLoading}>Bekor</Button>
+            <Button
+              className={`gap-2 ${paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : "bg-green-600 hover:bg-green-700"} text-white`}
+              disabled={paymentLoading || clientBalanceLoading || (paymentMode === "qarz" && (!paymentAmount || parseFloat(paymentAmount) <= 0))}
+              onClick={doPaymentAndReady}
+            >
+              {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              {paymentMode === "qarz" ? "Qarz yozib Tayyor!" : "Tayyor!"}
             </Button>
           </DialogFooter>
         </DialogContent>

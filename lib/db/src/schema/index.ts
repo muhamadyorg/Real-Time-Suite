@@ -6,3 +6,4 @@ export * from "./clients";
 export * from "./orders";
 export * from "./products";
 export * from "./permissions";
+export * from "./client_accounts";

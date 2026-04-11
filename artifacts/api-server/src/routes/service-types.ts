@@ -51,8 +51,12 @@ router.put("/:id", async (req, res) => {
       return;
     }
     const id = parseInt(req.params.id);
-    const { name, storeId } = req.body as { name: string; storeId?: number };
-    const [type] = await db.update(serviceTypesTable).set({ name, storeId: storeId ?? null }).where(eq(serviceTypesTable.id, id)).returning();
+    const { name, storeId, nasiyaEnabled } = req.body as { name?: string; storeId?: number; nasiyaEnabled?: boolean };
+    const updates: Record<string, any> = {};
+    if (name !== undefined) updates.name = name;
+    if (storeId !== undefined) updates.storeId = storeId ?? null;
+    if (nasiyaEnabled !== undefined) updates.nasiyaEnabled = nasiyaEnabled;
+    const [type] = await db.update(serviceTypesTable).set(updates).where(eq(serviceTypesTable.id, id)).returning();
     res.json(type);
   } catch (err) {
     req.log.error(err);
