@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { QRCodeSVG } from "qrcode.react";
 import { useMyPermissions } from "@/hooks/useMyPermissions";
 import { useBTPrinterContext } from "@/hooks/useBTPrinter";
+import { buildReceiptHtml, type ReceiptTransaction } from "@/lib/printUtils";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   new: { label: "Yangi", color: "text-blue-600 bg-blue-50 border border-blue-200" },
@@ -668,6 +669,7 @@ export default function WorkerDashboard() {
     try {
       const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
       // Tranzaksiya: naqd yoki qarz bo'lsa ham yaratiladi (naqd balansga ta'sir etmaydi)
+      let txInfo: ReceiptTransaction | undefined;
       if (paymentOrder.clientId && (paymentMode === "qarz" || paymentMode === "naqd")) {
         const txAmount = paymentMode === "naqd"
           ? (paymentAmount && !isNaN(parseFloat(paymentAmount)) && parseFloat(paymentAmount) > 0 ? parseFloat(paymentAmount) : 0)
@@ -692,8 +694,16 @@ export default function WorkerDashboard() {
           toast({ title: "Tranzaksiya xatosi", description: err.error, variant: "destructive" });
           setPaymentLoading(false); return;
         }
+        const txResult = await txRes.json();
+        txInfo = {
+          type: paymentMode,
+          amount: txAmount,
+          balanceAfter: txResult.balance ?? 0,
+          createdAt: txResult.transaction?.createdAt ?? new Date().toISOString(),
+        };
       }
       // Zakaz tayyor deb belgilash
+      const orderSnap = { ...paymentOrder };
       updateStatus.mutate(
         { id: paymentOrder.id, data: { status: "ready" } as any },
         {
@@ -701,6 +711,17 @@ export default function WorkerDashboard() {
             toast({ title: paymentMode === "qarz" ? "✅ Tayyor! Qarz yozildi" : "✅ Tayyor! Naqd to'landi" });
             queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
             setPaymentOrder(null);
+            // Chek avtomatik bosish
+            if (txInfo) {
+              try {
+                const html = buildReceiptHtml(orderSnap, txInfo);
+                const w = window.open("", "_blank", "width=300,height=700");
+                if (w) {
+                  w.document.open(); w.document.write(html); w.document.close();
+                  w.onload = () => { w.focus(); w.print(); w.onafterprint = () => w.close(); };
+                }
+              } catch { /* printer muammosi — e'tiborsiz qoldirilsin */ }
+            }
           },
           onError: () => toast({ title: "Xatolik", variant: "destructive" })
         }

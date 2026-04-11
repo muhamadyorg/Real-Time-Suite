@@ -17,15 +17,29 @@ function toTashkentParts(iso: string): { dateStr: string; timeStr: string } {
   return { dateStr, timeStr };
 }
 
+function formatSum(val: string | number | null | undefined): string {
+  const n = parseFloat(String(val ?? 0));
+  if (isNaN(n)) return "0";
+  return n.toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+export interface ReceiptTransaction {
+  type: "naqd" | "qarz" | "tolov" | "tuzatish";
+  amount: number;
+  balanceAfter: number;
+  createdAt?: string;
+  note?: string;
+}
+
 // ─── RawBT chek HTML ────────────────────────────────────────────────────────
-export function buildReceiptHtml(order: any): string {
+export function buildReceiptHtml(order: any, tx?: ReceiptTransaction): string {
   const { dateStr, timeStr } = order.createdAt
     ? toTashkentParts(order.createdAt)
     : { dateStr: "--.--.----", timeStr: "--:--" };
 
   const ordNum = String(order.id).padStart(5, "0");
   const qrData = (typeof window !== "undefined" ? window.location.origin : "") + `/order/${order.id}`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(qrData)}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(qrData)}`;
 
   const qty = [order.quantity, order.unit].filter(Boolean).join(" ");
 
@@ -38,6 +52,61 @@ export function buildReceiptHtml(order: any): string {
       ? `<tr><td style="padding:1px 0">Mijoz</td><td style="text-align:right;padding:1px 0">${escHtml(order.clientName)}</td></tr>`
       : "",
   ].join("");
+
+  // ─── To'lov qismi (faqat tranzaksiya bo'lsa) ──────────────────────────
+  let txSection = "";
+  if (tx) {
+    const txDate = tx.createdAt
+      ? toTashkentParts(tx.createdAt)
+      : { dateStr, timeStr };
+
+    const typeLabelMap: Record<string, string> = {
+      naqd: "NAQD",
+      qarz: "QARZ (Nasiya)",
+      tolov: "TO'LOV",
+      tuzatish: "TUZATISH",
+    };
+    const typeLabel = typeLabelMap[tx.type] ?? tx.type.toUpperCase();
+
+    const balanceNum = tx.balanceAfter;
+    const balanceColor = balanceNum < 0 ? "#c00" : balanceNum > 0 ? "#060" : "#555";
+    const balanceSign = balanceNum > 0 ? "+" : "";
+    const balanceLabel = balanceNum < 0
+      ? `${formatSum(Math.abs(balanceNum))} so'm QARZ`
+      : balanceNum > 0
+      ? `+${formatSum(balanceNum)} so'm HAQ`
+      : "0 — Toza hisob";
+
+    const amountRow = tx.amount > 0
+      ? `<tr>
+          <td style="padding:1px 0">Summa</td>
+          <td style="text-align:right;padding:1px 0;font-weight:bold">${formatSum(tx.amount)} so'm</td>
+        </tr>`
+      : "";
+
+    txSection = `
+<div class="hr"></div>
+<div class="b" style="font-size:11px;margin-bottom:2px">&#128179; TO'LOV MA'LUMOTI</div>
+<table>
+  <tr>
+    <td style="padding:1px 0">Turi</td>
+    <td style="text-align:right;padding:1px 0;font-weight:bold">${escHtml(typeLabel)}</td>
+  </tr>
+  ${amountRow}
+  <tr>
+    <td style="padding:1px 0">Sana</td>
+    <td style="text-align:right;padding:1px 0">${txDate.dateStr} ${txDate.timeStr}</td>
+  </tr>
+  <tr>
+    <td style="padding:1px 0">Do'kon</td>
+    <td style="text-align:right;padding:1px 0">${escHtml(order.storeName || "")}</td>
+  </tr>
+</table>
+<div class="hr"></div>
+<div style="text-align:center;font-size:11px;font-weight:bold;margin:3px 0">
+  Jami balans: <span style="color:${balanceColor}">${balanceSign}${balanceLabel}</span>
+</div>`;
+  }
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
@@ -55,9 +124,10 @@ export function buildReceiptHtml(order: any): string {
 <div class="c" style="font-size:10px">Sana: ${dateStr} &nbsp; Vaqt: ${timeStr}</div>
 <div class="hr"></div>
 <table>${rows}</table>
+${txSection}
 <div class="hr"></div>
 <div class="c" style="margin-top:4px">
-  <img src="${qrUrl}" style="width:70px;height:70px;display:block;margin:0 auto">
+  <img src="${qrUrl}" style="width:80px;height:80px;display:block;margin:0 auto">
 </div>
 <div class="c" style="font-size:9px">/order/${order.id}</div>
 <div class="c b" style="margin-top:5px">Rahmat!</div>
@@ -65,11 +135,10 @@ export function buildReceiptHtml(order: any): string {
 </body></html>`;
 }
 
-// ─── Brauzer orqali chop etish (sozlash talab qilmaydi) ──────────────────────
-export function printReceiptRawBT(order: any): void {
-  const html = buildReceiptHtml(order);
+// ─── Brauzer orqali chop etish ──────────────────────────────────────────────
+export function printReceiptRawBT(order: any, tx?: ReceiptTransaction): void {
+  const html = buildReceiptHtml(order, tx);
 
-  // Yangi oynada faqat chek HTML ochiladi — asosiy sahifa chop etilmaydi
   const printWindow = window.open("", "_blank", "width=300,height=600");
   if (!printWindow) return;
 
@@ -77,11 +146,9 @@ export function printReceiptRawBT(order: any): void {
   printWindow.document.write(html);
   printWindow.document.close();
 
-  // Hujjat yuklangandan so'ng print dialog
   printWindow.onload = () => {
     printWindow.focus();
     printWindow.print();
-    // Chop bo'lgach oyna yopiladi
     printWindow.onafterprint = () => printWindow.close();
   };
 }
