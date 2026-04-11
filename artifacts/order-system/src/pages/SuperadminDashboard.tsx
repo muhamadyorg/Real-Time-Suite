@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Header } from "@/components/Header";
 import { 
   useGetAccounts, useCreateAccount, useDeleteAccount, useUpdateAccount,
-  useGetServiceTypes, useCreateServiceType, useDeleteServiceType, useUpdateServiceType,
+  useGetServiceTypes, useCreateServiceType, useDeleteServiceType,
   useGetClients, useApproveClient, useRejectClient,
   getGetAccountsQueryKey, getGetServiceTypesQueryKey, getGetClientsQueryKey
 } from "@workspace/api-client-react";
@@ -285,15 +285,16 @@ function AccountsView({ storeId }: { storeId: number }) {
 }
 
 function ServiceTypesView({ storeId }: { storeId: number }) {
+  const { token } = useAuth();
   const { data, isLoading } = useGetServiceTypes({ query: { queryKey: getGetServiceTypesQueryKey() } });
   const createService = useCreateServiceType();
   const deleteService = useDeleteServiceType();
-  const updateService = useUpdateServiceType();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [nasiyaPending, setNasiyaPending] = useState<number | null>(null);
 
   const storeServices = data?.filter(s => s.storeId === storeId || s.storeId === null);
 
@@ -319,14 +320,27 @@ function ServiceTypesView({ storeId }: { storeId: number }) {
     }
   };
 
-  const handleNasiyaToggle = (id: number, current: boolean) => {
-    updateService.mutate({ id, data: { nasiyaEnabled: !current } as any }, {
-      onSuccess: () => {
-        toast({ title: !current ? "Nasiya yoqildi ✅" : "Nasiya o'chirildi" });
-        queryClient.invalidateQueries({ queryKey: getGetServiceTypesQueryKey() });
-      },
-      onError: () => toast({ title: "Xatolik", variant: "destructive" }),
-    });
+  const handleNasiyaToggle = async (id: number, current: boolean) => {
+    setNasiyaPending(id);
+    try {
+      const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+      const r = await fetch(`${apiBase}/api/service-types/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ nasiyaEnabled: !current }),
+      });
+      if (!r.ok) throw new Error("Server xatosi");
+      const updated = await r.json();
+      // Cache'ni manual yangilash — sahifani qayta yuklamasdan
+      queryClient.setQueryData(getGetServiceTypesQueryKey(), (old: any[]) =>
+        old ? old.map(s => s.id === id ? { ...s, nasiyaEnabled: !current, ...updated } : s) : old
+      );
+      toast({ title: !current ? "Nasiya yoqildi ✅" : "Nasiya o'chirildi" });
+    } catch {
+      toast({ title: "Xatolik yuz berdi", variant: "destructive" });
+    } finally {
+      setNasiyaPending(null);
+    }
   };
 
   return (
@@ -369,7 +383,7 @@ function ServiceTypesView({ storeId }: { storeId: number }) {
                   <Switch
                     checked={!!s.nasiyaEnabled}
                     onCheckedChange={() => handleNasiyaToggle(s.id, !!s.nasiyaEnabled)}
-                    disabled={updateService.isPending}
+                    disabled={nasiyaPending === s.id}
                     title="Nasiya rejimi"
                   />
                 </TableCell>
