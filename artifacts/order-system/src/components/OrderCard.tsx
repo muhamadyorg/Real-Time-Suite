@@ -2,7 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { PrintLabelButton } from "./PrintLabelButton";
-import { Truck, PackageCheck } from "lucide-react";
+import { Truck, PackageCheck, Lock } from "lucide-react";
 
 export function HighlightText({ text, search }: { text?: string | null, search?: string }) {
   if (!text) return null;
@@ -29,6 +29,7 @@ interface OrderCardProps {
   canMarkDelivered?: boolean;
   onDeliver?: () => void;
   onOutputQty?: () => void;
+  locked?: boolean;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -38,9 +39,16 @@ const STATUS_COLORS: Record<string, string> = {
   topshirildi: "border-l-purple-500",
 };
 
-export function OrderCard({ order, search = "", actionButton, onOrderClick, canPrint, canMarkDelivered, onDeliver, onOutputQty }: OrderCardProps) {
+export function OrderCard({ order, search = "", actionButton, onOrderClick, canPrint, canMarkDelivered, onDeliver, onOutputQty, locked }: OrderCardProps) {
   return (
-    <Card className={`shadow-sm border-l-4 transition-all hover:shadow-md ${STATUS_COLORS[order.status] ?? "border-l-primary"}`}>
+    <div className="relative">
+      {locked && (
+        <div className="absolute inset-0 z-10 rounded-xl bg-background/70 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 pointer-events-auto cursor-not-allowed select-none border border-border/40 shadow-sm">
+          <Lock className="w-8 h-8 text-muted-foreground/60" />
+          <span className="text-xs font-medium text-muted-foreground/60">Navbatda</span>
+        </div>
+      )}
+    <Card className={`shadow-sm border-l-4 transition-all hover:shadow-md ${STATUS_COLORS[order.status] ?? "border-l-primary"} ${locked ? "opacity-40" : ""}`}>
       <CardContent className="p-4 flex flex-col gap-3">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2 flex-wrap">
@@ -151,5 +159,6 @@ export function OrderCard({ order, search = "", actionButton, onOrderClick, canP
         )}
       </CardContent>
     </Card>
+    </div>
   );
 }

@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
 import { PrintLabelButton } from "@/components/PrintLabelButton";
-import { Search, Loader2, Plus, Users, X, QrCode, Hash, Clock, Package, CheckCircle, Phone, User, FileText, Building2, Pencil, Trash2, Truck } from "lucide-react";
+import { Search, Loader2, Plus, Users, X, QrCode, Hash, Clock, Package, CheckCircle, Phone, User, FileText, Building2, Pencil, Trash2, Truck, Lock, LockOpen } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -764,6 +764,16 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
   const [activeTab, setActiveTab] = useState("new");
   const [search, setSearch] = useState("");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [queueLocked, setQueueLocked] = useState(() => {
+    try { return localStorage.getItem(`queue_lock_${storeId}`) === "1"; } catch { return false; }
+  });
+  const toggleQueueLock = () => {
+    setQueueLocked(v => {
+      const next = !v;
+      try { localStorage.setItem(`queue_lock_${storeId}`, next ? "1" : "0"); } catch {}
+      return next;
+    });
+  };
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [editingOrder, setEditingOrder] = useState<any>(null);
@@ -879,12 +889,20 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
     if (isLoading) return <div className="flex justify-center p-12"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
     const filtered = filterBySearch(orders);
     if (!filtered.length) return <div className="text-center p-12 text-muted-foreground bg-muted/20 rounded-xl mt-4 border border-dashed">Malumot topilmadi</div>;
+
+    // Queue lock: oldest order (smallest createdAt) stays open, rest are locked
+    const oldestId = queueLocked && filtered.length > 0
+      ? filtered.reduce((a: any, b: any) => new Date(a.createdAt) <= new Date(b.createdAt) ? a : b).id
+      : null;
     
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
-        {filtered.map(order => (
-          <OrderCard key={order.id} order={order} search={search} onOrderClick={() => setSelectedOrder(order)} canPrint={canPrint} canMarkDelivered={canMarkDelivered} onDeliver={() => setDeliveringOrder(order)} />
-        ))}
+        {filtered.map(order => {
+          const isLocked = queueLocked && order.id !== oldestId;
+          return (
+            <OrderCard key={order.id} order={order} search={search} onOrderClick={isLocked ? undefined : () => setSelectedOrder(order)} canPrint={isLocked ? false : canPrint} canMarkDelivered={isLocked ? false : canMarkDelivered} onDeliver={isLocked ? undefined : () => setDeliveringOrder(order)} locked={isLocked} />
+          );
+        })}
       </div>
     );
   };
@@ -941,6 +959,19 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
               onChange={(e) => setDate(e.target.value)} 
               className="w-[140px] h-11 bg-card shadow-sm border-muted-foreground/20 text-sm"
             />
+          )}
+          {!isViewer && (
+            <button
+              onClick={toggleQueueLock}
+              title={queueLocked ? "Navbat rejimi yoqilgan — o'chirish" : "Navbat rejimi — yoqish"}
+              className={`h-11 w-11 rounded-lg border flex items-center justify-center shrink-0 transition-all ${
+                queueLocked
+                  ? "bg-amber-500 border-amber-600 text-white shadow-md"
+                  : "bg-card border-muted-foreground/20 text-muted-foreground hover:border-amber-400 hover:text-amber-500"
+              }`}
+            >
+              {queueLocked ? <Lock className="w-5 h-5" /> : <LockOpen className="w-5 h-5" />}
+            </button>
           )}
         </div>
       </div>
