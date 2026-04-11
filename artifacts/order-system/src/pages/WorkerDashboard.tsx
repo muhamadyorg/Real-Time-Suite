@@ -786,14 +786,33 @@ export default function WorkerDashboard() {
     if (isLoading) return <div className="flex justify-center p-12"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
     const filtered = filterBySearch(orders);
     if (!filtered.length) return <div className="text-center p-12 text-muted-foreground bg-muted/20 rounded-xl mt-4 border border-dashed">Malumot topilmadi</div>;
+
+    // Queue lock always on for workers — per service type oldest is open
+    const openIds = new Set<number>();
+    if (filtered.length > 0) {
+      const byType: Record<string, any[]> = {};
+      for (const o of filtered) {
+        const key = String(o.serviceTypeId ?? o.serviceTypeName ?? "");
+        if (!byType[key]) byType[key] = [];
+        byType[key].push(o);
+      }
+      for (const group of Object.values(byType)) {
+        const oldest = group.reduce((a: any, b: any) => new Date(a.createdAt) <= new Date(b.createdAt) ? a : b);
+        openIds.add(oldest.id);
+      }
+    }
+
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
-        {filtered.map(order => (
+        {filtered.map(order => {
+          const isQueueLocked = !openIds.has(order.id);
+          return (
           <OrderCard
             key={order.id}
             order={order}
             search={search}
-            onOrderClick={() => setSelectedOrder(order)}
+            locked={isQueueLocked}
+            onOrderClick={isQueueLocked ? undefined : () => setSelectedOrder(order)}
             actionButton={
               justAcceptedIds.has(order.id) ? (
                 <div className="flex-1 h-12 flex items-center justify-center gap-2 rounded-md bg-green-500 text-white font-bold text-base animate-pulse">
@@ -823,7 +842,8 @@ export default function WorkerDashboard() {
               )
             }
           />
-        ))}
+          );
+        })}
       </div>
     );
   };
