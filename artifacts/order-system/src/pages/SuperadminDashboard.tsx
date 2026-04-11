@@ -296,7 +296,7 @@ function ServiceTypesView({ storeId }: { storeId: number }) {
   const [name, setName] = useState("");
   const [nasiyaPending, setNasiyaPending] = useState<number | null>(null);
 
-  const storeServices = data?.filter(s => s.storeId === storeId || s.storeId === null);
+  const storeServices = data;
 
   const handleCreate = () => {
     createService.mutate({ data: { name, storeId } }, {
