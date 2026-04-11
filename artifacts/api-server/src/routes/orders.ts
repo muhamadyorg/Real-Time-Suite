@@ -326,11 +326,15 @@ router.post("/", async (req, res) => {
 
     const store = await db.query.storesTable.findFirst({ where: (t, { eq: e }) => e(t.id, storeId) });
 
-    // Check if there are existing "new" orders in this store → if yes, lock this new order
-    const existingNewOrders = await db.query.ordersTable.findMany({
-      where: and(eq(ordersTable.storeId, storeId), eq(ordersTable.status, "new")),
+    // Check if there are existing "new" orders for this service type → if yes, lock this new order
+    const existingNewOrdersForType = await db.query.ordersTable.findMany({
+      where: and(
+        eq(ordersTable.storeId, storeId),
+        eq(ordersTable.status, "new"),
+        eq(ordersTable.serviceTypeId, serviceTypeId)
+      ),
     });
-    const lockPin = existingNewOrders.length > 0 ? generateLockPin() : null;
+    const lockPin = existingNewOrdersForType.length > 0 ? generateLockPin() : null;
 
     const [order] = await db
       .insert(ordersTable)
@@ -500,12 +504,13 @@ router.patch("/:id/status", async (req, res) => {
       .where(eq(ordersTable.id, id))
       .returning();
 
-    // When order is accepted, unlock the next oldest "new" order in the same store
+    // When order is accepted, unlock the next oldest "new" order of the SAME service type
     if (status === "accepted") {
       const nextOrder = await db.query.ordersTable.findFirst({
         where: and(
           eq(ordersTable.storeId, updatedOrder.storeId),
-          eq(ordersTable.status, "new")
+          eq(ordersTable.status, "new"),
+          eq(ordersTable.serviceTypeId, updatedOrder.serviceTypeId)
         ),
         orderBy: [asc(ordersTable.createdAt)],
       });
@@ -649,10 +654,14 @@ router.delete("/:id", async (req, res) => {
     }
     await db.delete(ordersTable).where(eq(ordersTable.id, id));
 
-    // If deleted order had no lockPin (was the unlocked oldest), unlock the next one
+    // If deleted order had no lockPin (was the unlocked oldest), unlock the next one of the SAME service type
     if (!order.lockPin && order.status === "new") {
       const nextOrder = await db.query.ordersTable.findFirst({
-        where: and(eq(ordersTable.storeId, order.storeId), eq(ordersTable.status, "new")),
+        where: and(
+          eq(ordersTable.storeId, order.storeId),
+          eq(ordersTable.status, "new"),
+          eq(ordersTable.serviceTypeId, order.serviceTypeId)
+        ),
         orderBy: [asc(ordersTable.createdAt)],
       });
       if (nextOrder && nextOrder.lockPin) {
@@ -764,11 +773,12 @@ router.post("/:id/split", async (req, res) => {
     io?.to(`store:${order.storeId}`).emit("order:updated", mapOrder(acceptedOrder, true));
     io?.to(`store:${order.storeId}`).emit("order:created", mapOrder(remainingOrder, true));
 
-    // Auto-unlock the next oldest "new" order (excluding the new split remainder)
+    // Auto-unlock the next oldest "new" order of SAME service type (excluding the new split remainder)
     const nextToUnlock = await db.query.ordersTable.findFirst({
       where: and(
         eq(ordersTable.storeId, order.storeId),
         eq(ordersTable.status, "new"),
+        eq(ordersTable.serviceTypeId, order.serviceTypeId),
         ne(ordersTable.id, remainingOrder.id)
       ),
       orderBy: [asc(ordersTable.createdAt)],

@@ -7,7 +7,32 @@ import { setSettingsSocketIO } from "./routes/settings";
 import { verifyToken } from "./lib/auth";
 import { initTelegramBot, initStoreBots, checkAllBots } from "./routes/telegram";
 import { seedSudo } from "./lib/seed";
-import { db, storesTable } from "@workspace/db";
+import { db, storesTable, ordersTable } from "@workspace/db";
+import { eq, asc } from "drizzle-orm";
+
+// Fix lockPins per service type for existing "new" orders on startup
+async function fixLockPinsByServiceType() {
+  try {
+    const newOrders = await db.query.ordersTable.findMany({
+      where: eq(ordersTable.status, "new"),
+      orderBy: [asc(ordersTable.createdAt)],
+    });
+    const seenTypes = new Set<string>();
+    for (const order of newOrders) {
+      const key = `${order.storeId}-${order.serviceTypeId}`;
+      if (!seenTypes.has(key)) {
+        seenTypes.add(key);
+        // This is the oldest of its service type — should have no lockPin
+        if (order.lockPin) {
+          await db.update(ordersTable).set({ lockPin: null }).where(eq(ordersTable.id, order.id));
+          logger.info({ orderId: order.orderId, serviceTypeId: order.serviceTypeId }, "Fixed: oldest order unlocked per service type");
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "fixLockPinsByServiceType error (non-fatal)");
+  }
+}
 
 const rawPort = process.env["PORT"];
 
@@ -59,6 +84,9 @@ io.on("connection", async (socket) => {
 
 // Seed SUDO account on startup
 seedSudo().catch((err) => logger.error({ err }, "Seed error"));
+
+// Fix lockPins per service type for existing orders
+fixLockPinsByServiceType().catch((err) => logger.warn({ err }, "lockPin fix error"));
 
 // Init store bots first, then global bot (to detect token conflicts)
 const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
