@@ -170,8 +170,10 @@ router.post("/:clientId/transaction", async (req, res) => {
       note?: string;
     };
 
-    if (!amount || amount <= 0) { res.status(400).json({ error: "Summa noto'g'ri" }); return; }
     if (!type) { res.status(400).json({ error: "Tranzaksiya turi ko'rsatilmagan" }); return; }
+    // Naqd uchun amount 0 bo'lishi mumkin (summa kiritilmasa)
+    if (type !== "naqd" && (!amount || amount <= 0)) { res.status(400).json({ error: "Summa noto'g'ri" }); return; }
+    const safeAmount = amount ?? 0;
 
     // Ruxsatlar
     const isSuperUser = ["sudo", "superadmin", "admin"].includes(payload.role);
@@ -209,12 +211,12 @@ router.post("/:clientId/transaction", async (req, res) => {
     // "naqd" → balancega ta'sir qilmaydi, faqat qayd etish uchun
     let delta = 0;
     if (type === "qarz") {
-      delta = -Math.abs(amount); // qarz: balance kamayadi
+      delta = -Math.abs(safeAmount); // qarz: balance kamayadi
     } else if (type === "tolov") {
-      delta = sign === "minus" ? -Math.abs(amount) : Math.abs(amount); // to'lov: odatda balance ortadi
+      delta = sign === "minus" ? -Math.abs(safeAmount) : Math.abs(safeAmount); // to'lov: odatda balance ortadi
     } else if (type === "tuzatish") {
       if (!isSuperUser) { res.status(403).json({ error: "Tuzatish faqat admin uchun" }); return; }
-      delta = sign === "minus" ? -Math.abs(amount) : Math.abs(amount);
+      delta = sign === "minus" ? -Math.abs(safeAmount) : Math.abs(safeAmount);
     } else if (type === "naqd") {
       delta = 0; // Naqd — balancega ta'sir qilmaydi
     }
@@ -235,7 +237,7 @@ router.post("/:clientId/transaction", async (req, res) => {
       orderId: orderId ?? null,
       orderCode: orderCode ?? null,
       type,
-      amount: amount.toFixed(2),
+      amount: safeAmount.toFixed(2),
       balanceBefore: balanceBefore.toFixed(2),
       balanceAfter: balanceAfter.toFixed(2),
       note: note ?? null,

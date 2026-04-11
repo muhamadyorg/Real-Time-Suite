@@ -667,18 +667,23 @@ export default function WorkerDashboard() {
     setPaymentLoading(true);
     try {
       const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
-      // Tranzaksiya faqat qarz bo'lsa yaratiladi
-      if (paymentMode === "qarz" && paymentOrder.clientId) {
+      // Tranzaksiya: naqd yoki qarz bo'lsa ham yaratiladi (naqd balansga ta'sir etmaydi)
+      if (paymentOrder.clientId && (paymentMode === "qarz" || paymentMode === "naqd")) {
+        const txAmount = paymentMode === "naqd"
+          ? (paymentAmount && !isNaN(parseFloat(paymentAmount)) && parseFloat(paymentAmount) > 0 ? parseFloat(paymentAmount) : 0)
+          : amount;
         const txRes = await fetch(`${apiBase}/api/client-accounts/${paymentOrder.clientId}/transaction`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({
-            type: "qarz",
-            amount,
+            type: paymentMode,
+            amount: txAmount,
             serviceTypeId: paymentOrder.serviceTypeId,
             orderId: paymentOrder.id,
             orderCode: paymentOrder.orderId,
-            note: `Zakaz ${paymentOrder.orderId} uchun nasiya`,
+            note: paymentMode === "naqd"
+              ? `Zakaz ${paymentOrder.orderId} — naqd to'lov`
+              : `Zakaz ${paymentOrder.orderId} uchun nasiya`,
             storeId,
           }),
         });
@@ -1258,8 +1263,21 @@ export default function WorkerDashboard() {
               )}
 
               {paymentMode === "naqd" && (
-                <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-3 text-sm text-green-700 dark:text-green-400 text-center">
-                  Naqd to'lov — hisobga ta'sir etmaydi
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Naqd summasi (so'm) <span className="text-muted-foreground font-normal">— ixtiyoriy</span></Label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="0"
+                    min="0"
+                    step="0.1"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    className="text-xl font-bold h-14 text-center"
+                  />
+                  <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-2 text-xs text-green-700 dark:text-green-400 text-center">
+                    💵 Naqd to'lov — mijoz hisobiga ta'sir etmaydi, faqat tarixga yoziladi
+                  </div>
                 </div>
               )}
             </div>
