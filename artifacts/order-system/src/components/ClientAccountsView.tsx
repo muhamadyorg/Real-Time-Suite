@@ -230,7 +230,7 @@ export function ClientAccountsView({ storeId, token, role = "admin" }: ClientAcc
                 </button>
               )}
             </div>
-            {payType === "tuzatish" && (
+            {(payType === "tuzatish" || payType === "tolov") && (
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => setPaySign("plus")}
                   className={`h-10 rounded-lg font-bold border-2 ${paySign === "plus" ? "bg-green-500 text-white border-green-500" : "border-border"}`}>
