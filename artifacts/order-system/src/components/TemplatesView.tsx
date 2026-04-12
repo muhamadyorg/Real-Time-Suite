@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Loader2, Plus, Trash2, Pencil, ChevronUp, ChevronDown, Eye, EyeOff, FileText, X, Check, Tag } from "lucide-react";
 
-export const ALL_FIELD_KEYS: { key: string; defaultLabel: string; alwaysVisible?: boolean; noOptions?: boolean }[] = [
+const ALL_FIELD_KEYS: { key: string; defaultLabel: string; alwaysVisible?: boolean; noOptions?: boolean }[] = [
   { key: "serviceType",      defaultLabel: "Xizmat turi",            alwaysVisible: true, noOptions: true },
   { key: "client",           defaultLabel: "Mijoz",                   noOptions: true },
   { key: "product",          defaultLabel: "Mahsulot",               noOptions: true },
@@ -18,7 +18,7 @@ export const ALL_FIELD_KEYS: { key: string; defaultLabel: string; alwaysVisible?
   { key: "requireOutputQty", defaultLabel: "Chiqish miqdori belgisi", noOptions: true },
 ];
 
-export interface TemplateField {
+interface TemplateField {
   key: string;
   label: string;
   required: boolean;
@@ -26,7 +26,7 @@ export interface TemplateField {
   options?: string[];
 }
 
-export const DEFAULT_FIELDS: TemplateField[] = ALL_FIELD_KEYS.map(f => ({
+const DEFAULT_FIELDS: TemplateField[] = ALL_FIELD_KEYS.map(f => ({
   key: f.key,
   label: f.defaultLabel,
   required: f.key === "serviceType" || f.key === "quantity",
