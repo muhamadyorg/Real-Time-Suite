@@ -647,11 +647,13 @@ function ClientAccountsView({ storeId, token }: { storeId: number; token: string
 
 function ClientsView() {
   const [status, setStatus] = useState<any>("pending");
-  const { data, isLoading } = useGetClients({ status }, { query: { queryKey: getGetClientsQueryKey({ status }) } });
+  const { data, isLoading, refetch } = useGetClients({ status }, { query: { queryKey: getGetClientsQueryKey({ status }) } });
   const approve = useApproveClient();
   const reject = useRejectClient();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { token } = useAuth();
+  const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
   const handleApprove = (id: number) => {
     approve.mutate({ id }, {
@@ -669,6 +671,21 @@ function ClientsView() {
         queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey({ status }) });
       }
     });
+  };
+
+  const handleDelete = async (id: number, name: string) => {
+    if (!confirm(`"${name}" mijozni o'chirasizmi? Bu amalni qaytarib bo'lmaydi.`)) return;
+    try {
+      const r = await fetch(`${apiBase}/api/clients/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) throw new Error();
+      toast({ title: "Mijoz o'chirildi" });
+      queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey({ status }) });
+    } catch {
+      toast({ title: "Xatolik yuz berdi", variant: "destructive" });
+    }
   };
 
   return (
@@ -703,16 +720,22 @@ function ClientsView() {
                 <TableCell className="font-medium">{c.firstName} {c.lastName}</TableCell>
                 <TableCell className="text-sm">{c.phone}</TableCell>
                 <TableCell className="text-right">
-                  {c.status === "pending" && (
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="icon" className="text-green-600 hover:bg-green-50" onClick={() => handleApprove(c.id)}>
-                        <CheckCircle className="w-4 h-4" />
-                      </Button>
-                      <Button variant="outline" size="icon" className="text-red-600 hover:bg-red-50" onClick={() => handleReject(c.id)}>
-                        <XCircle className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex justify-end gap-2">
+                    {c.status === "pending" && (
+                      <>
+                        <Button variant="outline" size="icon" className="text-green-600 hover:bg-green-50" onClick={() => handleApprove(c.id)}>
+                          <CheckCircle className="w-4 h-4" />
+                        </Button>
+                        <Button variant="outline" size="icon" className="text-red-600 hover:bg-red-50" onClick={() => handleReject(c.id)}>
+                          <XCircle className="w-4 h-4" />
+                        </Button>
+                      </>
+                    )}
+                    <Button variant="outline" size="icon" className="text-destructive hover:bg-destructive/10 hover:border-destructive"
+                      onClick={() => handleDelete(c.id, `${c.firstName} ${c.lastName}`)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

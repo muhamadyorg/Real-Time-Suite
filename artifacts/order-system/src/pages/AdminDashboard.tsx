@@ -1091,7 +1091,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         {activeTab === "ready" && renderList(readyOrders, isReadyLoading)}
         {activeTab === "history" && renderList(
           historySubTab === "delivered"
-            ? (deliveredOrders ?? [])
+            ? (deliveredOrders ?? []).slice().sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             : (readyOrders ?? []).slice().sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
           historySubTab === "delivered" ? isDeliveredLoading : isReadyLoading
         )}
