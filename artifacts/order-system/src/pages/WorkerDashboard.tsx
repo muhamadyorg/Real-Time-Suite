@@ -254,14 +254,14 @@ function ClientSearch({ clients, value, onChange }: { clients: any[], value: str
 }
 
 const DEFAULT_ORDER_FIELDS = [
-  { key: "serviceType",      label: "Xizmat turi",            required: true,  visible: true },
-  { key: "client",           label: "Mijoz",                  required: false, visible: true },
-  { key: "product",          label: "Mahsulot",               required: false, visible: true },
-  { key: "quantity",         label: "Soni",                   required: true,  visible: true },
-  { key: "unit",             label: "O'lchov birligi",        required: false, visible: true },
-  { key: "shelf",            label: "Joylashuv (qolib)",      required: false, visible: true },
-  { key: "notes",            label: "Izoh",                   required: false, visible: true },
-  { key: "requireOutputQty", label: "Chiqish miqdori belgisi",required: false, visible: true },
+  { key: "serviceType",      label: "Xizmat turi",            required: true,  visible: true,  options: [] as string[] },
+  { key: "client",           label: "Mijoz",                  required: false, visible: true,  options: [] as string[] },
+  { key: "product",          label: "Mahsulot",               required: false, visible: true,  options: [] as string[] },
+  { key: "quantity",         label: "Soni",                   required: true,  visible: true,  options: [] as string[] },
+  { key: "unit",             label: "O'lchov birligi",        required: false, visible: true,  options: [] as string[] },
+  { key: "shelf",            label: "Joylashuv (qolib)",      required: false, visible: true,  options: [] as string[] },
+  { key: "notes",            label: "Izoh",                   required: false, visible: true,  options: [] as string[] },
+  { key: "requireOutputQty", label: "Chiqish miqdori belgisi",required: false, visible: true,  options: [] as string[] },
 ];
 
 function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }: {
@@ -407,9 +407,11 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
       case "quantity": {
         const unitField = getField("unit");
         const reqQtyField = getField("requireOutputQty");
+        const unitHasOptions = (unitField?.options?.length ?? 0) > 0;
+        const showUnitInline = unitField?.visible && !unitHasOptions;
         return (
           <div key={key} className="space-y-2">
-            <div className={`grid gap-4 ${unitField?.visible ? "grid-cols-2" : "grid-cols-1"}`}>
+            <div className={`grid gap-4 ${showUnitInline ? "grid-cols-2" : "grid-cols-1"}`}>
               <div className="space-y-2">
                 <Label>{label}{req ? " *" : ""}</Label>
                 <div className="flex gap-2">
@@ -424,10 +426,10 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
                   )}
                 </div>
               </div>
-              {unitField?.visible && (
+              {showUnitInline && (
                 <div className="space-y-2">
-                  <Label>{unitField.label}{unitField.required ? " *" : ""}</Label>
-                  <Input placeholder="dona, m2..." value={unit} onChange={e => setUnit(e.target.value)} className="h-12 bg-card" required={unitField.required} />
+                  <Label>{unitField!.label}{unitField!.required ? " *" : ""}</Label>
+                  <Input placeholder="dona, m2..." value={unit} onChange={e => setUnit(e.target.value)} className="h-12 bg-card" required={unitField!.required} />
                 </div>
               )}
             </div>
@@ -441,17 +443,55 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
         );
       }
 
-      case "unit":
+      case "unit": {
+        const uField = getField("unit");
+        const uOpts = uField?.options ?? [];
+        if (!uField?.visible) return null;
+        if (uOpts.length > 0) {
+          return (
+            <div key={key} className="space-y-2">
+              <Label>{label}{req ? " *" : ""}</Label>
+              <div className="flex flex-wrap gap-2">
+                {uOpts.map(opt => (
+                  <button key={opt} type="button" onClick={() => setUnit(unit === opt ? "" : opt)}
+                    className={`px-3 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${unit === opt ? "bg-primary text-primary-foreground border-primary shadow-md scale-105" : "bg-card border-border hover:border-primary/60 hover:bg-muted/50"}`}
+                  >{opt}</button>
+                ))}
+              </div>
+              {unit && <div className="text-xs text-muted-foreground">Tanlangan: <span className="font-semibold text-primary">{unit}</span></div>}
+            </div>
+          );
+        }
+        return null;
+      }
+
       case "requireOutputQty":
         return null;
 
-      case "shelf":
+      case "shelf": {
+        const sOpts = getField("shelf")?.options ?? [];
+        if (sOpts.length > 0) {
+          return (
+            <div key={key} className="space-y-2">
+              <Label>{label}{req ? " *" : ""}</Label>
+              <div className="flex flex-wrap gap-2">
+                {sOpts.map(opt => (
+                  <button key={opt} type="button" onClick={() => setShelf(shelf === opt ? "" : opt)}
+                    className={`px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${shelf === opt ? "bg-primary text-primary-foreground border-primary shadow-md scale-105" : "bg-card border-border hover:border-primary/60 hover:bg-muted/50"}`}
+                  >{opt}</button>
+                ))}
+              </div>
+              {shelf && <div className="text-xs text-muted-foreground">Tanlangan: <span className="font-semibold text-primary">{shelf}</span></div>}
+            </div>
+          );
+        }
         return (
           <div key={key} className="space-y-2">
             <Label>{label}{req ? " *" : ""}</Label>
             <Input placeholder="Masalan: A-12" value={shelf} onChange={e => setShelf(e.target.value)} className="h-12 bg-card font-mono" required={req} />
           </div>
         );
+      }
 
       case "product":
         if (products.length === 0) return null;
@@ -466,7 +506,7 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
                   key={p.id}
                   type="button"
                   onClick={() => setProduct(product === p.name ? "" : p.name)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all ${product === p.name ? "bg-primary text-primary-foreground border-primary shadow-sm" : "bg-card border-muted-foreground/20 hover:border-primary/50 hover:bg-muted/50"}`}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${product === p.name ? "bg-primary text-primary-foreground border-primary shadow-md scale-105" : "bg-card border-border hover:border-primary/60 hover:bg-muted/50"}`}
                 >{p.name}</button>
               ))}
             </div>
@@ -501,13 +541,30 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
           </div>
         );
 
-      case "notes":
+      case "notes": {
+        const nOpts = getField("notes")?.options ?? [];
+        if (nOpts.length > 0) {
+          return (
+            <div key={key} className="space-y-2">
+              <Label>{label}{req ? " *" : ""}</Label>
+              <div className="flex flex-wrap gap-2">
+                {nOpts.map(opt => (
+                  <button key={opt} type="button" onClick={() => setNotes(notes === opt ? "" : opt)}
+                    className={`px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${notes === opt ? "bg-primary text-primary-foreground border-primary shadow-md scale-105" : "bg-card border-border hover:border-primary/60 hover:bg-muted/50"}`}
+                  >{opt}</button>
+                ))}
+              </div>
+              {notes && <div className="text-xs text-muted-foreground">Tanlangan: <span className="font-semibold text-primary">{notes}</span></div>}
+            </div>
+          );
+        }
         return (
           <div key={key} className="space-y-2">
             <Label>{label}{req ? " *" : ""}</Label>
             <Input placeholder="Buyurtma haqida izoh..." value={notes} onChange={e => setNotes(e.target.value)} className="h-12 bg-card" required={req} />
           </div>
         );
+      }
 
       default:
         return null;

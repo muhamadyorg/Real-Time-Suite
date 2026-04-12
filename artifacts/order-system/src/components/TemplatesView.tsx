@@ -1,36 +1,93 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Loader2, Plus, Trash2, Pencil, ChevronUp, ChevronDown, Eye, EyeOff, Star, GripVertical, FileText } from "lucide-react";
+import { Loader2, Plus, Trash2, Pencil, ChevronUp, ChevronDown, Eye, EyeOff, FileText, X, Check, Tag } from "lucide-react";
 
-export const ALL_FIELD_KEYS = [
-  { key: "serviceType",      defaultLabel: "Xizmat turi",          alwaysVisible: true },
-  { key: "client",           defaultLabel: "Mijoz" },
-  { key: "product",          defaultLabel: "Mahsulot" },
-  { key: "quantity",         defaultLabel: "Soni" },
+export const ALL_FIELD_KEYS: { key: string; defaultLabel: string; alwaysVisible?: boolean; noOptions?: boolean }[] = [
+  { key: "serviceType",      defaultLabel: "Xizmat turi",            alwaysVisible: true, noOptions: true },
+  { key: "client",           defaultLabel: "Mijoz",                   noOptions: true },
+  { key: "product",          defaultLabel: "Mahsulot",               noOptions: true },
+  { key: "quantity",         defaultLabel: "Soni",                   noOptions: true },
   { key: "unit",             defaultLabel: "O'lchov birligi" },
   { key: "shelf",            defaultLabel: "Joylashuv (qolib)" },
   { key: "notes",            defaultLabel: "Izoh" },
-  { key: "requireOutputQty", defaultLabel: "Chiqish miqdori belgisi" },
+  { key: "requireOutputQty", defaultLabel: "Chiqish miqdori belgisi", noOptions: true },
 ];
 
-export const DEFAULT_FIELDS = ALL_FIELD_KEYS.map(f => ({
+export interface TemplateField {
+  key: string;
+  label: string;
+  required: boolean;
+  visible: boolean;
+  options?: string[];
+}
+
+export const DEFAULT_FIELDS: TemplateField[] = ALL_FIELD_KEYS.map(f => ({
   key: f.key,
   label: f.defaultLabel,
   required: f.key === "serviceType" || f.key === "quantity",
   visible: true,
+  options: [],
 }));
 
-interface Field { key: string; label: string; required: boolean; visible: boolean; }
-interface Template { id: number; storeId: number; name: string; fields: Field[]; }
-interface ServiceType { id: number; name: string; templateId?: number | null; }
+interface Template { id: number; storeId: number; name: string; fields: TemplateField[]; }
+interface ServiceType { id: number; name: string; storeId?: number | null; templateId?: number | null; }
 
-function FieldEditor({ fields, onChange }: { fields: Field[]; onChange: (f: Field[]) => void }) {
+function OptionsManager({ options, onChange }: { options: string[]; onChange: (o: string[]) => void }) {
+  const [input, setInput] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const add = () => {
+    const v = input.trim();
+    if (!v || options.includes(v)) return;
+    onChange([...options, v]);
+    setInput("");
+    inputRef.current?.focus();
+  };
+  const remove = (i: number) => onChange(options.filter((_, idx) => idx !== i));
+
+  return (
+    <div className="mt-2 space-y-2 pl-4 border-l-2 border-primary/20">
+      <p className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+        <Tag className="w-3 h-3" />Tayyor variantlar (bosib tanlash):
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((opt, i) => (
+          <span key={i} className="flex items-center gap-1 bg-primary/10 text-primary text-xs px-2 py-1 rounded-full font-medium">
+            {opt}
+            <button type="button" onClick={() => remove(i)} className="hover:text-destructive transition-colors">
+              <X className="w-3 h-3" />
+            </button>
+          </span>
+        ))}
+        {options.length === 0 && (
+          <span className="text-xs text-muted-foreground italic">Variant yo'q — oddiy input ko'rsatiladi</span>
+        )}
+      </div>
+      <div className="flex gap-1.5">
+        <Input
+          ref={inputRef}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          placeholder="Variant qo'shish (Enter)..."
+          className="h-7 text-xs"
+        />
+        <Button type="button" size="sm" variant="outline" onClick={add} className="h-7 px-2 shrink-0">
+          <Plus className="w-3 h-3" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function FieldEditor({ fields, onChange }: { fields: TemplateField[]; onChange: (f: TemplateField[]) => void }) {
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+
   const move = (idx: number, dir: -1 | 1) => {
     const arr = [...fields];
     const to = idx + dir;
@@ -38,7 +95,7 @@ function FieldEditor({ fields, onChange }: { fields: Field[]; onChange: (f: Fiel
     [arr[idx], arr[to]] = [arr[to], arr[idx]];
     onChange(arr);
   };
-  const update = (idx: number, patch: Partial<Field>) => {
+  const update = (idx: number, patch: Partial<TemplateField>) => {
     const arr = [...fields];
     arr[idx] = { ...arr[idx], ...patch };
     onChange(arr);
@@ -46,43 +103,70 @@ function FieldEditor({ fields, onChange }: { fields: Field[]; onChange: (f: Fiel
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-muted-foreground mb-3">Maydonlarni tartiblashtiring va sozlang:</p>
+      <p className="text-xs text-muted-foreground mb-3">
+        Maydonlarni tartiblashtiring. Variantlar qo'shilsa — chip tugmachalar sifatida ko'rsatiladi.
+      </p>
       {fields.map((f, i) => {
         const meta = ALL_FIELD_KEYS.find(m => m.key === f.key);
+        const isExpanded = expandedKey === f.key;
+        const hasOptions = !meta?.noOptions;
+        const optCount = f.options?.length ?? 0;
+
         return (
-          <div key={f.key} className={`flex items-center gap-2 p-3 rounded-xl border bg-card transition-all ${!f.visible ? "opacity-50" : ""}`}>
-            <div className="flex flex-col gap-0.5 shrink-0">
-              <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-20 p-0.5">
-                <ChevronUp className="w-3.5 h-3.5" />
-              </button>
-              <button type="button" onClick={() => move(i, 1)} disabled={i === fields.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-20 p-0.5">
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <GripVertical className="w-4 h-4 text-muted-foreground/40 shrink-0" />
-            <Input
-              value={f.label}
-              onChange={e => update(i, { label: e.target.value })}
-              className="h-8 text-sm flex-1 min-w-0"
-              placeholder="Maydon nomi..."
-            />
-            <div className="flex items-center gap-1 shrink-0">
+          <div key={f.key} className={`rounded-xl border bg-card transition-all ${!f.visible ? "opacity-50" : ""}`}>
+            <div className="flex items-center gap-2 p-3">
+              <div className="flex flex-col gap-0.5 shrink-0">
+                <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-20 p-0.5">
+                  <ChevronUp className="w-3.5 h-3.5" />
+                </button>
+                <button type="button" onClick={() => move(i, 1)} disabled={i === fields.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-20 p-0.5">
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <Input
+                value={f.label}
+                onChange={e => update(i, { label: e.target.value })}
+                className="h-8 text-sm flex-1 min-w-0"
+                placeholder="Maydon nomi..."
+              />
+              {hasOptions && (
+                <button
+                  type="button"
+                  onClick={() => setExpandedKey(isExpanded ? null : f.key)}
+                  title="Variantlarni boshqarish"
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold transition-all shrink-0 relative ${isExpanded ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  {optCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{optCount}</span>
+                  )}
+                </button>
+              )}
               <button
                 type="button"
                 title={f.required ? "Majburiy" : "Ixtiyoriy"}
                 onClick={() => update(i, { required: !f.required })}
-                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all text-xs font-bold ${f.required ? "bg-orange-500 text-white" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all text-xs font-bold shrink-0 ${f.required ? "bg-orange-500 text-white" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
               >*</button>
               <button
                 type="button"
                 title={f.visible ? "Ko'rinadigan" : "Yashirin"}
                 onClick={() => { if (!meta?.alwaysVisible) update(i, { visible: !f.visible }); }}
                 disabled={!!meta?.alwaysVisible}
-                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${f.visible ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"} disabled:cursor-not-allowed`}
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all shrink-0 ${f.visible ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"} disabled:cursor-not-allowed`}
               >
                 {f.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
               </button>
             </div>
+
+            {isExpanded && hasOptions && (
+              <div className="px-3 pb-3">
+                <OptionsManager
+                  options={f.options ?? []}
+                  onChange={opts => update(i, { options: opts })}
+                />
+              </div>
+            )}
           </div>
         );
       })}
@@ -98,7 +182,7 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
   const [editTmpl, setEditTmpl] = useState<Template | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [editName, setEditName] = useState("");
-  const [editFields, setEditFields] = useState<Field[]>([]);
+  const [editFields, setEditFields] = useState<TemplateField[]>([]);
   const [editAssigned, setEditAssigned] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
@@ -114,6 +198,7 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
       const tmpls = await tmplRes.json();
       const sts = await stRes.json();
       setTemplates(Array.isArray(tmpls) ? tmpls : []);
+      // Faqat shu do'konning xizmat turlarini ko'rsat (null storeId emas)
       setServiceTypes(Array.isArray(sts) ? sts.filter((s: any) => s.storeId === storeId) : []);
     } catch { toast({ variant: "destructive", title: "Yuklanmadi" }); }
     setLoading(false);
@@ -134,15 +219,16 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
     setEditTmpl(tmpl);
     setEditName(tmpl.name);
     const existingKeys = new Set(tmpl.fields.map(f => f.key));
-    const merged = [
-      ...tmpl.fields,
+    const merged: TemplateField[] = [
+      ...tmpl.fields.map(f => ({ ...f, options: f.options ?? [] })),
       ...DEFAULT_FIELDS.filter(d => !existingKeys.has(d.key)).map(d => ({ ...d, visible: false })),
     ];
     setEditFields(merged);
     setEditAssigned(serviceTypes.filter(s => s.templateId === tmpl.id).map(s => s.id));
   };
 
-  const toggleAssign = (id: number) => setEditAssigned(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const toggleAssign = (id: number) =>
+    setEditAssigned(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   const save = async () => {
     if (!editName.trim()) { toast({ variant: "destructive", title: "Shablon nomi kerak" }); return; }
@@ -151,15 +237,18 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
       const body = { name: editName, fields: editFields, assignToServiceTypeIds: editAssigned, storeId };
       if (isNew) {
         const r = await fetch(`${apiBase}/api/order-templates`, { method: "POST", headers, body: JSON.stringify(body) });
-        if (!r.ok) throw new Error();
+        if (!r.ok) throw new Error(await r.text());
       } else if (editTmpl) {
         const r = await fetch(`${apiBase}/api/order-templates/${editTmpl.id}`, { method: "PUT", headers, body: JSON.stringify(body) });
-        if (!r.ok) throw new Error();
+        if (!r.ok) throw new Error(await r.text());
       }
       toast({ title: "✅ Saqlandi" });
       setEditTmpl(null); setIsNew(false);
       await load();
-    } catch { toast({ variant: "destructive", title: "Xatolik" }); }
+    } catch (e) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Xatolik", description: String(e) });
+    }
     setSaving(false);
   };
 
@@ -172,6 +261,8 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
     } catch { toast({ variant: "destructive", title: "Xatolik" }); }
   };
 
+  const assignedToTemplate = (tmpl: Template) => serviceTypes.filter(s => s.templateId === tmpl.id);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -183,7 +274,9 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
           <Plus className="w-4 h-4" />Yangi shablon
         </Button>
       </div>
-      <p className="text-sm text-muted-foreground">Har bir xizmat turi uchun zakaz formasini moslashtiring — qaysi maydonlar, qanday tartibda va nomi bilan chiqishini belgilang.</p>
+      <p className="text-sm text-muted-foreground">
+        Har bir xizmat turi uchun zakaz formasini moslashtiring. Maydonlarga tayyor variantlar qo'shsangiz, ishchilar bosib tez zakaz beradi.
+      </p>
 
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
@@ -196,12 +289,13 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
       ) : (
         <div className="space-y-3">
           {templates.map(tmpl => {
-            const assigned = serviceTypes.filter(s => s.templateId === tmpl.id);
+            const assigned = assignedToTemplate(tmpl);
+            const visibleFields = Array.isArray(tmpl.fields) ? tmpl.fields.filter(f => f.visible) : [];
             return (
               <Card key={tmpl.id}>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="font-semibold">{tmpl.name}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
                         {assigned.length > 0
@@ -209,9 +303,12 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
                           : <span className="text-amber-500">Hech bir xizmat turiga ulanmagan</span>}
                       </div>
                       <div className="flex flex-wrap gap-1 mt-2">
-                        {tmpl.fields.filter(f => f.visible).map(f => (
-                          <span key={f.key} className="text-xs bg-muted px-2 py-0.5 rounded-full">
+                        {visibleFields.map(f => (
+                          <span key={f.key} className="text-xs bg-muted px-2 py-0.5 rounded-full flex items-center gap-1">
                             {f.label}{f.required ? " *" : ""}
+                            {(f.options?.length ?? 0) > 0 && (
+                              <span className="bg-primary/20 text-primary rounded-full px-1 font-bold">{f.options!.length}</span>
+                            )}
                           </span>
                         ))}
                       </div>
@@ -236,7 +333,7 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
         <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0 gap-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
             <DialogTitle>{isNew ? "Yangi shablon" : "Shablonni tahrirlash"}</DialogTitle>
-            <DialogDescription>Zakaz formasidagi maydonlarni tartiblashtiring</DialogDescription>
+            <DialogDescription>Maydonlar, ularning tartibi va tayyor variantlari</DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-5 space-y-5">
             <div className="space-y-2">
@@ -245,21 +342,31 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
             </div>
 
             <div className="space-y-2">
-              <Label>Xizmat turlari (ulash)</Label>
-              <div className="flex flex-wrap gap-2">
-                {serviceTypes.map(st => (
-                  <button
-                    key={st.id}
-                    type="button"
-                    onClick={() => toggleAssign(st.id)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${editAssigned.includes(st.id) ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground hover:border-primary/50"}`}
-                  >
-                    {st.name}
-                    {st.templateId && st.templateId !== editTmpl?.id && <span className="ml-1 text-xs opacity-60">(boshqa)</span>}
-                  </button>
-                ))}
-                {serviceTypes.length === 0 && <p className="text-sm text-muted-foreground">Xizmat turlari topilmadi</p>}
-              </div>
+              <Label>Xizmat turlariga ulash</Label>
+              {serviceTypes.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2 px-3 bg-muted rounded-lg">
+                  Bu do'konga tegishli xizmat turlari topilmadi. Avval "Xizmatlar" tabida xizmat turi qo'shing.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {serviceTypes.map(st => {
+                    const isSelected = editAssigned.includes(st.id);
+                    const otherTmpl = !isSelected && st.templateId && st.templateId !== editTmpl?.id;
+                    return (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => toggleAssign(st.id)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all flex items-center gap-1.5 ${isSelected ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground hover:border-primary/50"}`}
+                      >
+                        {isSelected && <Check className="w-3 h-3" />}
+                        {st.name}
+                        {otherTmpl && <span className="text-xs opacity-60">(boshqa)</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

@@ -1,22 +1,22 @@
 import { Router } from "express";
 import { db, orderTemplatesTable, serviceTypesTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 
 const router = Router();
 
 export const DEFAULT_TEMPLATE_FIELDS = [
-  { key: "serviceType", label: "Xizmat turi",     required: true,  visible: true },
-  { key: "client",      label: "Mijoz",            required: false, visible: true },
-  { key: "product",     label: "Mahsulot",         required: false, visible: true },
-  { key: "quantity",    label: "Soni",             required: true,  visible: true },
-  { key: "unit",        label: "O'lchov birligi",  required: false, visible: true },
-  { key: "shelf",       label: "Joylashuv (qolib)", required: false, visible: true },
-  { key: "notes",       label: "Izoh",             required: false, visible: true },
-  { key: "requireOutputQty", label: "Chiqish miqdori belgisi", required: false, visible: true },
+  { key: "serviceType", label: "Xizmat turi",        required: true,  visible: true,  options: [] },
+  { key: "client",      label: "Mijoz",               required: false, visible: true,  options: [] },
+  { key: "product",     label: "Mahsulot",            required: false, visible: true,  options: [] },
+  { key: "quantity",    label: "Soni",                required: true,  visible: true,  options: [] },
+  { key: "unit",        label: "O'lchov birligi",     required: false, visible: true,  options: [] },
+  { key: "shelf",       label: "Joylashuv (qolib)",   required: false, visible: true,  options: [] },
+  { key: "notes",       label: "Izoh",                required: false, visible: true,  options: [] },
+  { key: "requireOutputQty", label: "Chiqish miqdori belgisi", required: false, visible: true, options: [] },
 ];
 
-// GET /api/order-templates — list all templates for store
+// GET /api/order-templates
 router.get("/", async (req, res) => {
   try {
     const payload = await authenticateToken(req.headers.authorization);
@@ -34,7 +34,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// GET /api/order-templates/by-service/:serviceTypeId — get template for a service type
+// GET /api/order-templates/by-service/:serviceTypeId
 router.get("/by-service/:serviceTypeId", async (req, res) => {
   try {
     const payload = await authenticateToken(req.headers.authorization);
@@ -46,29 +46,25 @@ router.get("/by-service/:serviceTypeId", async (req, res) => {
       return;
     }
     const tmpl = await db.query.orderTemplatesTable.findFirst({ where: eq(orderTemplatesTable.id, st.templateId) });
-    res.json(tmpl ? { ...tmpl } : { fields: DEFAULT_TEMPLATE_FIELDS });
+    res.json(tmpl ?? { fields: DEFAULT_TEMPLATE_FIELDS });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Server xatosi" });
   }
 });
 
-// POST /api/order-templates — create template
+// POST /api/order-templates — yaratish
 router.post("/", async (req, res) => {
   try {
     const payload = await authenticateToken(req.headers.authorization);
     if (!payload || (payload.role !== "sudo" && payload.role !== "superadmin")) {
       res.status(403).json({ error: "Ruxsat yo'q" }); return;
     }
-    const { name, fields, assignToServiceTypeIds } = req.body as {
-      name: string;
-      fields: typeof DEFAULT_TEMPLATE_FIELDS;
-      assignToServiceTypeIds?: number[];
-    };
+    const { name, fields, assignToServiceTypeIds } = req.body;
     const storeId = payload.role === "sudo" ? req.body.storeId : payload.storeId;
     if (!storeId) { res.status(400).json({ error: "storeId majburiy" }); return; }
     const [tmpl] = await db.insert(orderTemplatesTable).values({ storeId, name, fields }).returning();
-    if (assignToServiceTypeIds?.length) {
+    if (Array.isArray(assignToServiceTypeIds) && assignToServiceTypeIds.length > 0) {
       for (const stId of assignToServiceTypeIds) {
         await db.update(serviceTypesTable).set({ templateId: tmpl.id }).where(eq(serviceTypesTable.id, stId));
       }
@@ -80,7 +76,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-// PUT /api/order-templates/:id — update template
+// PUT /api/order-templates/:id — yangilash
 router.put("/:id", async (req, res) => {
   try {
     const payload = await authenticateToken(req.headers.authorization);
@@ -88,24 +84,33 @@ router.put("/:id", async (req, res) => {
       res.status(403).json({ error: "Ruxsat yo'q" }); return;
     }
     const id = parseInt(req.params.id);
-    const { name, fields, assignToServiceTypeIds } = req.body as {
-      name?: string;
-      fields?: typeof DEFAULT_TEMPLATE_FIELDS;
-      assignToServiceTypeIds?: number[];
-    };
-    const updates: any = {};
-    if (name !== undefined) updates.name = name;
-    if (fields !== undefined) updates.fields = fields;
-    const [updated] = await db.update(orderTemplatesTable).set(updates).where(eq(orderTemplatesTable.id, id)).returning();
-    if (assignToServiceTypeIds !== undefined) {
-      const storeId = payload.role === "sudo" ? updated.storeId : payload.storeId!;
+    const { name, fields, assignToServiceTypeIds } = req.body;
+
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (fields !== undefined) updateData.fields = fields;
+
+    let updated: any;
+    if (Object.keys(updateData).length > 0) {
+      const [r] = await db.update(orderTemplatesTable).set(updateData).where(eq(orderTemplatesTable.id, id)).returning();
+      updated = r;
+    } else {
+      updated = await db.query.orderTemplatesTable.findFirst({ where: eq(orderTemplatesTable.id, id) });
+    }
+
+    if (Array.isArray(assignToServiceTypeIds)) {
+      // Faqat bu shablonga ulanganlarni tozala (boshqa shablonlarni TEGANMA!)
       await db.update(serviceTypesTable)
         .set({ templateId: null })
-        .where(eq(serviceTypesTable.storeId, storeId));
+        .where(eq(serviceTypesTable.templateId, id));
+      // Yangilarini birlаshtir
       for (const stId of assignToServiceTypeIds) {
-        await db.update(serviceTypesTable).set({ templateId: id }).where(eq(serviceTypesTable.id, stId));
+        await db.update(serviceTypesTable)
+          .set({ templateId: id })
+          .where(eq(serviceTypesTable.id, stId));
       }
     }
+
     res.json(updated);
   } catch (err) {
     req.log.error(err);
@@ -113,30 +118,7 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// PATCH /api/order-templates/:id/assign — assign template to service types
-router.patch("/:id/assign", async (req, res) => {
-  try {
-    const payload = await authenticateToken(req.headers.authorization);
-    if (!payload || (payload.role !== "sudo" && payload.role !== "superadmin")) {
-      res.status(403).json({ error: "Ruxsat yo'q" }); return;
-    }
-    const id = parseInt(req.params.id);
-    const { serviceTypeIds } = req.body as { serviceTypeIds: number[] };
-    const storeId = payload.role === "superadmin" ? payload.storeId! : req.body.storeId;
-    await db.update(serviceTypesTable)
-      .set({ templateId: null })
-      .where(eq(serviceTypesTable.storeId, storeId));
-    for (const stId of serviceTypeIds) {
-      await db.update(serviceTypesTable).set({ templateId: id }).where(eq(serviceTypesTable.id, stId));
-    }
-    res.json({ success: true });
-  } catch (err) {
-    req.log.error(err);
-    res.status(500).json({ error: "Server xatosi" });
-  }
-});
-
-// DELETE /api/order-templates/:id — delete template
+// DELETE /api/order-templates/:id
 router.delete("/:id", async (req, res) => {
   try {
     const payload = await authenticateToken(req.headers.authorization);
