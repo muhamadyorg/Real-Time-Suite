@@ -16,6 +16,7 @@ function isSudo(req: express.Request): boolean {
 // accounts.service_type_id → service_types.id  (so service_types must come before accounts)
 const TABLES_ORDERED = [
   "stores",
+  "order_templates",
   "service_types",
   "accounts",
   "admin_allowed_service_types",
@@ -116,6 +117,11 @@ router.get("/export", async (req, res) => {
           if (typeof v === "number") return v.toString();
           if (typeof v === "boolean") return v ? "true" : "false";
           if (v instanceof Date) return `'${v.toISOString()}'`;
+          // JSONB/JSON columns come as parsed JS objects — serialize to JSON string
+          if (typeof v === "object" || Array.isArray(v)) {
+            const str = JSON.stringify(v).replace(/\\/g, "\\\\").replace(/'/g, "''");
+            return `'${str}'`;
+          }
           const str = String(v).replace(/\\/g, "\\\\").replace(/'/g, "''");
           return `'${str}'`;
         }).join(", ");
