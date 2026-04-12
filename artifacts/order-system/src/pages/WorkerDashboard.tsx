@@ -179,7 +179,7 @@ function OrderDetailModal({ order, open, onClose }: { order: any, open: boolean,
   );
 }
 
-function ClientSearch({ clients, value, onChange }: { clients: any[], value: string, onChange: (id: string, name: string, phone: string) => void }) {
+function ClientSearch({ clients, value, name: manualName, onChange }: { clients: any[], value: string, name?: string, onChange: (id: string, name: string, phone: string) => void }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -197,6 +197,12 @@ function ClientSearch({ clients, value, onChange }: { clients: any[], value: str
     const s = q.toLowerCase();
     return (c.firstName + " " + c.lastName).toLowerCase().includes(s) || (c.phone ?? "").toLowerCase().includes(s);
   });
+
+  const handleQuickAdd = () => {
+    onChange("", q.trim(), "");
+    setQ("");
+    setOpen(false);
+  };
 
   return (
     <div ref={triggerRef} className="relative">
@@ -229,6 +235,19 @@ function ClientSearch({ clients, value, onChange }: { clients: any[], value: str
                 </div>
               </button>
             ))}
+            {q.trim() !== "" && filtered.length === 0 && (
+              <button
+                type="button"
+                className="w-full text-left px-3 py-2.5 hover:bg-green-50 dark:hover:bg-green-950/30 flex items-center gap-3 transition-colors border-t"
+                onClick={handleQuickAdd}
+              >
+                <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/50 text-green-600 flex items-center justify-center text-sm font-bold shrink-0">+</div>
+                <div>
+                  <div className="text-sm font-medium text-green-700 dark:text-green-400">«{q.trim()}»</div>
+                  <div className="text-xs text-muted-foreground">Shu nomda qo'shish</div>
+                </div>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -239,10 +258,12 @@ function ClientSearch({ clients, value, onChange }: { clients: any[], value: str
         <Users className="w-4 h-4 text-muted-foreground shrink-0" />
         {selectedClient ? (
           <span className="flex-1 text-sm font-medium truncate">{selectedClient.firstName} {selectedClient.lastName} ({selectedClient.phone})</span>
+        ) : manualName ? (
+          <span className="flex-1 text-sm font-medium truncate text-green-700 dark:text-green-400">{manualName}</span>
         ) : (
           <span className="flex-1 text-sm text-muted-foreground">Mijoz qidiring...</span>
         )}
-        {value && (
+        {(value || manualName) && (
           <button type="button" onClick={e => { e.stopPropagation(); onChange("", "", ""); setQ(""); }}>
             <X className="w-4 h-4 text-muted-foreground hover:text-foreground" />
           </button>
@@ -523,6 +544,7 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
             <ClientSearch
               clients={clients ?? []}
               value={clientId}
+              name={clientName}
               onChange={(id, name, phone) => { setClientId(id); setClientName(name); setClientPhone(phone); }}
             />
           </div>
