@@ -183,7 +183,6 @@ function ClientSearch({ clients, value, onChange }: { clients: any[], value: str
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
-  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 0 });
   const selectedClient = clients.find(c => c.id.toString() === value);
 
   useEffect(() => {
@@ -194,14 +193,6 @@ function ClientSearch({ clients, value, onChange }: { clients: any[], value: str
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const openDropdown = () => {
-    if (triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      setDropPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
-    }
-    setOpen(v => !v);
-  };
-
   const filtered = q.trim() === "" ? clients.slice(0, 8) : clients.filter(c => {
     const s = q.toLowerCase();
     return (c.firstName + " " + c.lastName).toLowerCase().includes(s) || (c.phone ?? "").toLowerCase().includes(s);
@@ -209,27 +200,8 @@ function ClientSearch({ clients, value, onChange }: { clients: any[], value: str
 
   return (
     <div ref={triggerRef} className="relative">
-      <div
-        className="h-12 flex items-center gap-2 px-3 border rounded-lg bg-card cursor-pointer hover:border-primary/50 transition-colors"
-        onClick={openDropdown}
-      >
-        <Users className="w-4 h-4 text-muted-foreground shrink-0" />
-        {selectedClient ? (
-          <span className="flex-1 text-sm font-medium truncate">{selectedClient.firstName} {selectedClient.lastName} ({selectedClient.phone})</span>
-        ) : (
-          <span className="flex-1 text-sm text-muted-foreground">Mijoz qidiring...</span>
-        )}
-        {value && (
-          <button type="button" onClick={e => { e.stopPropagation(); onChange("", "", ""); setQ(""); }}>
-            <X className="w-4 h-4 text-muted-foreground hover:text-foreground" />
-          </button>
-        )}
-      </div>
       {open && (
-        <div
-          className="fixed z-[200] bg-card border rounded-lg shadow-2xl overflow-hidden"
-          style={{ top: dropPos.top, left: dropPos.left, width: dropPos.width }}
-        >
+        <div className="absolute bottom-full left-0 right-0 mb-1 z-[200] bg-card border rounded-lg shadow-2xl overflow-hidden">
           <div className="p-2 border-b">
             <Input
               autoFocus
@@ -241,7 +213,6 @@ function ClientSearch({ clients, value, onChange }: { clients: any[], value: str
             />
           </div>
           <div className="max-h-48 overflow-y-auto">
-            {filtered.length === 0 && <div className="p-3 text-sm text-center text-muted-foreground">Topilmadi</div>}
             {filtered.map(c => (
               <button
                 key={c.id}
@@ -261,6 +232,22 @@ function ClientSearch({ clients, value, onChange }: { clients: any[], value: str
           </div>
         </div>
       )}
+      <div
+        className="h-12 flex items-center gap-2 px-3 border rounded-lg bg-card cursor-pointer hover:border-primary/50 transition-colors"
+        onClick={() => setOpen(v => !v)}
+      >
+        <Users className="w-4 h-4 text-muted-foreground shrink-0" />
+        {selectedClient ? (
+          <span className="flex-1 text-sm font-medium truncate">{selectedClient.firstName} {selectedClient.lastName} ({selectedClient.phone})</span>
+        ) : (
+          <span className="flex-1 text-sm text-muted-foreground">Mijoz qidiring...</span>
+        )}
+        {value && (
+          <button type="button" onClick={e => { e.stopPropagation(); onChange("", "", ""); setQ(""); }}>
+            <X className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -289,7 +276,6 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
   const [shelf, setShelf] = useState("");
   const [product, setProduct] = useState("");
   const [notes, setNotes] = useState("");
-  const [isClientManual, setIsClientManual] = useState(false);
   const [clientId, setClientId] = useState<string>("");
   const [clientName, setClientName] = useState("");
   const [clientPhone, setClientPhone] = useState("");
@@ -366,9 +352,9 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
           shelf: shelf || null,
           product: product || null,
           notes: notes || null,
-          clientId: !isClientManual && clientId ? Number(clientId) : null,
-          clientName: isClientManual ? clientName : null,
-          clientPhone: isClientManual ? clientPhone : null,
+          clientId: clientId ? Number(clientId) : null,
+          clientName: clientName || null,
+          clientPhone: clientPhone || null,
           requireOutputQty,
           ...(Object.keys(extraFields).length > 0 ? { extraFields } : {}),
         } as any
@@ -531,27 +517,14 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
       case "client":
         return (
           <div key={key} className="p-4 bg-muted/50 rounded-xl border space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-primary" />{label}{req ? " *" : ""}
-              </Label>
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground cursor-pointer">Qo'lda</Label>
-                <Switch checked={isClientManual} onCheckedChange={setIsClientManual} />
-              </div>
-            </div>
-            {!isClientManual ? (
-              <ClientSearch
-                clients={clients ?? []}
-                value={clientId}
-                onChange={(id, name, phone) => { setClientId(id); setClientName(name); setClientPhone(phone); }}
-              />
-            ) : (
-              <div className="space-y-3">
-                <Input placeholder="Ism / Familiya" value={clientName} onChange={e => setClientName(e.target.value)} className="h-12 bg-card" />
-                <Input placeholder="+998..." value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="h-12 bg-card" />
-              </div>
-            )}
+            <Label className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-primary" />{label}{req ? " *" : ""}
+            </Label>
+            <ClientSearch
+              clients={clients ?? []}
+              value={clientId}
+              onChange={(id, name, phone) => { setClientId(id); setClientName(name); setClientPhone(phone); }}
+            />
           </div>
         );
 
