@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/hooks/useSocket";
 import { Header } from "@/components/Header";
@@ -23,7 +23,8 @@ import { useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   Loader2, Plus, Trash2, CheckCircle, XCircle, Pencil,
   Store, Users, Layers, UserCheck, ShoppingBag, LayoutDashboard, Package,
-  Database, Download, Upload, RefreshCw, AlertTriangle
+  Database, Download, Upload, RefreshCw, AlertTriangle,
+  Shield, Send, Clock, Eye, EyeOff
 } from "lucide-react";
 import ProductsView from "@/components/ProductsView";
 import { format } from "date-fns";
@@ -1237,6 +1238,210 @@ function DatabaseView() {
   );
 }
 
+function AutoBackupView() {
+  const { token } = useAuth();
+  const { toast } = useToast();
+  const baseUrl = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+  const hdrs = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+
+  const [botToken, setBotToken] = useState("");
+  const [chatId, setChatId] = useState("");
+  const [intervalSec, setIntervalSec] = useState(3600);
+  const [enabled, setEnabled] = useState(false);
+  const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
+  const [nextBackupAt, setNextBackupAt] = useState<string | null>(null);
+  const [showToken, setShowToken] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const loadSettings = async () => {
+    if (!token) return;
+    try {
+      const r = await fetch(`${baseUrl}/api/auto-backup/settings`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) return;
+      const d = await r.json();
+      setBotToken(d.botToken ?? "");
+      setChatId(d.chatId ?? "");
+      setIntervalSec(d.intervalSeconds ?? 3600);
+      setEnabled(d.enabled ?? false);
+      setLastBackupAt(d.lastBackupAt ?? null);
+      setNextBackupAt(d.nextBackupAt ?? null);
+    } catch {}
+  };
+
+  useEffect(() => { loadSettings(); }, [token]);
+
+  useEffect(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (!nextBackupAt || !enabled) { setCountdown(null); return; }
+    const tick = () => {
+      const diff = Math.max(0, Math.round((new Date(nextBackupAt).getTime() - Date.now()) / 1000));
+      setCountdown(diff);
+    };
+    tick();
+    timerRef.current = setInterval(tick, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [nextBackupAt, enabled]);
+
+  const fmtCountdown = (sec: number) => {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return h > 0
+      ? `${h}s ${String(m).padStart(2,"0")}d ${String(s).padStart(2,"0")}s`
+      : `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const r = await fetch(`${baseUrl}/api/auto-backup/settings`, {
+        method: "POST", headers: hdrs,
+        body: JSON.stringify({ botToken, chatId, intervalSeconds: intervalSec, enabled }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error);
+      const d = await r.json();
+      setNextBackupAt(d.nextBackupAt ?? null);
+      setLastBackupAt(d.lastBackupAt ?? null);
+      toast({ title: enabled ? "✅ Auto-backup yoqildi va saqlandi" : "✅ Saqlandi" });
+    } catch (e: any) {
+      toast({ title: e.message ?? "Xatolik", variant: "destructive" });
+    }
+    setSaving(false);
+  };
+
+  const handleNow = async () => {
+    setSending(true);
+    try {
+      const r = await fetch(`${baseUrl}/api/auto-backup/now`, { method: "POST", headers: hdrs });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      setLastBackupAt(d.settings?.lastBackupAt ?? null);
+      setNextBackupAt(d.settings?.nextBackupAt ?? null);
+      toast({ title: "✅ Backup Telegram ga yuborildi!" });
+    } catch (e: any) {
+      toast({ title: e.message ?? "Yuborishda xatolik", variant: "destructive" });
+    }
+    setSending(false);
+  };
+
+  return (
+    <div className="space-y-5 max-w-lg">
+      <div className="flex items-center gap-2">
+        <Shield className="w-5 h-5 text-primary" />
+        <h2 className="text-lg font-bold">Auto Backup</h2>
+        {enabled && (
+          <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded-full font-medium border border-green-200 dark:border-green-700">
+            Yoqilgan
+          </span>
+        )}
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Belgilangan har X sekundda DB backup fayli avtomatik Telegram ga yuboriladi.
+        Fayl nomi: <code className="text-xs bg-muted px-1 rounded">2026-04-12-08-52-33.sql</code>
+      </p>
+
+      {enabled && countdown !== null && (
+        <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10">
+          <CardContent className="p-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-green-600" />
+              <span className="text-sm font-medium text-green-700 dark:text-green-400">Keyingi backup:</span>
+            </div>
+            <span className="text-2xl font-black font-mono text-green-700 dark:text-green-400 tabular-nums">
+              {fmtCountdown(countdown)}
+            </span>
+          </CardContent>
+        </Card>
+      )}
+
+      {lastBackupAt && (
+        <div className="text-xs text-muted-foreground flex items-center gap-1">
+          <CheckCircle className="w-3 h-3 text-green-500" />
+          Oxirgi backup: {new Date(lastBackupAt).toLocaleString("uz-UZ")}
+        </div>
+      )}
+
+      <Card>
+        <CardContent className="p-5 space-y-4">
+          <div className="space-y-1.5">
+            <Label>Telegram Bot Token</Label>
+            <div className="relative">
+              <Input
+                type={showToken ? "text" : "password"}
+                value={botToken}
+                onChange={e => setBotToken(e.target.value)}
+                placeholder="1234567890:AAF..."
+                className="font-mono text-xs pr-10"
+              />
+              <button type="button" onClick={() => setShowToken(v => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Telegram User ID (Chat ID)</Label>
+            <Input
+              value={chatId}
+              onChange={e => setChatId(e.target.value)}
+              placeholder="123456789"
+              className="font-mono"
+            />
+            <p className="text-xs text-muted-foreground">
+              <code>@userinfobot</code> ga /start yozsangiz o'z ID'ingizni olasiz
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Interval (sekund)</Label>
+            <Input
+              type="number"
+              min={10}
+              value={intervalSec}
+              onChange={e => setIntervalSec(Math.max(10, Number(e.target.value)))}
+              className="font-mono"
+            />
+            <p className="text-xs text-muted-foreground">
+              {intervalSec >= 3600
+                ? `${(intervalSec/3600).toFixed(1)} soat`
+                : intervalSec >= 60
+                  ? `${Math.floor(intervalSec/60)} daqiqa ${intervalSec%60} sekund`
+                  : `${intervalSec} sekund`
+              } da bir marta
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between py-2">
+            <span className="text-sm font-medium">Auto-backup holati</span>
+            <button
+              type="button"
+              onClick={() => setEnabled(v => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${enabled ? "bg-green-500" : "bg-muted"}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${enabled ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex gap-3">
+        <Button onClick={handleSave} disabled={saving} className="flex-1 gap-2">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+          Saqlash
+        </Button>
+        <Button variant="outline" onClick={handleNow} disabled={sending || !botToken || !chatId} className="gap-2">
+          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          Hozir yuborish
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 const NAV_ITEMS = [
   { key: "stores", label: "Do'konlar", icon: Store },
   { key: "accounts", label: "Hisoblar", icon: Users },
@@ -1245,6 +1450,7 @@ const NAV_ITEMS = [
   { key: "clients", label: "Mijozlar", icon: UserCheck },
   { key: "orders", label: "Zakazlar", icon: ShoppingBag },
   { key: "database", label: "Database", icon: Database },
+  { key: "backup", label: "Auto Backup", icon: Shield },
 ];
 
 export default function SudoDashboard() {
@@ -1260,6 +1466,7 @@ export default function SudoDashboard() {
     clients: <ClientsView />,
     orders: <OrdersView />,
     database: <DatabaseView />,
+    backup: <AutoBackupView />,
   };
 
   return (

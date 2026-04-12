@@ -7,6 +7,7 @@ import { setSettingsSocketIO } from "./routes/settings";
 import { verifyToken } from "./lib/auth";
 import { initTelegramBot, initStoreBots, checkAllBots } from "./routes/telegram";
 import { seedSudo } from "./lib/seed";
+import { loadBackupSettings } from "./autoBackup";
 import { db, storesTable, ordersTable } from "@workspace/db";
 import { eq, asc } from "drizzle-orm";
 
@@ -106,6 +107,9 @@ initStoreBots()
 // Check all bots on startup and every 5 minutes
 setTimeout(() => checkAllBots().catch(() => {}), 8000);
 setInterval(() => checkAllBots().catch(() => {}), 5 * 60 * 1000);
+
+// Auto-backup sozlamalarini yuklash
+loadBackupSettings().catch(err => logger.warn({ err }, "Auto-backup load error"));
 
 function startServer(listenPort: number) {
   httpServer.listen(listenPort, (err?: Error) => {
