@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ interface ClientAccountsViewProps {
 }
 
 export function ClientAccountsView({ storeId, token, role = "admin" }: ClientAccountsViewProps) {
+  const { serviceTypeId: authServiceTypeId } = useAuth();
   const { toast } = useToast();
   const [accounts, setAccounts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -75,7 +77,14 @@ export function ClientAccountsView({ storeId, token, role = "admin" }: ClientAcc
       const r = await fetch(`${apiBase}/api/client-accounts/${payModalClient.id}/transaction`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ type: payType, sign: paySign, amount: parseFloat(payAmount), storeId, note: payNote || undefined }),
+        body: JSON.stringify({
+          type: payType,
+          sign: payType === "tolov" ? (paySign === "plus" ? "minus" : "plus") : paySign,
+          amount: parseFloat(payAmount),
+          storeId,
+          serviceTypeId: authServiceTypeId ?? undefined,
+          note: payNote || undefined,
+        }),
       });
       const data = await r.json();
       if (!r.ok) { toast({ title: data.error ?? "Xatolik", variant: "destructive" }); return; }
@@ -257,7 +266,9 @@ export function ClientAccountsView({ storeId, token, role = "admin" }: ClientAcc
                 <div className="flex justify-between border-t border-border/50 pt-1">
                   <span className="font-medium">Yangi holat:</span>
                   {(() => {
-                    const delta = (payType === "tolov" ? 1 : (paySign === "plus" ? 1 : -1)) * parseFloat(payAmount);
+                    const delta = payType === "tolov"
+                      ? (paySign === "plus" ? -1 : 1) * parseFloat(payAmount)
+                      : (paySign === "plus" ? 1 : -1) * parseFloat(payAmount);
                     const nb = (payModalClient.balance ?? 0) + delta;
                     return <span className={`font-bold tabular-nums ${nb < 0 ? "text-red-500" : "text-green-600"}`}>{fmtBalance(nb).text}</span>;
                   })()}
