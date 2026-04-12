@@ -34,7 +34,7 @@ export function ClientAccountsView({ storeId, token, role = "admin" }: ClientAcc
   const [payLoading, setPayLoading] = useState(false);
 
   const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
-  const canPay = role === "superadmin" || role === "admin";
+  const canPay = role === "superadmin" || role === "admin" || role === "worker";
   const canAdjust = role === "superadmin";
 
   const fetchAccounts = async () => {
