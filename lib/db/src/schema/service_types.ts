@@ -8,6 +8,7 @@ export const serviceTypesTable = pgTable("service_types", {
   name: text("name").notNull(),
   storeId: integer("store_id").references(() => storesTable.id, { onDelete: "cascade" }),
   nasiyaEnabled: boolean("nasiya_enabled").notNull().default(false),
+  templateId: integer("template_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

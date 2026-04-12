@@ -253,6 +253,17 @@ function ClientSearch({ clients, value, onChange }: { clients: any[], value: str
   );
 }
 
+const DEFAULT_ORDER_FIELDS = [
+  { key: "serviceType",      label: "Xizmat turi",            required: true,  visible: true },
+  { key: "client",           label: "Mijoz",                  required: false, visible: true },
+  { key: "product",          label: "Mahsulot",               required: false, visible: true },
+  { key: "quantity",         label: "Soni",                   required: true,  visible: true },
+  { key: "unit",             label: "O'lchov birligi",        required: false, visible: true },
+  { key: "shelf",            label: "Joylashuv (qolib)",      required: false, visible: true },
+  { key: "notes",            label: "Izoh",                   required: false, visible: true },
+  { key: "requireOutputQty", label: "Chiqish miqdori belgisi",required: false, visible: true },
+];
+
 function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }: {
   storeId: number;
   workerServiceTypeId?: number | null;
@@ -272,6 +283,8 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
   const [clientPhone, setClientPhone] = useState("");
   const [products, setProducts] = useState<any[]>([]);
   const [requireOutputQty, setRequireOutputQty] = useState(false);
+  const [templateFields, setTemplateFields] = useState<typeof DEFAULT_ORDER_FIELDS>(DEFAULT_ORDER_FIELDS);
+  const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
   const { data: serviceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId] } });
   const { data: clients } = useGetClients({ status: 'approved' }, { query: { queryKey: ["getClients", { status: 'approved' }] } });
@@ -280,23 +293,44 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
   const queryClient = useQueryClient();
 
   const workerServiceType = serviceTypes?.find(st => st.id === workerServiceTypeId);
-
   const activeServiceTypeId = workerServiceTypeId ? String(workerServiceTypeId) : serviceTypeId;
 
   useEffect(() => {
     setProduct("");
     if (!activeServiceTypeId || !token) { setProducts([]); return; }
-    fetch(`/api/products?serviceTypeId=${activeServiceTypeId}`, {
+    fetch(`${apiBase}/api/products?serviceTypeId=${activeServiceTypeId}`, {
       headers: { Authorization: `Bearer ${token}` }
     }).then(r => r.json()).then(data => setProducts(Array.isArray(data) ? data.filter((p: any) => p.active) : [])).catch(() => setProducts([]));
   }, [activeServiceTypeId, token]);
+
+  useEffect(() => {
+    if (!activeServiceTypeId || !token) { setTemplateFields(DEFAULT_ORDER_FIELDS); return; }
+    fetch(`${apiBase}/api/order-templates/by-service/${activeServiceTypeId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }).then(r => r.json()).then(data => {
+      if (data?.fields && Array.isArray(data.fields) && data.fields.length > 0) {
+        const existingKeys = new Set(data.fields.map((f: any) => f.key));
+        const merged = [
+          ...data.fields,
+          ...DEFAULT_ORDER_FIELDS.filter(d => !existingKeys.has(d.key)).map(d => ({ ...d, visible: false })),
+        ];
+        setTemplateFields(merged);
+      } else {
+        setTemplateFields(DEFAULT_ORDER_FIELDS);
+      }
+    }).catch(() => setTemplateFields(DEFAULT_ORDER_FIELDS));
+  }, [activeServiceTypeId, token]);
+
+  const getField = (key: string) => templateFields.find(f => f.key === key);
+  const isVisible = (key: string) => getField(key)?.visible !== false;
+  const isRequired = (key: string) => !!getField(key)?.required;
+  const getLabel = (key: string) => getField(key)?.label ?? key;
 
   const resetForm = () => {
     setServiceTypeId(workerServiceTypeId ? String(workerServiceTypeId) : "");
     setQuantity("1"); setUnit(""); setShelf(""); setProduct(""); setNotes("");
     setIsClientManual(false); setClientId(""); setClientName(""); setClientPhone("");
     setRequireOutputQty(false);
-    // setProducts([]) — olib tashlandi: products ro'yxati saqlansin, keyingi zakazda ham ko'rinsin
   };
 
   const onSubmit = (e: React.FormEvent) => {
@@ -304,6 +338,10 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
     const finalServiceTypeId = workerServiceTypeId ? workerServiceTypeId : Number(serviceTypeId);
     if (!finalServiceTypeId) {
       toast({ title: "Xatolik", description: "Xizmat turi aniqlanmadi", variant: "destructive" });
+      return;
+    }
+    if (isRequired("quantity") && (!quantity || Number(quantity) < 1)) {
+      toast({ title: "Xatolik", description: `${getLabel("quantity")} majburiy`, variant: "destructive" });
       return;
     }
     createOrder.mutate(
@@ -335,6 +373,147 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
     );
   };
 
+  const renderField = (key: string) => {
+    if (!isVisible(key)) return null;
+    const label = getLabel(key);
+    const req = isRequired(key);
+
+    switch (key) {
+      case "serviceType":
+        if (workerServiceType) {
+          return (
+            <div key={key} className="bg-primary/5 border border-primary/20 rounded-xl p-3">
+              <div className="text-sm text-muted-foreground">{label}</div>
+              <div className="font-bold text-primary text-lg">{workerServiceType.name}</div>
+            </div>
+          );
+        }
+        return (
+          <div key={key} className="space-y-2">
+            <Label>{label}{req ? " *" : ""}</Label>
+            <Select value={serviceTypeId} onValueChange={setServiceTypeId}>
+              <SelectTrigger className="h-12 bg-card">
+                <SelectValue placeholder="Xizmatni tanlang..." />
+              </SelectTrigger>
+              <SelectContent>
+                {serviceTypes?.map(st => (
+                  <SelectItem key={st.id} value={st.id.toString()}>{st.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        );
+
+      case "quantity": {
+        const unitField = getField("unit");
+        const reqQtyField = getField("requireOutputQty");
+        return (
+          <div key={key} className="space-y-2">
+            <div className={`grid gap-4 ${unitField?.visible ? "grid-cols-2" : "grid-cols-1"}`}>
+              <div className="space-y-2">
+                <Label>{label}{req ? " *" : ""}</Label>
+                <div className="flex gap-2">
+                  <Input type="number" min="1" step="1" value={quantity} onChange={e => setQuantity(e.target.value)} className="h-12 bg-card font-semibold text-lg" required={req} />
+                  {reqQtyField?.visible && (
+                    <button
+                      type="button"
+                      onClick={() => setRequireOutputQty(v => !v)}
+                      title={reqQtyField.label}
+                      className={`h-12 px-3 rounded-lg border text-sm font-bold transition-all shrink-0 ${requireOutputQty ? "bg-green-500 text-white border-green-500 shadow-sm" : "bg-card border-border text-muted-foreground hover:border-green-400 hover:text-green-600"}`}
+                    >⚖</button>
+                  )}
+                </div>
+              </div>
+              {unitField?.visible && (
+                <div className="space-y-2">
+                  <Label>{unitField.label}{unitField.required ? " *" : ""}</Label>
+                  <Input placeholder="dona, m2..." value={unit} onChange={e => setUnit(e.target.value)} className="h-12 bg-card" required={unitField.required} />
+                </div>
+              )}
+            </div>
+            {requireOutputQty && reqQtyField?.visible && (
+              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2 text-sm text-green-700 dark:text-green-400">
+                <span className="text-base">⚖</span>
+                <span>Ishchi <b>TAYYOR</b> bosishdan oldin chiqish miqdorini kiritishi shart bo'ladi</span>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      case "unit":
+      case "requireOutputQty":
+        return null;
+
+      case "shelf":
+        return (
+          <div key={key} className="space-y-2">
+            <Label>{label}{req ? " *" : ""}</Label>
+            <Input placeholder="Masalan: A-12" value={shelf} onChange={e => setShelf(e.target.value)} className="h-12 bg-card font-mono" required={req} />
+          </div>
+        );
+
+      case "product":
+        if (products.length === 0) return null;
+        return (
+          <div key={key} className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Package className="w-4 h-4 text-primary" />{label}{req ? " *" : ""}
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              {products.map((p: any) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setProduct(product === p.name ? "" : p.name)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all ${product === p.name ? "bg-primary text-primary-foreground border-primary shadow-sm" : "bg-card border-muted-foreground/20 hover:border-primary/50 hover:bg-muted/50"}`}
+                >{p.name}</button>
+              ))}
+            </div>
+            {product && <div className="text-xs text-muted-foreground">Tanlangan: <span className="font-semibold text-primary">{product}</span></div>}
+          </div>
+        );
+
+      case "client":
+        return (
+          <div key={key} className="p-4 bg-muted/50 rounded-xl border space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" />{label}{req ? " *" : ""}
+              </Label>
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground cursor-pointer">Qo'lda</Label>
+                <Switch checked={isClientManual} onCheckedChange={setIsClientManual} />
+              </div>
+            </div>
+            {!isClientManual ? (
+              <ClientSearch
+                clients={clients ?? []}
+                value={clientId}
+                onChange={(id, name, phone) => { setClientId(id); setClientName(name); setClientPhone(phone); }}
+              />
+            ) : (
+              <div className="space-y-3">
+                <Input placeholder="Ism / Familiya" value={clientName} onChange={e => setClientName(e.target.value)} className="h-12 bg-card" />
+                <Input placeholder="+998..." value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="h-12 bg-card" />
+              </div>
+            )}
+          </div>
+        );
+
+      case "notes":
+        return (
+          <div key={key} className="space-y-2">
+            <Label>{label}{req ? " *" : ""}</Label>
+            <Input placeholder="Buyurtma haqida izoh..." value={notes} onChange={e => setNotes(e.target.value)} className="h-12 bg-card" required={req} />
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) resetForm(); }}>
       <DialogContent className="w-full max-w-md mx-4 max-h-[90vh] flex flex-col p-0 gap-0">
@@ -347,116 +526,7 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
         <form onSubmit={onSubmit} className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto overscroll-contain">
             <div className="space-y-5 px-6 py-5">
-              {workerServiceType ? (
-                <div className="bg-primary/5 border border-primary/20 rounded-xl p-3">
-                  <div className="text-sm text-muted-foreground">Xizmat turi</div>
-                  <div className="font-bold text-primary text-lg">{workerServiceType.name}</div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label>Xizmat turi *</Label>
-                  <Select value={serviceTypeId} onValueChange={setServiceTypeId}>
-                    <SelectTrigger className="h-12 bg-card">
-                      <SelectValue placeholder="Xizmatni tanlang..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {serviceTypes?.map(st => (
-                        <SelectItem key={st.id} value={st.id.toString()}>{st.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Soni *</Label>
-                  <div className="flex gap-2">
-                    <Input type="number" min="1" step="1" value={quantity} onChange={e => setQuantity(e.target.value)} className="h-12 bg-card font-semibold text-lg" required />
-                    <button
-                      type="button"
-                      onClick={() => setRequireOutputQty(v => !v)}
-                      title="Chiqish miqdori talab qilinsinmi?"
-                      className={`h-12 px-3 rounded-lg border text-sm font-bold transition-all shrink-0 ${requireOutputQty ? "bg-green-500 text-white border-green-500 shadow-sm" : "bg-card border-border text-muted-foreground hover:border-green-400 hover:text-green-600"}`}
-                    >
-                      ⚖
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>O'lchov</Label>
-                  <Input placeholder="dona, m2..." value={unit} onChange={e => setUnit(e.target.value)} className="h-12 bg-card" />
-                </div>
-              </div>
-              {requireOutputQty && (
-                <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2 text-sm text-green-700 dark:text-green-400">
-                  <span className="text-base">⚖</span>
-                  <span>Ishchi <b>TAYYOR</b> bosishdan oldin chiqish miqdorini kiritishi shart bo'ladi</span>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label>Qolib (joylashuv)</Label>
-                <Input placeholder="Masalan: A-12" value={shelf} onChange={e => setShelf(e.target.value)} className="h-12 bg-card font-mono" />
-              </div>
-
-              {products.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <Package className="w-4 h-4 text-primary" />
-                    Mahsulot
-                  </Label>
-                  <div className="flex flex-wrap gap-2">
-                    {products.map((p: any) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => setProduct(product === p.name ? "" : p.name)}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
-                          product === p.name
-                            ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                            : "bg-card border-muted-foreground/20 hover:border-primary/50 hover:bg-muted/50"
-                        }`}
-                      >
-                        {p.name}
-                      </button>
-                    ))}
-                  </div>
-                  {product && (
-                    <div className="text-xs text-muted-foreground">Tanlangan: <span className="font-semibold text-primary">{product}</span></div>
-                  )}
-                </div>
-              )}
-
-              <div className="p-4 bg-muted/50 rounded-xl border space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-primary" />
-                    Mijoz
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground cursor-pointer">Qo'lda</Label>
-                    <Switch checked={isClientManual} onCheckedChange={setIsClientManual} />
-                  </div>
-                </div>
-                {!isClientManual ? (
-                  <ClientSearch
-                    clients={clients ?? []}
-                    value={clientId}
-                    onChange={(id, name, phone) => { setClientId(id); setClientName(name); setClientPhone(phone); }}
-                  />
-                ) : (
-                  <div className="space-y-3">
-                    <Input placeholder="Ism / Familiya" value={clientName} onChange={e => setClientName(e.target.value)} className="h-12 bg-card" />
-                    <Input placeholder="+998..." value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="h-12 bg-card" />
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label>Qo'shimcha izoh</Label>
-                <Input placeholder="Buyurtma haqida izoh..." value={notes} onChange={e => setNotes(e.target.value)} className="h-12 bg-card" />
-              </div>
+              {templateFields.map(f => renderField(f.key))}
             </div>
           </div>
           <DialogFooter className="px-6 pb-6 pt-4 border-t shrink-0">

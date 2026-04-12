@@ -15,7 +15,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil, Users, Save, Send, RefreshCw, Bot, CreditCard, Wallet, TrendingDown, TrendingUp, ArrowDownLeft, ArrowUpRight, Phone, User, ChevronDown, ChevronUp, Timer } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil, Users, Save, Send, RefreshCw, Bot, CreditCard, Wallet, TrendingDown, TrendingUp, ArrowDownLeft, ArrowUpRight, Phone, User, ChevronDown, ChevronUp, Timer, FileText } from "lucide-react";
+import TemplatesView from "@/components/TemplatesView";
 import { Switch } from "@/components/ui/switch";
 import AdminDashboard from "./AdminDashboard";
 import ProductsView from "@/components/ProductsView";
@@ -1387,6 +1388,9 @@ export default function SuperadminDashboard() {
             <TabsTrigger value="telegram" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
               <Bot className="w-3 h-3 hidden sm:block" />Telegram
             </TabsTrigger>
+            <TabsTrigger value="shablon" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
+              <FileText className="w-3 h-3 hidden sm:block" />Shablon
+            </TabsTrigger>
             <TabsTrigger value="settings" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
               <ShieldCheck className="w-3 h-3" />Ruxsatlar
             </TabsTrigger>
@@ -1431,6 +1435,10 @@ export default function SuperadminDashboard() {
 
         <TabsContent value="telegram" className="p-5 focus-visible:outline-none">
           <TelegramView token={token} />
+        </TabsContent>
+
+        <TabsContent value="shablon" className="p-5 max-w-4xl mx-auto focus-visible:outline-none">
+          <TemplatesView storeId={storeId} token={token} />
         </TabsContent>
 
         <TabsContent value="settings" className="p-5 focus-visible:outline-none">

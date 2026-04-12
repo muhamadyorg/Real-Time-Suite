@@ -12,6 +12,7 @@ import permissionsRouter from "./permissions";
 import dbRouter from "./db";
 import telegramRouter from "./telegram-router";
 import clientAccountsRouter from "./client-accounts";
+import orderTemplatesRouter from "./order-templates";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use("/permissions", permissionsRouter);
 router.use("/db", dbRouter);
 router.use("/telegram", telegramRouter);
 router.use("/client-accounts", clientAccountsRouter);
+router.use("/order-templates", orderTemplatesRouter);
 
 export default router;
