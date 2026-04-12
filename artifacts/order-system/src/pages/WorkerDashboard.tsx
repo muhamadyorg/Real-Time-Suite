@@ -304,6 +304,8 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
   const [requireOutputQty, setRequireOutputQty] = useState(false);
   const [templateFields, setTemplateFields] = useState<typeof DEFAULT_ORDER_FIELDS>(DEFAULT_ORDER_FIELDS);
   const [extraFields, setExtraFields] = useState<Record<string, string>>({});
+  const [priceRaw, setPriceRaw] = useState("");
+  const fmtPrice = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
   const { data: serviceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId] } });
@@ -348,7 +350,7 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
 
   const resetForm = () => {
     setServiceTypeId(workerServiceTypeId ? String(workerServiceTypeId) : "");
-    setQuantity("1"); setUnit(""); setShelf(""); setProduct(""); setNotes("");
+    setQuantity("1"); setUnit(""); setShelf(""); setProduct(""); setNotes(""); setPriceRaw("");
     setClientId(""); setClientName(""); setClientPhone("");
     setRequireOutputQty(false); setExtraFields({});
   };
@@ -378,6 +380,7 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
           clientPhone: clientPhone || null,
           requireOutputQty,
           ...(Object.keys(extraFields).length > 0 ? { extraFields } : {}),
+          ...(priceRaw.trim() ? { price: Number(priceRaw.replace(/\s/g, "")) } : {}),
         } as any
       },
       {
@@ -620,6 +623,18 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
           <div className="flex-1 overflow-y-auto overscroll-contain">
             <div className="space-y-5 px-6 py-5">
               {templateFields.map(f => renderField(f.key))}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5"><span>Narx (so'm)</span><span className="text-xs text-muted-foreground font-normal">— ixtiyoriy</span></Label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={priceRaw}
+                  onChange={e => setPriceRaw(fmtPrice(e.target.value))}
+                  className="h-12 bg-card font-semibold text-lg tabular-nums"
+                />
+                {priceRaw && <p className="text-xs text-muted-foreground">{priceRaw} so'm</p>}
+              </div>
             </div>
           </div>
           <DialogFooter className="px-6 pb-6 pt-4 border-t shrink-0">

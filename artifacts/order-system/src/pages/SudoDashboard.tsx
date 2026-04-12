@@ -1400,9 +1400,9 @@ function AutoBackupView() {
             <Label>Interval (sekund)</Label>
             <Input
               type="number"
-              min={10}
+              min={1}
               value={intervalSec}
-              onChange={e => setIntervalSec(Math.max(10, Number(e.target.value)))}
+              onChange={e => setIntervalSec(Math.max(1, Number(e.target.value)))}
               className="font-mono"
             />
             <p className="text-xs text-muted-foreground">

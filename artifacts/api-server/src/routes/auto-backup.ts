@@ -25,7 +25,7 @@ router.post("/settings", async (req, res) => {
     const updates: any = {};
     if (botToken !== undefined) updates.botToken = String(botToken);
     if (chatId !== undefined) updates.chatId = String(chatId);
-    if (intervalSeconds !== undefined) updates.intervalSeconds = Math.max(10, Number(intervalSeconds));
+    if (intervalSeconds !== undefined) updates.intervalSeconds = Math.max(1, Number(intervalSeconds));
     if (enabled !== undefined) updates.enabled = Boolean(enabled);
     const result = await updateBackupSettings(updates);
     res.json(result);

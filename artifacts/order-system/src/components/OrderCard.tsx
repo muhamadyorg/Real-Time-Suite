@@ -78,7 +78,7 @@ export function OrderCard({ order, search = "", actionButton, onOrderClick, canP
           <HighlightText text={order.serviceTypeName} search={search} />
         </div>
 
-        <div className="flex justify-between items-center bg-secondary/50 p-3 rounded-lg border border-secondary">
+        <div className={`flex justify-between items-center bg-secondary/50 p-3 rounded-lg border border-secondary ${order.price ? "rounded-b-none border-b-0" : ""}`}>
           <span className="font-medium text-muted-foreground text-sm uppercase tracking-wider">Miqdor</span>
           <div className="flex items-center gap-2">
             <span className="text-xl font-black">
@@ -98,6 +98,14 @@ export function OrderCard({ order, search = "", actionButton, onOrderClick, canP
             )}
           </div>
         </div>
+        {order.price != null && order.price > 0 && (
+          <div className="flex justify-between items-center bg-amber-50 dark:bg-amber-950/30 px-3 py-2 rounded-b-lg border border-t-0 border-amber-200 dark:border-amber-800">
+            <span className="text-amber-700 dark:text-amber-400 text-xs font-semibold uppercase tracking-wider">Narx</span>
+            <span className="text-amber-700 dark:text-amber-400 font-black tabular-nums">
+              {Math.round(order.price).toLocaleString("uz-UZ")} <span className="text-xs font-normal">so'm</span>
+            </span>
+          </div>
+        )}
 
         <div className="grid gap-2 text-sm">
           {order.shelf && (

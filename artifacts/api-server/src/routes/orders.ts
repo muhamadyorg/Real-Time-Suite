@@ -54,6 +54,7 @@ function mapOrder(o: typeof ordersTable.$inferSelect, showLockPin = true) {
     deliveredAt: o.deliveredAt,
     deliveredByName: o.deliveredByName,
     extraFields: o.extraFields ?? {},
+    price: o.price ? parseFloat(o.price) : null,
     lockPin: showLockPin ? o.lockPin : undefined,
     isLocked: !!o.lockPin,
     splitGroup: o.splitGroup,
@@ -278,7 +279,7 @@ router.post("/", async (req, res) => {
       return;
     }
 
-    const { serviceTypeId, quantity, unit, shelf, product, notes, clientId, clientName, clientPhone, requireOutputQty, extraFields } = req.body as {
+    const { serviceTypeId, quantity, unit, shelf, product, notes, clientId, clientName, clientPhone, requireOutputQty, extraFields, price } = req.body as {
       serviceTypeId: number;
       quantity: number;
       unit?: string;
@@ -290,6 +291,7 @@ router.post("/", async (req, res) => {
       clientPhone?: string;
       requireOutputQty?: boolean;
       extraFields?: Record<string, string>;
+      price?: number;
     };
 
     const serviceType = await db.query.serviceTypesTable.findFirst({
@@ -360,6 +362,7 @@ router.post("/", async (req, res) => {
         lockPin,
         requireOutputQty: requireOutputQty ?? false,
         extraFields: extraFields && Object.keys(extraFields).length > 0 ? extraFields : null,
+        price: price != null && price > 0 ? String(price) : null,
       })
       .returning();
 

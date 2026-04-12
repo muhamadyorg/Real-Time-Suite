@@ -14,6 +14,7 @@ import telegramRouter from "./telegram-router";
 import clientAccountsRouter from "./client-accounts";
 import orderTemplatesRouter from "./order-templates";
 import autoBackupRouter from "./auto-backup";
+import analyticsRouter from "./analytics";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use("/telegram", telegramRouter);
 router.use("/client-accounts", clientAccountsRouter);
 router.use("/order-templates", orderTemplatesRouter);
 router.use("/auto-backup", autoBackupRouter);
+router.use("/analytics", analyticsRouter);
 
 export default router;

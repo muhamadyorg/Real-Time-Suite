@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil, Users, Save, Send, RefreshCw, Bot, CreditCard, Wallet, TrendingDown, TrendingUp, ArrowDownLeft, ArrowUpRight, Phone, User, ChevronDown, ChevronUp, Timer, FileText } from "lucide-react";
 import TemplatesView from "@/components/TemplatesView";
+import { AnalyticsView } from "@/components/AnalyticsView";
 import { Switch } from "@/components/ui/switch";
 import AdminDashboard from "./AdminDashboard";
 import ProductsView from "@/components/ProductsView";
@@ -1381,7 +1382,8 @@ function TimerSettingsPanel({ token, storeId }: { token: string | null; storeId:
 
 export default function SuperadminDashboard() {
   const { accountName, storeId, token } = useAuth();
-  
+  const { data: allServiceTypes } = useGetServiceTypes({ query: { enabled: !!storeId } });
+
   if (!storeId) return null;
 
   return (
@@ -1413,6 +1415,9 @@ export default function SuperadminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="shablon" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
               <FileText className="w-3 h-3 hidden sm:block" />Shablon
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
+              <TrendingUp className="w-3 h-3" />Hisobot
             </TabsTrigger>
             <TabsTrigger value="settings" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
               <ShieldCheck className="w-3 h-3" />Ruxsatlar
@@ -1462,6 +1467,14 @@ export default function SuperadminDashboard() {
 
         <TabsContent value="shablon" className="p-5 max-w-4xl mx-auto focus-visible:outline-none">
           <TemplatesView storeId={storeId} token={token} />
+        </TabsContent>
+
+        <TabsContent value="analytics" className="p-5 focus-visible:outline-none">
+          <AnalyticsView
+            storeId={storeId}
+            token={token ?? ""}
+            serviceTypes={Array.isArray(allServiceTypes) ? allServiceTypes as any[] : []}
+          />
         </TabsContent>
 
         <TabsContent value="settings" className="p-5 focus-visible:outline-none">

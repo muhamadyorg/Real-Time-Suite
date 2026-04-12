@@ -14,12 +14,13 @@ import {
   useUpdateOrderStatus,
 } from "@workspace/api-client-react";
 import { ClientAccountsView } from "@/components/ClientAccountsView";
+import { AnalyticsView } from "@/components/AnalyticsView";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
 import { PrintLabelButton } from "@/components/PrintLabelButton";
-import { Search, Loader2, Plus, Users, X, QrCode, Hash, Clock, Package, CheckCircle, Phone, User, FileText, Building2, Pencil, Trash2, Truck, Lock, LockOpen, CreditCard } from "lucide-react";
+import { Search, Loader2, Plus, Users, X, QrCode, Hash, Clock, Package, CheckCircle, Phone, User, FileText, Building2, Pencil, Trash2, Truck, Lock, LockOpen, CreditCard, TrendingUp } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -525,6 +526,8 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
   const [requireOutputQty, setRequireOutputQty] = useState(false);
   const [templateFields, setTemplateFields] = useState<typeof ADMIN_DEFAULT_ORDER_FIELDS>(ADMIN_DEFAULT_ORDER_FIELDS);
   const [extraFields, setExtraFields] = useState<Record<string, string>>({});
+  const [priceRaw, setPriceRaw] = useState("");
+  const fmtPrice = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
   const { data: allServiceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId] } });
@@ -576,7 +579,7 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
   const getLabel = (key: string) => getField(key)?.label ?? key;
 
   const resetForm = () => {
-    setServiceTypeId(""); setQuantity("1"); setUnit(""); setShelf(""); setProduct(""); setNotes("");
+    setServiceTypeId(""); setQuantity("1"); setUnit(""); setShelf(""); setProduct(""); setNotes(""); setPriceRaw("");
     setClientId(""); setClientName(""); setClientPhone("");
     setProducts([]); setRequireOutputQty(false); setExtraFields({});
   };
@@ -596,6 +599,7 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
         clientPhone: clientPhone || null,
         requireOutputQty,
         ...(Object.keys(extraFields).length > 0 ? { extraFields } : {}),
+        ...(priceRaw.trim() ? { price: Number(priceRaw.replace(/\s/g, "")) } : {}),
       } as any},
       {
         onSuccess: () => {
@@ -811,6 +815,18 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
           <div className="flex-1 overflow-y-auto overscroll-contain">
             <div className="space-y-5 px-6 py-5">
               {templateFields.map(f => renderField(f.key))}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5"><span>Narx (so'm)</span><span className="text-xs text-muted-foreground font-normal">— ixtiyoriy</span></Label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={priceRaw}
+                  onChange={e => setPriceRaw(fmtPrice(e.target.value))}
+                  className="h-12 bg-card font-semibold text-lg tabular-nums"
+                />
+                {priceRaw && <p className="text-xs text-muted-foreground">{priceRaw} so'm</p>}
+              </div>
             </div>
           </div>
           <DialogFooter className="px-6 pb-6 pt-4 border-t shrink-0">
@@ -1019,7 +1035,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
 
       <div className="p-4 pt-2 sticky z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b" style={{ top: stickyTop }}>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className={`grid w-full h-12 bg-muted/50 p-1 ${hasNasiya ? "grid-cols-5" : "grid-cols-4"}`}>
+          <TabsList className={`grid w-full h-12 bg-muted/50 p-1`} style={{ gridTemplateColumns: `repeat(${4 + (hasNasiya ? 1 : 0) + (showAnalytics ? 1 : 0)}, 1fr)` }}>
             <TabsTrigger value="new" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">YANGI</TabsTrigger>
             <TabsTrigger value="accepted" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">QABUL</TabsTrigger>
             <TabsTrigger value="ready" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">TAYYOR</TabsTrigger>
@@ -1029,10 +1045,15 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
                 <CreditCard className="w-3 h-3 hidden sm:block" />HISOB
               </TabsTrigger>
             )}
+            {showAnalytics && (
+              <TabsTrigger value="analytics" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary flex items-center gap-1">
+                <TrendingUp className="w-3 h-3 hidden sm:block" />HISOBOT
+              </TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
         
-        {activeTab !== "hisoblar" && <div className="mt-3 flex gap-2">
+        {activeTab !== "hisoblar" && activeTab !== "analytics" && <div className="mt-3 flex gap-2">
           <div className="relative flex-1 group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
             <Input 
@@ -1098,6 +1119,15 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         {activeTab === "hisoblar" && hasNasiya && storeId && token && (
           <div className="p-4">
             <ClientAccountsView storeId={storeId} token={token} role={role as any} />
+          </div>
+        )}
+        {activeTab === "analytics" && showAnalytics && storeId && token && (
+          <div className="p-4">
+            <AnalyticsView
+              storeId={storeId}
+              token={token}
+              serviceTypes={Array.isArray(serviceTypes) ? (serviceTypes as any[]).filter((s: any) => !allowedServiceTypeIds?.length || allowedServiceTypeIds.includes(s.id)) : []}
+            />
           </div>
         )}
       </div>
