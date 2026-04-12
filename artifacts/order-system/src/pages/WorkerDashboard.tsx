@@ -328,7 +328,7 @@ function CreateOrderDialog({ storeId, workerServiceTypeId, open, onOpenChange }:
   const resetForm = () => {
     setServiceTypeId(workerServiceTypeId ? String(workerServiceTypeId) : "");
     setQuantity("1"); setUnit(""); setShelf(""); setProduct(""); setNotes("");
-    setIsClientManual(false); setClientId(""); setClientName(""); setClientPhone("");
+    setClientId(""); setClientName(""); setClientPhone("");
     setRequireOutputQty(false); setExtraFields({});
   };
 

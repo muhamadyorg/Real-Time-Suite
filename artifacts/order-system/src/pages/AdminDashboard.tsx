@@ -334,20 +334,13 @@ function EditOrderModal({ order, open, onClose, storeId }: { order: any, open: b
       setOutputQty(order.outputQuantity != null ? String(order.outputQuantity) : "");
       setOutputQtyUnit(order.outputUnit ?? "");
       if (order.clientId) {
-        setIsClientManual(false);
         setClientId(String(order.clientId));
         setClientName(order.clientName ?? "");
         setClientPhone(order.clientPhone ?? "");
-      } else if (order.clientName || order.clientPhone) {
-        setIsClientManual(true);
+      } else {
         setClientId("");
         setClientName(order.clientName ?? "");
         setClientPhone(order.clientPhone ?? "");
-      } else {
-        setIsClientManual(false);
-        setClientId("");
-        setClientName("");
-        setClientPhone("");
       }
     }
   }, [order, open]);
@@ -563,7 +556,7 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
 
   const resetForm = () => {
     setServiceTypeId(""); setQuantity("1"); setUnit(""); setShelf(""); setProduct(""); setNotes("");
-    setIsClientManual(false); setClientId(""); setClientName(""); setClientPhone("");
+    setClientId(""); setClientName(""); setClientPhone("");
     setProducts([]); setRequireOutputQty(false); setExtraFields({});
   };
 
