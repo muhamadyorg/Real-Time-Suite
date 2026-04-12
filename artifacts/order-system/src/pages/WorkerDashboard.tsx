@@ -573,6 +573,9 @@ export default function WorkerDashboard() {
   const { data: historyOrders, isLoading: isHistoryLoading } = useGetOrders({ storeId: storeId!, date }, { query: { queryKey: [...getGetOrdersQueryKey({ storeId: storeId!, date }), accountId], refetchInterval: 60000, enabled: !!storeId && !!accountId } });
 
   const { data: serviceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId], enabled: !!storeId } });
+  const hasNasiya = workerServiceTypeId
+    ? (serviceTypes as any[])?.some((s: any) => s.id === workerServiceTypeId && s.nasiyaEnabled) ?? false
+    : false;
 
   const updateStatus = useUpdateOrderStatus();
 
@@ -1013,7 +1016,6 @@ export default function WorkerDashboard() {
       <div className="p-4 sticky top-[56px] z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {(() => {
-            const hasNasiya = (serviceTypes as any[])?.some((s: any) => s.nasiyaEnabled) ?? false;
             return (
               <TabsList className={`grid w-full h-12 bg-muted/50 p-1 ${hasNasiya ? "grid-cols-5" : "grid-cols-4"}`}>
                 <TabsTrigger value="new" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">
@@ -1067,7 +1069,7 @@ export default function WorkerDashboard() {
         {activeTab === "accepted" && renderAcceptedOrders(myAcceptedOrders, isAcceptedLoading)}
         {activeTab === "ready" && renderReadyOrders(readyOrders, isReadyLoading)}
         {activeTab === "history" && renderList(historyOrders, isHistoryLoading)}
-        {activeTab === "hisoblar" && storeId && token && (
+        {activeTab === "hisoblar" && hasNasiya && storeId && token && (
           <div className="p-4">
             <ClientAccountsView storeId={storeId} token={token} role="worker" />
           </div>

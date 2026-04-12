@@ -761,7 +761,7 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
 }
 
 export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: { hideHeader?: boolean, stickyTop?: number }) {
-  const { accountName, storeId, role, token } = useAuth();
+  const { accountName, storeId, role, token, allowedServiceTypeIds } = useAuth();
   const [activeTab, setActiveTab] = useState("new");
   const [search, setSearch] = useState("");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -823,7 +823,13 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
   const { data: summary } = useGetOrdersSummary({ query: { refetchInterval: 60000, enabled: !!storeId } });
   
   const { data: serviceTypes } = useGetServiceTypes({ query: { enabled: !!storeId } });
-  const hasNasiya = (serviceTypes as any[])?.some((s: any) => s.nasiyaEnabled) ?? false;
+  const hasNasiya = (() => {
+    const st = serviceTypes as any[];
+    if (!st?.length) return false;
+    if (allowedServiceTypeIds && allowedServiceTypeIds.length > 0)
+      return st.some((s) => allowedServiceTypeIds.includes(s.id) && s.nasiyaEnabled);
+    return st.some((s) => s.nasiyaEnabled);
+  })();
 
   const { data: newOrders, isLoading: isNewLoading } = useGetOrders({ status: "new", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "new", storeId: storeId! }), refetchInterval: 60000, enabled: !!storeId } });
   const { data: acceptedOrders, isLoading: isAcceptedLoading } = useGetOrders({ status: "accepted", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "accepted", storeId: storeId! }), refetchInterval: 60000, enabled: !!storeId } });
