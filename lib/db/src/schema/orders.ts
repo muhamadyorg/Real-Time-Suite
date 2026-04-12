@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp, pgEnum, numeric, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, pgEnum, numeric, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { storesTable } from "./stores";
@@ -38,6 +38,7 @@ export const ordersTable = pgTable("orders", {
   splitPart: integer("split_part"),
   deliveredAt: timestamp("delivered_at"),
   deliveredByName: text("delivered_by_name"),
+  extraFields: jsonb("extra_fields").$type<Record<string, string>>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

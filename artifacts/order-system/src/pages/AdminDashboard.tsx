@@ -527,6 +527,7 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
   const [products, setProducts] = useState<any[]>([]);
   const [requireOutputQty, setRequireOutputQty] = useState(false);
   const [templateFields, setTemplateFields] = useState<typeof ADMIN_DEFAULT_ORDER_FIELDS>(ADMIN_DEFAULT_ORDER_FIELDS);
+  const [extraFields, setExtraFields] = useState<Record<string, string>>({});
   const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
   const { data: allServiceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId] } });
@@ -580,7 +581,7 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
   const resetForm = () => {
     setServiceTypeId(""); setQuantity("1"); setUnit(""); setShelf(""); setProduct(""); setNotes("");
     setIsClientManual(false); setClientId(""); setClientName(""); setClientPhone("");
-    setProducts([]); setRequireOutputQty(false);
+    setProducts([]); setRequireOutputQty(false); setExtraFields({});
   };
 
   const onSubmit = (e: React.FormEvent) => {
@@ -597,7 +598,8 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
         clientName: isClientManual ? clientName : null,
         clientPhone: isClientManual ? clientPhone : null,
         requireOutputQty,
-      }},
+        ...(Object.keys(extraFields).length > 0 ? { extraFields } : {}),
+      } as any},
       {
         onSuccess: () => {
           toast({ title: "Muvaffaqiyatli", description: "Yangi zakaz qo'shildi" });
@@ -783,8 +785,34 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
         );
       }
 
-      default:
-        return null;
+      default: {
+        if (!key.startsWith("custom_")) return null;
+        const field = getField(key);
+        if (!field || !field.visible) return null;
+        const val = extraFields[field.label] ?? "";
+        const cOpts = field.options ?? [];
+        if (cOpts.length > 0) {
+          return (
+            <div key={key} className="space-y-2">
+              <Label>{field.label}{field.required ? " *" : ""}</Label>
+              <div className="flex flex-wrap gap-2">
+                {cOpts.map((opt: string) => (
+                  <button key={opt} type="button" onClick={() => setExtraFields(prev => ({ ...prev, [field.label]: prev[field.label] === opt ? "" : opt }))}
+                    className={`px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${val === opt ? "bg-primary text-primary-foreground border-primary shadow-md scale-105" : "bg-card border-border hover:border-primary/60 hover:bg-muted/50"}`}
+                  >{opt}</button>
+                ))}
+              </div>
+              {val && <div className="text-xs text-muted-foreground">Tanlangan: <span className="font-semibold text-primary">{val}</span></div>}
+            </div>
+          );
+        }
+        return (
+          <div key={key} className="space-y-2">
+            <Label>{field.label}{field.required ? " *" : ""}</Label>
+            <Input value={val} onChange={e => setExtraFields(prev => ({ ...prev, [field.label]: e.target.value }))} className="h-12 bg-card" required={field.required} />
+          </div>
+        );
+      }
     }
   };
 

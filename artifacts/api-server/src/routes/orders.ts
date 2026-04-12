@@ -53,6 +53,7 @@ function mapOrder(o: typeof ordersTable.$inferSelect, showLockPin = true) {
     requireOutputQty: o.requireOutputQty ?? false,
     deliveredAt: o.deliveredAt,
     deliveredByName: o.deliveredByName,
+    extraFields: o.extraFields ?? {},
     lockPin: showLockPin ? o.lockPin : undefined,
     isLocked: !!o.lockPin,
     splitGroup: o.splitGroup,
@@ -277,7 +278,7 @@ router.post("/", async (req, res) => {
       return;
     }
 
-    const { serviceTypeId, quantity, unit, shelf, product, notes, clientId, clientName, clientPhone, requireOutputQty } = req.body as {
+    const { serviceTypeId, quantity, unit, shelf, product, notes, clientId, clientName, clientPhone, requireOutputQty, extraFields } = req.body as {
       serviceTypeId: number;
       quantity: number;
       unit?: string;
@@ -288,6 +289,7 @@ router.post("/", async (req, res) => {
       clientName?: string;
       clientPhone?: string;
       requireOutputQty?: boolean;
+      extraFields?: Record<string, string>;
     };
 
     const serviceType = await db.query.serviceTypesTable.findFirst({
@@ -357,6 +359,7 @@ router.post("/", async (req, res) => {
         createdByName: payload.name ?? "Xodim",
         lockPin,
         requireOutputQty: requireOutputQty ?? false,
+        extraFields: extraFields && Object.keys(extraFields).length > 0 ? extraFields : null,
       })
       .returning();
 
@@ -378,6 +381,9 @@ router.post("/", async (req, res) => {
         (resolvedClientPhone ? `📱 Telefon: <b>${resolvedClientPhone}</b>\n` : ``) +
         (order.shelf ? `📍 Qolib: <b>${order.shelf}</b>\n` : ``) +
         (order.notes ? `📝 Izoh: <b>${order.notes}</b>\n` : ``) +
+        (order.extraFields && Object.keys(order.extraFields).length > 0
+          ? Object.entries(order.extraFields).map(([k, v]) => `📌 ${k}: <b>${v}</b>`).join("\n") + "\n"
+          : ``) +
         `\n🏪 Do'kon: <b>${order.storeName}</b>`
       );
     } catch (_e) { /* ignore */ }

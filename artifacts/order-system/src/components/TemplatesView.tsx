@@ -138,6 +138,11 @@ function FieldEditor({ fields, onChange }: { fields: TemplateField[]; onChange: 
     arr[idx] = { ...arr[idx], ...patch };
     onChange(arr);
   };
+  const remove = (idx: number) => onChange(fields.filter((_, i) => i !== idx));
+  const addCustom = () => {
+    const key = `custom_${Date.now()}`;
+    onChange([...fields, { key, label: "Yangi maydon", required: false, visible: true, options: [] }]);
+  };
 
   return (
     <div className="space-y-2">
@@ -146,10 +151,11 @@ function FieldEditor({ fields, onChange }: { fields: TemplateField[]; onChange: 
       </p>
       {fields.map((f, i) => {
         const meta = ALL_FIELD_KEYS.find(m => m.key === f.key);
-        const hasOptions = !meta?.noOptions;
+        const isCustom = f.key.startsWith("custom_");
+        const hasOptions = isCustom || !meta?.noOptions;
 
         return (
-          <div key={f.key} className={`rounded-xl border bg-card transition-all ${!f.visible ? "opacity-50" : ""}`}>
+          <div key={f.key} className={`rounded-xl border bg-card transition-all ${!f.visible ? "opacity-50" : ""} ${isCustom ? "border-primary/30" : ""}`}>
             <div className="flex items-center gap-2 p-3">
               <div className="flex flex-col gap-0.5 shrink-0">
                 <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-20 p-0.5">
@@ -171,15 +177,26 @@ function FieldEditor({ fields, onChange }: { fields: TemplateField[]; onChange: 
                 onClick={() => update(i, { required: !f.required })}
                 className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all text-xs font-bold shrink-0 ${f.required ? "bg-orange-500 text-white" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
               >*</button>
-              <button
-                type="button"
-                title={f.visible ? "Ko'rinadigan" : "Yashirin"}
-                onClick={() => { if (!meta?.alwaysVisible) update(i, { visible: !f.visible }); }}
-                disabled={!!meta?.alwaysVisible}
-                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all shrink-0 ${f.visible ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"} disabled:cursor-not-allowed`}
-              >
-                {f.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-              </button>
+              {isCustom ? (
+                <button
+                  type="button"
+                  title="Maydonni o'chirish"
+                  onClick={() => remove(i)}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center transition-all shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  title={f.visible ? "Ko'rinadigan" : "Yashirin"}
+                  onClick={() => { if (!meta?.alwaysVisible) update(i, { visible: !f.visible }); }}
+                  disabled={!!meta?.alwaysVisible}
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all shrink-0 ${f.visible ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"} disabled:cursor-not-allowed`}
+                >
+                  {f.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                </button>
+              )}
             </div>
 
             {hasOptions && (
@@ -193,6 +210,15 @@ function FieldEditor({ fields, onChange }: { fields: TemplateField[]; onChange: 
           </div>
         );
       })}
+
+      <button
+        type="button"
+        onClick={addCustom}
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-primary/30 text-primary/70 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all text-sm font-medium"
+      >
+        <Plus className="w-4 h-4" />
+        Yangi maydon qo'shish
+      </button>
     </div>
   );
 }
