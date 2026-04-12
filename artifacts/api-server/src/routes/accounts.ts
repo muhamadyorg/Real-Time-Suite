@@ -237,4 +237,25 @@ router.put("/:id/service-types", async (req, res) => {
   }
 });
 
+// PATCH /accounts/:id/no-timer — superadmin/sudo uchun timer o'chirish/yoqish
+router.patch("/:id/no-timer", async (req, res) => {
+  try {
+    const payload = await authenticateToken(req.headers.authorization);
+    if (!payload || (payload.role !== "sudo" && payload.role !== "superadmin")) {
+      res.status(403).json({ error: "Ruxsat yo'q" });
+      return;
+    }
+    const id = parseInt(req.params.id);
+    const { noTimer } = req.body as { noTimer: boolean };
+    const [updated] = await db.update(accountsTable)
+      .set({ noTimer: !!noTimer })
+      .where(eq(accountsTable.id, id))
+      .returning();
+    res.json({ success: true, noTimer: updated.noTimer });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server xatosi" });
+  }
+});
+
 export default router;

@@ -528,7 +528,7 @@ function LockPinModal({ order, open, onClose, onConfirm, isPending }: {
 }
 
 export default function WorkerDashboard() {
-  const { accountName, storeId, accountId, serviceTypeId: workerServiceTypeId, clearPinAuth, token, role } = useAuth();
+  const { accountName, storeId, accountId, serviceTypeId: workerServiceTypeId, clearPinAuth, token, role, noTimer } = useAuth();
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("new");
   const [search, setSearch] = useState("");
@@ -565,7 +565,7 @@ export default function WorkerDashboard() {
     setLocation("/pin");
   }, [clearPinAuth, setLocation]);
 
-  const { secondsLeft } = useInactivityTimer(15, handleTimeout);
+  const { secondsLeft } = useInactivityTimer(noTimer ? 999999 : 15, handleTimeout);
 
   const { data: newOrders, isLoading: isNewLoading } = useGetOrders({ status: "new", storeId: storeId! }, { query: { queryKey: [...getGetOrdersQueryKey({ status: "new", storeId: storeId! }), accountId], refetchInterval: 60000, enabled: !!storeId && !!accountId } });
   const { data: acceptedOrders, isLoading: isAcceptedLoading } = useGetOrders({ status: "accepted", storeId: storeId! }, { query: { queryKey: [...getGetOrdersQueryKey({ status: "accepted", storeId: storeId! }), accountId], refetchInterval: 60000, enabled: !!storeId && !!accountId } });
@@ -1005,7 +1005,7 @@ export default function WorkerDashboard() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-accent"></span>
             </span>
-            {secondsLeft}s
+            {noTimer ? "∞" : `${secondsLeft}s`}
           </div>
         }
       />

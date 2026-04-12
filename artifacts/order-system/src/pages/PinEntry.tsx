@@ -30,7 +30,7 @@ export default function PinEntry() {
   if (pin.length === 4 && storeId && !pinLogin.isPending) {
     pinLogin.mutate({ data: { pin, storeId } }, {
       onSuccess: (data) => {
-        setPinAuth(data.token, data.account.id, data.account.name, data.role, data.account.serviceTypeId ?? null, (data.account as any).allowedServiceTypeIds ?? []);
+        setPinAuth(data.token, data.account.id, data.account.name, data.role, data.account.serviceTypeId ?? null, (data.account as any).allowedServiceTypeIds ?? [], (data.account as any).noTimer ?? false);
         if (data.role === 'worker') setLocation('/worker');
         else if (data.role === 'admin') setLocation('/admin');
         else if (data.role === 'superadmin') setLocation('/superadmin');

@@ -11,11 +11,12 @@ interface AuthState {
   role: string | null;
   serviceTypeId: number | null;
   allowedServiceTypeIds: number[];
+  noTimer: boolean;
 }
 
 interface AuthContextType extends AuthState {
   setStoreAuth: (token: string, storeId: number, storeUsername: string, storeName: string, role: string) => void;
-  setPinAuth: (token: string, accountId: number, accountName: string, role: string, serviceTypeId?: number | null, allowedServiceTypeIds?: number[]) => void;
+  setPinAuth: (token: string, accountId: number, accountName: string, role: string, serviceTypeId?: number | null, allowedServiceTypeIds?: number[], noTimer?: boolean) => void;
   clearPinAuth: () => void;
   clearStoreAuth: () => void;
 }
@@ -30,6 +31,7 @@ const defaultState: AuthState = {
   role: null,
   serviceTypeId: null,
   allowedServiceTypeIds: [],
+  noTimer: false,
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -66,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const setPinAuth = (token: string, accountId: number, accountName: string, role: string, serviceTypeId?: number | null, allowedServiceTypeIds?: number[]) => {
+  const setPinAuth = (token: string, accountId: number, accountName: string, role: string, serviceTypeId?: number | null, allowedServiceTypeIds?: number[], noTimer?: boolean) => {
     setState((prev) => ({
       ...prev,
       token,
@@ -75,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role,
       serviceTypeId: serviceTypeId ?? null,
       allowedServiceTypeIds: allowedServiceTypeIds ?? [],
+      noTimer: noTimer ?? false,
     }));
   };
 

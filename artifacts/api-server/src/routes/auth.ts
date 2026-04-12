@@ -125,6 +125,7 @@ router.post("/pin-login", async (req, res) => {
         allowedServiceTypeIds,
         storeName: store?.name ?? null,
         createdAt: account.createdAt,
+        noTimer: account.noTimer ?? false,
       },
       role: account.role,
     });

@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil, Users, Save, Send, RefreshCw, Bot, CreditCard, Wallet, TrendingDown, TrendingUp, ArrowDownLeft, ArrowUpRight, Phone, User, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil, Users, Save, Send, RefreshCw, Bot, CreditCard, Wallet, TrendingDown, TrendingUp, ArrowDownLeft, ArrowUpRight, Phone, User, ChevronDown, ChevronUp, Timer } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import AdminDashboard from "./AdminDashboard";
 import ProductsView from "@/components/ProductsView";
@@ -1269,6 +1269,92 @@ function TelegramView({ token }: { token: string | null }) {
   );
 }
 
+function TimerSettingsPanel({ token, storeId }: { token: string | null; storeId: number }) {
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [toggling, setToggling] = useState<number | null>(null);
+  const { toast } = useToast();
+  const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+
+  const loadAccounts = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`${apiBase}/api/accounts`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await r.json();
+      setAccounts((data as any[]).filter((a: any) => a.storeId === storeId && (a.role === "worker" || a.role === "admin")));
+    } catch { toast({ variant: "destructive", title: "Xatolik", description: "Yuklanmadi" }); }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadAccounts(); }, [storeId]);
+
+  const toggleTimer = async (id: number, current: boolean) => {
+    setToggling(id);
+    try {
+      const r = await fetch(`${apiBase}/api/accounts/${id}/no-timer`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ noTimer: !current }),
+      });
+      const data = await r.json();
+      if (data.success) {
+        setAccounts(prev => prev.map(a => a.id === id ? { ...a, noTimer: data.noTimer } : a));
+        toast({ title: data.noTimer ? "Timer o'chirildi ✅" : "Timer yoqildi 🔄", description: `Akkount yangilandi` });
+      }
+    } catch { toast({ variant: "destructive", title: "Xatolik" }); }
+    setToggling(null);
+  };
+
+  const roleLabel: Record<string, string> = { worker: "Ishchi", admin: "Admin" };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Timer className="w-5 h-5 text-primary" />
+        <h2 className="text-lg font-bold">Timer sozlamalari</h2>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        Ishchilar odatda <b>15 soniya</b> faolsizlikda avtomatik chiqib ketadi. Quyidagi ro'yxatda timer'ni o'chirib qo'yishingiz mumkin — u holda ishchi hisobdan chiqmaydi.
+      </p>
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+      ) : accounts.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8">Ishchi/admin topilmadi</p>
+      ) : (
+        <div className="space-y-2">
+          {accounts.map(acc => (
+            <Card key={acc.id}>
+              <CardContent className="p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${acc.role === "worker" ? "bg-accent" : "bg-primary"}`}>
+                    {acc.name?.charAt(0)?.toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-semibold truncate">{acc.name}</div>
+                    <div className="text-xs text-muted-foreground">{roleLabel[acc.role] ?? acc.role} • PIN: {acc.pin ?? "—"}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-right">
+                    <div className={`text-xs font-semibold ${acc.noTimer ? "text-green-600" : "text-muted-foreground"}`}>
+                      {acc.noTimer ? "∞ Timer o'chiq" : "⏱ 15 soniya"}
+                    </div>
+                  </div>
+                  {toggling === acc.id ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Switch checked={!!acc.noTimer} onCheckedChange={() => toggleTimer(acc.id, !!acc.noTimer)} />
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SuperadminDashboard() {
   const { accountName, storeId, token } = useAuth();
   
@@ -1283,6 +1369,9 @@ export default function SuperadminDashboard() {
           <TabsList className="flex w-max min-w-full h-10 gap-0.5">
             <TabsTrigger value="orders"   className="text-xs sm:text-sm px-3 shrink-0">Zakazlar</TabsTrigger>
             <TabsTrigger value="accounts" className="text-xs sm:text-sm px-3 shrink-0">Ishchilar</TabsTrigger>
+            <TabsTrigger value="timer" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
+              <Timer className="w-3 h-3 hidden sm:block" />Timer
+            </TabsTrigger>
             <TabsTrigger value="admins"   className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
               <Users className="w-3 h-3 hidden sm:block" />Adminlar
             </TabsTrigger>
@@ -1310,6 +1399,10 @@ export default function SuperadminDashboard() {
         
         <TabsContent value="accounts" className="p-5 max-w-4xl mx-auto focus-visible:outline-none">
           <AccountsView storeId={storeId} />
+        </TabsContent>
+
+        <TabsContent value="timer" className="p-5 max-w-2xl mx-auto focus-visible:outline-none">
+          <TimerSettingsPanel token={token} storeId={storeId} />
         </TabsContent>
 
         <TabsContent value="admins" className="p-5 focus-visible:outline-none">

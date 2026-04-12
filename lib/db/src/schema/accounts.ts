@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, pgEnum, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { storesTable } from "./stores";
@@ -15,6 +15,7 @@ export const accountsTable = pgTable("accounts", {
   passwordHash: text("password_hash"),
   storeId: integer("store_id").references(() => storesTable.id, { onDelete: "cascade" }),
   serviceTypeId: integer("service_type_id").references(() => serviceTypesTable.id, { onDelete: "set null" }),
+  noTimer: boolean("no_timer").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
