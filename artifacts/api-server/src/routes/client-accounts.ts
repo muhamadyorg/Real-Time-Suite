@@ -255,14 +255,17 @@ router.post("/:clientId/transaction", async (req, res) => {
     const noteStr = note ? `\n📝 ${note}` : "";
     const orderStr = orderCode ? `\n🔖 Buyurtma: #${orderCode}` : "";
 
+    // Mijoz to'liq ismi
+    const clientFullName = [(client as any).firstName, (client as any).lastName].filter(Boolean).join(" ") || "Noma'lum";
+
     // Mijozga to'g'ridan-to'g'ri xabar (agar Telegram bog'langan bo'lsa)
     if ((client as any).telegramUserId) {
-      const clientMsg = `${typeLabel}${storeTag}\nMijoz: ${client.name}\nSumma: ${safeAmount.toFixed(0)} so'm\nBalans: ${balanceStr} so'm${orderStr}${noteStr}\nBajaruvchi: ${payload.name}`;
+      const clientMsg = `${typeLabel}${storeTag}\n👤 Mijoz: ${clientFullName}\n📞 Telefon: ${(client as any).phone || "—"}\nSumma: ${safeAmount.toFixed(0)} so'm\nBalans: ${balanceStr} so'm${orderStr}${noteStr}\nBajaruvchi: ${payload.name}`;
       sendTelegramNotification((client as any).telegramUserId, clientMsg, storeId).catch(() => {});
     }
 
     // Do'kon adminga bildirishnoma
-    const adminMsg = `${typeLabel}${storeTag}\n👤 ${client.name}\nSumma: ${safeAmount.toFixed(0)} so'm\nBalans: ${balanceStr} so'm${orderStr}${noteStr}\nBajaruvchi: ${payload.name}`;
+    const adminMsg = `${typeLabel}${storeTag}\n👤 ${clientFullName}\n📞 ${(client as any).phone || "—"}\nSumma: ${safeAmount.toFixed(0)} so'm\nBalans: ${balanceStr} so'm${orderStr}${noteStr}\nBajaruvchi: ${payload.name}`;
     notifyStoreAdmin(storeId, adminMsg).catch(() => {});
   } catch (err) {
     req.log.error(err);

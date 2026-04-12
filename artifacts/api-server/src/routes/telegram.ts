@@ -147,26 +147,24 @@ function setupBotHandlers(bot: TelegramBot, storeId: number | null, storeName = 
 
       if (step === "first_name") {
         tempData.firstName = text;
-        await db.update(clientsTable).set({ registrationStep: "last_name", tempData: JSON.stringify(tempData) }).where(eq(clientsTable.id, client.id));
-        await bot.sendMessage(chatId, `✅ <b>Ism:</b> ${text}\n\n👤 Endi <b>Familiyangizni</b> kiriting:`, { parse_mode: "HTML" });
-
-      } else if (step === "last_name") {
-        tempData.lastName = text;
         await db.update(clientsTable).set({ registrationStep: "phone", tempData: JSON.stringify(tempData) }).where(eq(clientsTable.id, client.id));
-        await bot.sendMessage(chatId, `✅ <b>Familiya:</b> ${text}\n\n📱 Endi <b>telefon raqamingizni</b> kiriting:\n\n<i>Faqat raqamlarni kiriting, masalan: 901234567</i>`, { parse_mode: "HTML" });
+        await bot.sendMessage(chatId, `✅ <b>Ism:</b> ${text}\n\n📱 Endi <b>to'liq telefon raqamingizni</b> kiriting:\n\n<i>Masalan: +998901234567 yoki 998901234567</i>`, { parse_mode: "HTML" });
 
       } else if (step === "phone") {
         tempData.phone = text;
+        // Familiya o'rniga raqamning oxirgi 4 ta raqami
+        const digits = text.replace(/\D/g, "");
+        const autoLastName = digits.slice(-4);
         await db.update(clientsTable).set({
           firstName: tempData.firstName,
-          lastName: tempData.lastName,
+          lastName: autoLastName,
           phone: tempData.phone,
           registrationStep: "done",
           tempData: null,
         }).where(eq(clientsTable.id, client.id));
         await bot.sendMessage(
           chatId,
-          `🎊 <b>Ro'yxatdan o'tdingiz!</b>\n\n👤 Ism: <b>${tempData.firstName} ${tempData.lastName}</b>\n📱 Telefon: <b>${tempData.phone}</b>\n\n⏳ So'rovingiz admin tomonidan ko'rib chiqilmoqda.\n✨ Tasdiqlangandan so'ng siz bizning <b>rasmiy mijozimiz</b> bo'lasiz!`,
+          `🎊 <b>Ro'yxatdan bo'ldingiz!</b>\n\n👤 Ism: <b>${tempData.firstName}</b>\n📱 Telefon: <b>${tempData.phone}</b>\n\n⏳ So'rovingiz admin tomonidan ko'rib chiqilmoqda.\n✨ Tasdiqlangandan so'ng siz bizning <b>rasmiy mijozimiz</b> bo'lasiz!`,
           { parse_mode: "HTML" }
         );
 
