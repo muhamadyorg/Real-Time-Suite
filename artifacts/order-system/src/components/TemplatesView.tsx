@@ -39,6 +39,8 @@ interface ServiceType { id: number; name: string; storeId?: number | null; templ
 
 function OptionsManager({ options, onChange }: { options: string[]; onChange: (o: string[]) => void }) {
   const [input, setInput] = useState("");
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const [editVal, setEditVal] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const add = () => {
@@ -46,39 +48,77 @@ function OptionsManager({ options, onChange }: { options: string[]; onChange: (o
     if (!v || options.includes(v)) return;
     onChange([...options, v]);
     setInput("");
-    inputRef.current?.focus();
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
   const remove = (i: number) => onChange(options.filter((_, idx) => idx !== i));
+  const startEdit = (i: number) => { setEditIdx(i); setEditVal(options[i]); };
+  const commitEdit = () => {
+    if (editIdx === null) return;
+    const v = editVal.trim();
+    if (v && !options.some((o, i) => o === v && i !== editIdx)) {
+      const arr = [...options]; arr[editIdx] = v; onChange(arr);
+    }
+    setEditIdx(null);
+  };
 
   return (
-    <div className="mt-2 space-y-2 pl-4 border-l-2 border-primary/20">
+    <div className="space-y-2 pt-2 border-t border-border/40">
       <p className="text-xs text-muted-foreground font-medium flex items-center gap-1">
-        <Tag className="w-3 h-3" />Tayyor variantlar (bosib tanlash):
+        <Tag className="w-3 h-3 shrink-0" />
+        Tayyor variantlar — foydalanuvchi bosib tanlaydi:
       </p>
-      <div className="flex flex-wrap gap-1.5">
+
+      {options.length === 0 && (
+        <p className="text-xs text-muted-foreground italic px-1">
+          Variant yo'q — oddiy matn kiritish ko'rsatiladi
+        </p>
+      )}
+
+      <div className="space-y-1">
         {options.map((opt, i) => (
-          <span key={i} className="flex items-center gap-1 bg-primary/10 text-primary text-xs px-2 py-1 rounded-full font-medium">
-            {opt}
-            <button type="button" onClick={() => remove(i)} className="hover:text-destructive transition-colors">
-              <X className="w-3 h-3" />
-            </button>
-          </span>
+          <div key={i} className="flex items-center gap-1.5 bg-muted/40 rounded-lg px-2 py-1">
+            {editIdx === i ? (
+              <>
+                <input
+                  autoFocus
+                  value={editVal}
+                  onChange={e => setEditVal(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); commitEdit(); } if (e.key === "Escape") setEditIdx(null); }}
+                  className="flex-1 min-w-0 bg-background border border-border rounded px-2 py-0.5 text-xs outline-none"
+                />
+                <button type="button" onClick={commitEdit} className="text-green-500 hover:text-green-600 shrink-0">
+                  <Check className="w-3.5 h-3.5" />
+                </button>
+                <button type="button" onClick={() => setEditIdx(null)} className="text-muted-foreground hover:text-foreground shrink-0">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="flex-1 text-xs font-medium">{opt}</span>
+                <button type="button" onClick={() => startEdit(i)} title="Tahrirlash" className="text-muted-foreground hover:text-foreground shrink-0">
+                  <Pencil className="w-3 h-3" />
+                </button>
+                <button type="button" onClick={() => remove(i)} title="O'chirish" className="text-muted-foreground hover:text-destructive shrink-0">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </>
+            )}
+          </div>
         ))}
-        {options.length === 0 && (
-          <span className="text-xs text-muted-foreground italic">Variant yo'q — oddiy input ko'rsatiladi</span>
-        )}
       </div>
+
       <div className="flex gap-1.5">
         <Input
           ref={inputRef}
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
-          placeholder="Variant qo'shish (Enter)..."
-          className="h-7 text-xs"
+          placeholder="Yangi variant nomi (Enter)..."
+          className="h-8 text-xs"
         />
-        <Button type="button" size="sm" variant="outline" onClick={add} className="h-7 px-2 shrink-0">
-          <Plus className="w-3 h-3" />
+        <Button type="button" size="sm" variant="outline" onClick={add} className="h-8 px-2 shrink-0">
+          <Plus className="w-3.5 h-3.5" />
         </Button>
       </div>
     </div>
@@ -86,8 +126,6 @@ function OptionsManager({ options, onChange }: { options: string[]; onChange: (o
 }
 
 function FieldEditor({ fields, onChange }: { fields: TemplateField[]; onChange: (f: TemplateField[]) => void }) {
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
-
   const move = (idx: number, dir: -1 | 1) => {
     const arr = [...fields];
     const to = idx + dir;
@@ -108,9 +146,7 @@ function FieldEditor({ fields, onChange }: { fields: TemplateField[]; onChange: 
       </p>
       {fields.map((f, i) => {
         const meta = ALL_FIELD_KEYS.find(m => m.key === f.key);
-        const isExpanded = expandedKey === f.key;
         const hasOptions = !meta?.noOptions;
-        const optCount = f.options?.length ?? 0;
 
         return (
           <div key={f.key} className={`rounded-xl border bg-card transition-all ${!f.visible ? "opacity-50" : ""}`}>
@@ -129,19 +165,6 @@ function FieldEditor({ fields, onChange }: { fields: TemplateField[]; onChange: 
                 className="h-8 text-sm flex-1 min-w-0"
                 placeholder="Maydon nomi..."
               />
-              {hasOptions && (
-                <button
-                  type="button"
-                  onClick={() => setExpandedKey(isExpanded ? null : f.key)}
-                  title="Variantlarni boshqarish"
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold transition-all shrink-0 relative ${isExpanded ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
-                >
-                  <Tag className="w-3.5 h-3.5" />
-                  {optCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">{optCount}</span>
-                  )}
-                </button>
-              )}
               <button
                 type="button"
                 title={f.required ? "Majburiy" : "Ixtiyoriy"}
@@ -159,7 +182,7 @@ function FieldEditor({ fields, onChange }: { fields: TemplateField[]; onChange: 
               </button>
             </div>
 
-            {isExpanded && hasOptions && (
+            {hasOptions && (
               <div className="px-3 pb-3">
                 <OptionsManager
                   options={f.options ?? []}
@@ -198,8 +221,8 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
       const tmpls = await tmplRes.json();
       const sts = await stRes.json();
       setTemplates(Array.isArray(tmpls) ? tmpls : []);
-      // Faqat shu do'konning xizmat turlarini ko'rsat (null storeId emas)
-      setServiceTypes(Array.isArray(sts) ? sts.filter((s: any) => s.storeId === storeId) : []);
+      // SUDO (storeId=-1) barcha xizmat turlarini ko'radi; admin faqat o'zinikini
+      setServiceTypes(Array.isArray(sts) ? (storeId === -1 ? sts : sts.filter((s: any) => s.storeId === storeId)) : []);
     } catch { toast({ variant: "destructive", title: "Yuklanmadi" }); }
     setLoading(false);
   };
