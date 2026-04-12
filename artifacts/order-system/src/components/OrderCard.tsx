@@ -55,7 +55,7 @@ export function OrderCard({ order, search = "", actionButton, onOrderClick, canP
             <button
               type="button"
               onClick={onOrderClick}
-              className={`text-xs font-semibold tracking-widest font-mono text-muted-foreground ${onOrderClick ? 'hover:text-primary hover:underline cursor-pointer' : 'cursor-default'}`}
+              className={`font-bold text-lg tracking-wider font-mono ${onOrderClick ? 'text-primary hover:underline cursor-pointer' : 'cursor-default'}`}
               disabled={!onOrderClick}
             >
               <HighlightText text={order.orderId} search={search} />
