@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, clientsTable, clientAccountsTable, clientTransactionsTable, serviceTypesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
+import { notifyStoreAdmin, sendTelegramNotification } from "./telegram";
 
 const router = Router();
 
@@ -246,6 +247,23 @@ router.post("/:clientId/transaction", async (req, res) => {
     }).returning();
 
     res.status(201).json({ transaction: tx, balance: balanceAfter });
+
+    // Telegram bildirishnomalar (fon rejimida, javobni kutmasdan)
+    const typeLabel = type === "qarz" ? "📦 Nasiya" : type === "tolov" ? "💰 To'lov" : type === "tuzatish" ? "✏️ Tuzatish" : "💵 Naqd";
+    const balanceStr = balanceAfter >= 0 ? `+${balanceAfter.toFixed(0)}` : balanceAfter.toFixed(0);
+    const storeTag = serviceTypeName ? ` (${serviceTypeName})` : "";
+    const noteStr = note ? `\n📝 ${note}` : "";
+    const orderStr = orderCode ? `\n🔖 Buyurtma: #${orderCode}` : "";
+
+    // Mijozga to'g'ridan-to'g'ri xabar (agar Telegram bog'langan bo'lsa)
+    if ((client as any).telegramUserId) {
+      const clientMsg = `${typeLabel}${storeTag}\nMijoz: ${client.name}\nSumma: ${safeAmount.toFixed(0)} so'm\nBalans: ${balanceStr} so'm${orderStr}${noteStr}\nBajaruvchi: ${payload.name}`;
+      sendTelegramNotification((client as any).telegramUserId, clientMsg, storeId).catch(() => {});
+    }
+
+    // Do'kon adminga bildirishnoma
+    const adminMsg = `${typeLabel}${storeTag}\n👤 ${client.name}\nSumma: ${safeAmount.toFixed(0)} so'm\nBalans: ${balanceStr} so'm${orderStr}${noteStr}\nBajaruvchi: ${payload.name}`;
+    notifyStoreAdmin(storeId, adminMsg).catch(() => {});
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Server xatosi" });

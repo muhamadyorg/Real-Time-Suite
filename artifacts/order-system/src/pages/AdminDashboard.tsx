@@ -13,12 +13,13 @@ import {
   useDeleteOrder,
   useUpdateOrderStatus,
 } from "@workspace/api-client-react";
+import { ClientAccountsView } from "@/components/ClientAccountsView";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
 import { PrintLabelButton } from "@/components/PrintLabelButton";
-import { Search, Loader2, Plus, Users, X, QrCode, Hash, Clock, Package, CheckCircle, Phone, User, FileText, Building2, Pencil, Trash2, Truck, Lock, LockOpen } from "lucide-react";
+import { Search, Loader2, Plus, Users, X, QrCode, Hash, Clock, Package, CheckCircle, Phone, User, FileText, Building2, Pencil, Trash2, Truck, Lock, LockOpen, CreditCard } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -821,6 +822,9 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
 
   const { data: summary } = useGetOrdersSummary({ query: { refetchInterval: 60000, enabled: !!storeId } });
   
+  const { data: serviceTypes } = useGetServiceTypes({ query: { enabled: !!storeId } });
+  const hasNasiya = (serviceTypes as any[])?.some((s: any) => s.nasiyaEnabled) ?? false;
+
   const { data: newOrders, isLoading: isNewLoading } = useGetOrders({ status: "new", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "new", storeId: storeId! }), refetchInterval: 60000, enabled: !!storeId } });
   const { data: acceptedOrders, isLoading: isAcceptedLoading } = useGetOrders({ status: "accepted", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "accepted", storeId: storeId! }), refetchInterval: 60000, enabled: !!storeId } });
   const { data: readyOrders, isLoading: isReadyLoading } = useGetOrders({ status: "ready", storeId: storeId! }, { query: { queryKey: getGetOrdersQueryKey({ status: "ready", storeId: storeId! }), refetchInterval: 60000, enabled: !!storeId } });
@@ -944,15 +948,20 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
 
       <div className="p-4 pt-2 sticky z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b" style={{ top: stickyTop }}>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid grid-cols-4 w-full h-12 bg-muted/50 p-1">
+          <TabsList className={`grid w-full h-12 bg-muted/50 p-1 ${hasNasiya ? "grid-cols-5" : "grid-cols-4"}`}>
             <TabsTrigger value="new" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">YANGI</TabsTrigger>
             <TabsTrigger value="accepted" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">QABUL</TabsTrigger>
             <TabsTrigger value="ready" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">TAYYOR</TabsTrigger>
             <TabsTrigger value="history" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">TARIX</TabsTrigger>
+            {hasNasiya && (
+              <TabsTrigger value="hisoblar" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary flex items-center gap-1">
+                <CreditCard className="w-3 h-3 hidden sm:block" />HISOB
+              </TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
         
-        <div className="mt-3 flex gap-2">
+        {activeTab !== "hisoblar" && <div className="mt-3 flex gap-2">
           <div className="relative flex-1 group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
             <Input 
@@ -983,7 +992,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
               {queueLocked ? <Lock className="w-5 h-5" /> : <LockOpen className="w-5 h-5" />}
             </button>
           )}
-        </div>
+        </div>}
       </div>
 
       {activeTab === "history" && (
@@ -1014,6 +1023,11 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
             ? (deliveredOrders ?? [])
             : (readyOrders ?? []).slice().sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
           historySubTab === "delivered" ? isDeliveredLoading : isReadyLoading
+        )}
+        {activeTab === "hisoblar" && hasNasiya && storeId && token && (
+          <div className="p-4">
+            <ClientAccountsView storeId={storeId} token={token} role={role as any} />
+          </div>
         )}
       </div>
 

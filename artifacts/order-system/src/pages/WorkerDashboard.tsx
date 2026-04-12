@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
 import { PrintLabelButton } from "@/components/PrintLabelButton";
-import { Search, Loader2, X, QrCode, Clock, CheckCircle, Package, Hash, User, Phone, FileText, Building2, Plus, Users, Lock, Split, Truck, Check, CreditCard, Wallet } from "lucide-react";
+import { Search, Loader2, X, QrCode, Clock, CheckCircle, Package, Hash, User, Phone, FileText, Building2, Plus, Users, Lock, Split, Truck, Check, CreditCard, Wallet, BarChart3 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { QRCodeSVG } from "qrcode.react";
 import { useMyPermissions } from "@/hooks/useMyPermissions";
 import { useBTPrinterContext } from "@/hooks/useBTPrinter";
+import { ClientAccountsView } from "@/components/ClientAccountsView";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   new: { label: "Yangi", color: "text-blue-600 bg-blue-50 border border-blue-200" },
@@ -1011,21 +1012,31 @@ export default function WorkerDashboard() {
 
       <div className="p-4 sticky top-[56px] z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid grid-cols-4 w-full h-12 bg-muted/50 p-1">
-            <TabsTrigger value="new" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">
-              YANGI
-              {newOrders && newOrders.length > 0 && <span className="ml-1.5 bg-destructive text-white px-1.5 py-0.5 rounded-full text-xs">{newOrders.length}</span>}
-            </TabsTrigger>
-            <TabsTrigger value="accepted" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">
-              QABUL
-              {myAcceptedOrders.length > 0 && <span className="ml-1.5 bg-accent text-white px-1.5 py-0.5 rounded-full text-xs">{myAcceptedOrders.length}</span>}
-            </TabsTrigger>
-            <TabsTrigger value="ready" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">TAYYOR</TabsTrigger>
-            <TabsTrigger value="history" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">TARIX</TabsTrigger>
-          </TabsList>
+          {(() => {
+            const hasNasiya = (serviceTypes as any[])?.some((s: any) => s.nasiyaEnabled) ?? false;
+            return (
+              <TabsList className={`grid w-full h-12 bg-muted/50 p-1 ${hasNasiya ? "grid-cols-5" : "grid-cols-4"}`}>
+                <TabsTrigger value="new" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">
+                  YANGI
+                  {newOrders && newOrders.length > 0 && <span className="ml-1.5 bg-destructive text-white px-1.5 py-0.5 rounded-full text-xs">{newOrders.length}</span>}
+                </TabsTrigger>
+                <TabsTrigger value="accepted" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">
+                  QABUL
+                  {myAcceptedOrders.length > 0 && <span className="ml-1.5 bg-accent text-white px-1.5 py-0.5 rounded-full text-xs">{myAcceptedOrders.length}</span>}
+                </TabsTrigger>
+                <TabsTrigger value="ready" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">TAYYOR</TabsTrigger>
+                <TabsTrigger value="history" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary">TARIX</TabsTrigger>
+                {hasNasiya && (
+                  <TabsTrigger value="hisoblar" className="text-xs sm:text-sm font-semibold h-full data-[state=active]:bg-card data-[state=active]:shadow-sm data-[state=active]:text-primary flex items-center gap-1">
+                    <BarChart3 className="w-3 h-3 hidden sm:block" />HISOB
+                  </TabsTrigger>
+                )}
+              </TabsList>
+            );
+          })()}
         </Tabs>
 
-        <div className="mt-3 flex gap-2">
+        {activeTab !== "hisoblar" && <div className="mt-3 flex gap-2">
           <div className="relative flex-1 group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
             <Input
@@ -1048,7 +1059,7 @@ export default function WorkerDashboard() {
               className="w-[140px] h-11 bg-card shadow-sm border-muted-foreground/20 text-sm"
             />
           )}
-        </div>
+        </div>}
       </div>
 
       <div className="w-full max-w-[1600px] mx-auto">
@@ -1056,6 +1067,11 @@ export default function WorkerDashboard() {
         {activeTab === "accepted" && renderAcceptedOrders(myAcceptedOrders, isAcceptedLoading)}
         {activeTab === "ready" && renderReadyOrders(readyOrders, isReadyLoading)}
         {activeTab === "history" && renderList(historyOrders, isHistoryLoading)}
+        {activeTab === "hisoblar" && storeId && token && (
+          <div className="p-4">
+            <ClientAccountsView storeId={storeId} token={token} role="worker" />
+          </div>
+        )}
       </div>
 
       {/* + button for creating orders */}

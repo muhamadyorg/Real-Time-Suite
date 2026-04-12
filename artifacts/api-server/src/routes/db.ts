@@ -24,6 +24,8 @@ const TABLES_ORDERED = [
   "orders",
   "account_permissions",
   "store_permission_modes",
+  "client_accounts",
+  "client_transactions",
 ];
 
 // Reverse order for DELETE (children first, parents last)

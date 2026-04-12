@@ -388,13 +388,14 @@ function ServiceTypesView({ storeId }: { storeId: number }) {
                   />
                 </TableCell>
                 <TableCell className="text-right">
-                  {s.storeId !== null ? (
+                  <div className="flex items-center justify-end gap-2">
+                    {s.storeId === null && (
+                      <span className="text-xs text-muted-foreground">Umumiy</span>
+                    )}
                     <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)}>
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">Umumiy</span>
-                  )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
