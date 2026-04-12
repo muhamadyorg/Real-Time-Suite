@@ -240,6 +240,15 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
   const load = async () => {
     setLoading(true);
     try {
+      // Agar aniq bir do'kon bo'lsa, "Standart" shablon yo'q bo'lsa avtomatik yaratamiz
+      if (storeId > 0) {
+        await fetch(`${apiBase}/api/order-templates/ensure-default`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ storeId }),
+        });
+      }
+
       const [tmplRes, stRes] = await Promise.all([
         fetch(`${apiBase}/api/order-templates`, { headers }),
         fetch(`${apiBase}/api/service-types`, { headers }),
@@ -345,11 +354,16 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
             const assigned = assignedToTemplate(tmpl);
             const visibleFields = Array.isArray(tmpl.fields) ? tmpl.fields.filter(f => f.visible) : [];
             return (
-              <Card key={tmpl.id}>
+              <Card key={tmpl.id} className={tmpl.name === "Standart" ? "border-primary/40 bg-primary/5" : ""}>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="font-semibold">{tmpl.name}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{tmpl.name}</span>
+                        {tmpl.name === "Standart" && (
+                          <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-medium">Default</span>
+                        )}
+                      </div>
                       <div className="text-xs text-muted-foreground mt-0.5">
                         {assigned.length > 0
                           ? <>Ulangan: <span className="text-foreground font-medium">{assigned.map(s => s.name).join(", ")}</span></>

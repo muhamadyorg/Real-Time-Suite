@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, orderTemplatesTable, serviceTypesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 
 const router = Router();
@@ -15,6 +15,34 @@ export const DEFAULT_TEMPLATE_FIELDS = [
   { key: "notes",       label: "Izoh",                required: false, visible: true,  options: [] },
   { key: "requireOutputQty", label: "Chiqish miqdori belgisi", required: false, visible: true, options: [] },
 ];
+
+// POST /api/order-templates/ensure-default
+// Idempotent: store uchun "Standart" shablon yo'q bo'lsa yaratadi, bor bo'lsa qaytaradi
+router.post("/ensure-default", async (req, res) => {
+  try {
+    const payload = await authenticateToken(req.headers.authorization);
+    if (!payload || (payload.role !== "sudo" && payload.role !== "superadmin")) {
+      res.status(403).json({ error: "Ruxsat yo'q" }); return;
+    }
+    const storeId = payload.role === "sudo" ? Number(req.body.storeId) : payload.storeId;
+    if (!storeId || storeId <= 0) { res.status(400).json({ error: "storeId kerak" }); return; }
+
+    const existing = await db.query.orderTemplatesTable.findFirst({
+      where: and(eq(orderTemplatesTable.storeId, storeId), eq(orderTemplatesTable.name, "Standart")),
+    });
+    if (existing) { res.json(existing); return; }
+
+    const [tmpl] = await db.insert(orderTemplatesTable).values({
+      storeId,
+      name: "Standart",
+      fields: DEFAULT_TEMPLATE_FIELDS,
+    }).returning();
+    res.status(201).json(tmpl);
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server xatosi" });
+  }
+});
 
 // GET /api/order-templates
 router.get("/", async (req, res) => {
