@@ -249,9 +249,10 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
         });
       }
 
+      const ts = Date.now();
       const [tmplRes, stRes] = await Promise.all([
-        fetch(`${apiBase}/api/order-templates`, { headers }),
-        fetch(`${apiBase}/api/service-types`, { headers }),
+        fetch(`${apiBase}/api/order-templates?_=${ts}`, { headers }),
+        fetch(`${apiBase}/api/service-types?_=${ts}`, { headers }),
       ]);
       const tmpls = await tmplRes.json();
       const sts = await stRes.json();
