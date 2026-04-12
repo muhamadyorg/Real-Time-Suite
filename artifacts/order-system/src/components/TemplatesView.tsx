@@ -221,8 +221,12 @@ export default function TemplatesView({ storeId, token }: { storeId: number; tok
       const tmpls = await tmplRes.json();
       const sts = await stRes.json();
       setTemplates(Array.isArray(tmpls) ? tmpls : []);
-      // SUDO (storeId=-1) barcha xizmat turlarini ko'radi; admin faqat o'zinikini
-      setServiceTypes(Array.isArray(sts) ? (storeId === -1 ? sts : sts.filter((s: any) => s.storeId === storeId)) : []);
+      // SUDO (storeId=-1 yoki null) — barcha xizmatlar; admin — o'zinikilar + global (null storeId) xizmatlar
+      setServiceTypes(Array.isArray(sts)
+        ? (storeId === -1 || storeId == null
+          ? sts
+          : sts.filter((s: any) => s.storeId === storeId || s.storeId == null))
+        : []);
     } catch { toast({ variant: "destructive", title: "Yuklanmadi" }); }
     setLoading(false);
   };
