@@ -113,6 +113,18 @@ function OrderDetailModal({ order, open, onClose }: { order: any, open: boolean,
             </div>
           )}
 
+          {order.extraFields && Object.keys(order.extraFields).length > 0 && (
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 space-y-2">
+              <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Qo'shimcha maydonlar</div>
+              {Object.entries(order.extraFields).map(([k, v]) => v ? (
+                <div key={k} className="flex justify-between items-center border-t border-border/30 pt-2">
+                  <span className="text-sm text-muted-foreground">{k}</span>
+                  <span className="font-semibold text-sm">{v}</span>
+                </div>
+              ) : null)}
+            </div>
+          )}
+
           <div className="bg-muted/40 rounded-xl p-4 space-y-2">
             <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-2">Vaqt & Xodimlar</div>
             <div className="flex justify-between text-sm">

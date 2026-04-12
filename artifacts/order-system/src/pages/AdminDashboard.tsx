@@ -112,6 +112,17 @@ function OrderDetailModal({ order, open, onClose, onEdit, onDelete, canEdit, can
               <p className="text-sm italic">{order.notes}</p>
             </div>
           )}
+          {(order as any).extraFields && Object.keys((order as any).extraFields).length > 0 && (
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 space-y-2">
+              <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Qo'shimcha maydonlar</div>
+              {Object.entries((order as any).extraFields as Record<string, string>).map(([k, v]) => v ? (
+                <div key={k} className="flex justify-between items-center border-t border-border/30 pt-2">
+                  <span className="text-sm text-muted-foreground">{k}</span>
+                  <span className="font-semibold text-sm">{v}</span>
+                </div>
+              ) : null)}
+            </div>
+          )}
           <div className="bg-muted/40 rounded-xl p-4 space-y-2">
             <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-2">Vaqt & Xodimlar</div>
             <div className="flex justify-between text-sm">
