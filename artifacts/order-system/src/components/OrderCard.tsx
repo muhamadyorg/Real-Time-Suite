@@ -55,7 +55,7 @@ export function OrderCard({ order, search = "", actionButton, onOrderClick, canP
             <button
               type="button"
               onClick={onOrderClick}
-              className={`font-bold text-lg tracking-wider font-mono ${onOrderClick ? 'text-primary hover:underline cursor-pointer' : 'cursor-default'}`}
+              className={`text-xs font-semibold tracking-widest font-mono text-muted-foreground ${onOrderClick ? 'hover:text-primary hover:underline cursor-pointer' : 'cursor-default'}`}
               disabled={!onOrderClick}
             >
               <HighlightText text={order.orderId} search={search} />
@@ -121,6 +121,21 @@ export function OrderCard({ order, search = "", actionButton, onOrderClick, canP
             </div>
           )}
         </div>
+
+        {order.extraFields && Object.keys(order.extraFields).length > 0 && (
+          <div className="grid gap-2 text-sm">
+            {(Object.entries(order.extraFields as Record<string, string>)).map(([label, val]) =>
+              val ? (
+                <div key={label} className="flex justify-between items-center pb-1 border-b border-border/50">
+                  <span className="text-muted-foreground">{label}:</span>
+                  <span className="font-semibold text-foreground text-right max-w-[180px] break-words">
+                    <HighlightText text={val} search={search} />
+                  </span>
+                </div>
+              ) : null
+            )}
+          </div>
+        )}
 
         {order.notes && (
           <div className="text-sm bg-accent/10 border border-accent/20 p-3 rounded-lg text-foreground italic mt-1">
