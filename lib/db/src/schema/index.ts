@@ -8,3 +8,5 @@ export * from "./products";
 export * from "./permissions";
 export * from "./client_accounts";
 export * from "./order_templates";
+export * from "./push_subscriptions";
+export * from "./notification_rules";

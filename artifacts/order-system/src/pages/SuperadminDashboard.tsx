@@ -15,7 +15,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil, Users, Save, Send, RefreshCw, Bot, CreditCard, Wallet, TrendingDown, TrendingUp, ArrowDownLeft, ArrowUpRight, Phone, User, ChevronDown, ChevronUp, Timer, FileText } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil, Users, Save, Send, RefreshCw, Bot, CreditCard, Wallet, TrendingDown, TrendingUp, ArrowDownLeft, ArrowUpRight, Phone, User, ChevronDown, ChevronUp, Timer, FileText, Bell } from "lucide-react";
+import { NotificationRulesView } from "@/components/NotificationRulesView";
+import { PushNotificationButton } from "@/components/PushNotificationButton";
 import TemplatesView from "@/components/TemplatesView";
 import { AnalyticsView } from "@/components/AnalyticsView";
 import { Switch } from "@/components/ui/switch";
@@ -1397,7 +1399,9 @@ export default function SuperadminDashboard() {
 
   return (
     <div className="min-h-screen bg-muted/20 pb-20">
-      <Header title={`Superadmin: ${accountName}`} showLogout={true} />
+      <Header title={`Superadmin: ${accountName}`} showLogout={true} rightContent={
+        <PushNotificationButton token={token} apiBase={(import.meta.env.BASE_URL ?? "/").replace(/\/$/, "")} />
+      } />
       
       <Tabs defaultValue="orders" className="w-full">
         <div className="bg-background border-b sticky top-[56px] z-20 px-2 py-2.5 overflow-x-auto scrollbar-none">
@@ -1430,6 +1434,9 @@ export default function SuperadminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="settings" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
               <ShieldCheck className="w-3 h-3" />Ruxsatlar
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
+              <Bell className="w-3 h-3" />Bildirishnoma
             </TabsTrigger>
           </TabsList>
         </div>
@@ -1488,6 +1495,14 @@ export default function SuperadminDashboard() {
 
         <TabsContent value="settings" className="p-5 focus-visible:outline-none">
           <PermissionsView token={token} storeId={storeId} />
+        </TabsContent>
+
+        <TabsContent value="notifications" className="p-5 max-w-2xl focus-visible:outline-none">
+          <NotificationRulesView
+            token={token}
+            storeId={storeId}
+            apiBase={(import.meta.env.BASE_URL ?? "/").replace(/\/$/, "")}
+          />
         </TabsContent>
       </Tabs>
     </div>

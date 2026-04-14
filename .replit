@@ -28,3 +28,10 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+VAPID_PUBLIC_KEY = "BIhIRwIs-rShIq4iTIGebHBYOxblsazaSlo4ynE7-b8by2mC7owIlFKZtGAXkYAKNwDrAFta_ltqwsbFta3Jv-c"
+VAPID_PRIVATE_KEY = "Sqsh_RIQFQJNWP0LKg0Our_LtmihTco0BxqqcdP2pYc"
+VAPID_SUBJECT = "mailto:admin@zakaz.muhamadyorg.uz"

@@ -15,10 +15,12 @@ import clientAccountsRouter from "./client-accounts";
 import orderTemplatesRouter from "./order-templates";
 import autoBackupRouter from "./auto-backup";
 import analyticsRouter from "./analytics";
+import pushRouter from "./push";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use("/push", pushRouter);
 router.use("/auth", authRouter);
 router.use("/stores", storesRouter);
 router.use("/accounts", accountsRouter);
