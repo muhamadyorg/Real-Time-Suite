@@ -751,6 +751,17 @@ export default function WorkerDashboard() {
   const [clientInfo, setClientInfo] = useState<any>(null);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [clientBalanceLoading, setClientBalanceLoading] = useState(false);
+  // 3-nol formatlash
+  const wPayAmountEdited = useRef(false);
+  const wFmtAmt = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  const wParseAmt = (v: string) => parseFloat(v.replace(/\s/g, "") || "0");
+  const wHandleAmtBlur = () => {
+    if (wPayAmountEdited.current) {
+      const d = paymentAmount.replace(/\s/g, "");
+      if (d) setPaymentAmount(wFmtAmt(d + "000"));
+      wPayAmountEdited.current = false;
+    }
+  };
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { has: hasPerm } = useMyPermissions(token, role);
@@ -838,6 +849,7 @@ export default function WorkerDashboard() {
       }
       setPaymentMode("naqd");
       setPaymentAmount("");
+      wPayAmountEdited.current = false;
       setPaymentOrder(order);
       return;
     }
@@ -863,8 +875,8 @@ export default function WorkerDashboard() {
 
   const doPaymentAndReady = async () => {
     if (!paymentOrder || !storeId) return;
-    const amount = parseFloat(paymentAmount);
-    if (paymentMode === "qarz" && (!paymentAmount || isNaN(amount) || amount <= 0)) {
+    const amount = wParseAmt(paymentAmount);
+    if (paymentMode === "qarz" && (!paymentAmount || amount <= 0)) {
       toast({ title: "Summa kiriting", variant: "destructive" }); return;
     }
     setPaymentLoading(true);
@@ -873,7 +885,7 @@ export default function WorkerDashboard() {
       // Tranzaksiya: naqd yoki qarz bo'lsa ham yaratiladi (naqd balansga ta'sir etmaydi)
       if (paymentOrder.clientId && (paymentMode === "qarz" || paymentMode === "naqd")) {
         const txAmount = paymentMode === "naqd"
-          ? (paymentAmount && !isNaN(parseFloat(paymentAmount)) && parseFloat(paymentAmount) > 0 ? parseFloat(paymentAmount) : 0)
+          ? (paymentAmount && amount > 0 ? amount : 0)
           : amount;
         const txRes = await fetch(`${apiBase}/api/client-accounts/${paymentOrder.clientId}/transaction`, {
           method: "POST",
@@ -1444,19 +1456,22 @@ export default function WorkerDashboard() {
               {/* Qarz bo'lsa — summa kiriting */}
               {paymentMode === "qarz" && (
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Qarz summasi (so'm)</Label>
+                  <Label className="text-sm font-medium flex items-center gap-1.5">
+                    Qarz summasi (so'm)
+                    <span className="text-xs text-muted-foreground font-normal">— 000 avtomatik qo'shiladi</span>
+                  </Label>
                   <Input
-                    type="number"
-                    inputMode="decimal"
-                    placeholder="0"
-                    min="0"
-                    step="0.1"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="masalan: 150 → 150 000"
                     value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    onChange={(e) => { setPaymentAmount(wFmtAmt(e.target.value)); wPayAmountEdited.current = true; }}
+                    onBlur={wHandleAmtBlur}
                     autoFocus
-                    className="text-xl font-bold h-14 text-center"
+                    className="text-xl font-bold h-14 text-center tabular-nums"
                   />
-                  {paymentAmount && !isNaN(parseFloat(paymentAmount)) && parseFloat(paymentAmount) > 0 && (
+                  {paymentAmount && <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold text-center">{paymentAmount} so'm</p>}
+                  {paymentAmount && wParseAmt(paymentAmount) > 0 && (
                     <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-3 text-sm space-y-1">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Hozir:</span>
@@ -1466,12 +1481,12 @@ export default function WorkerDashboard() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Qo'shiladi:</span>
-                        <span className="text-red-500 font-semibold">−{parseFloat(paymentAmount).toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm</span>
+                        <span className="text-red-500 font-semibold">−{wParseAmt(paymentAmount).toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm</span>
                       </div>
                       <div className="flex justify-between border-t border-border/50 pt-1">
                         <span className="font-medium">Yangi holat:</span>
-                        <span className={`font-bold tabular-nums ${(clientBalance - parseFloat(paymentAmount)) < 0 ? "text-red-500" : "text-green-600"}`}>
-                          {(clientBalance - parseFloat(paymentAmount)) >= 0 ? "+" : ""}{(clientBalance - parseFloat(paymentAmount)).toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm
+                        <span className={`font-bold tabular-nums ${(clientBalance - wParseAmt(paymentAmount)) < 0 ? "text-red-500" : "text-green-600"}`}>
+                          {(clientBalance - wParseAmt(paymentAmount)) >= 0 ? "+" : ""}{(clientBalance - wParseAmt(paymentAmount)).toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm
                         </span>
                       </div>
                     </div>
@@ -1481,17 +1496,20 @@ export default function WorkerDashboard() {
 
               {paymentMode === "naqd" && (
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Naqd summasi (so'm) <span className="text-muted-foreground font-normal">— ixtiyoriy</span></Label>
+                  <Label className="text-sm font-medium flex items-center gap-1.5">
+                    Naqd summasi (so'm)
+                    <span className="text-muted-foreground font-normal text-xs">— ixtiyoriy, 000 qo'shiladi</span>
+                  </Label>
                   <Input
-                    type="number"
-                    inputMode="decimal"
-                    placeholder="0"
-                    min="0"
-                    step="0.1"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="masalan: 150 → 150 000"
                     value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
-                    className="text-xl font-bold h-14 text-center"
+                    onChange={(e) => { setPaymentAmount(wFmtAmt(e.target.value)); wPayAmountEdited.current = true; }}
+                    onBlur={wHandleAmtBlur}
+                    className="text-xl font-bold h-14 text-center tabular-nums"
                   />
+                  {paymentAmount && <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold text-center">{paymentAmount} so'm</p>}
                   <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-2 text-xs text-green-700 dark:text-green-400 text-center">
                     💵 Naqd to'lov — mijoz hisobiga ta'sir etmaydi, faqat tarixga yoziladi
                   </div>
@@ -1504,7 +1522,7 @@ export default function WorkerDashboard() {
             <Button variant="outline" onClick={() => setPaymentOrder(null)} disabled={paymentLoading}>Bekor</Button>
             <Button
               className={`gap-2 ${paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : "bg-green-600 hover:bg-green-700"} text-white`}
-              disabled={paymentLoading || clientBalanceLoading || (paymentMode === "qarz" && (!paymentAmount || parseFloat(paymentAmount) <= 0))}
+              disabled={paymentLoading || clientBalanceLoading || (paymentMode === "qarz" && (!paymentAmount || wParseAmt(paymentAmount) <= 0))}
               onClick={doPaymentAndReady}
             >
               {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
