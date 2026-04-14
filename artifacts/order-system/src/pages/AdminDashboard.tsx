@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMyPermissions } from "@/hooks/useMyPermissions";
 import { Header } from "@/components/Header";
@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/OrderCard";
 import { PrintLabelButton } from "@/components/PrintLabelButton";
-import { Search, Loader2, Plus, Users, X, QrCode, Hash, Clock, Package, CheckCircle, Phone, User, FileText, Building2, Pencil, Trash2, Truck, Lock, LockOpen, CreditCard, TrendingUp } from "lucide-react";
+import { Search, Loader2, Plus, Users, X, QrCode, Hash, Clock, Package, CheckCircle, Phone, User, FileText, Building2, Pencil, Trash2, Truck, Lock, LockOpen, CreditCard, TrendingUp, TrendingDown } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -883,6 +883,30 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
   const [deliveringOrder, setDeliveringOrder] = useState<any>(null);
   const [historySubTab, setHistorySubTab] = useState<"pending" | "delivered">("pending");
 
+  // TAYYOR: nasiya payment modal
+  const [paymentOrder, setPaymentOrder] = useState<any>(null);
+  const [paymentMode, setPaymentMode] = useState<"naqd" | "qarz">("naqd");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [clientBalance, setClientBalance] = useState(0);
+  const [clientBalanceLoading, setClientBalanceLoading] = useState(false);
+  const [clientInfo, setClientInfo] = useState<any>(null);
+  // TAYYOR: chiqish miqdori
+  const [readyQtyOrder, setReadyQtyOrder] = useState<any>(null);
+  const [readyQtyInput, setReadyQtyInput] = useState("");
+  const [readyQtyUnit, setReadyQtyUnit] = useState("");
+  // 3-nol formatlash
+  const payAmountEdited = useRef(false);
+  const fmtAmt = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  const parseAmt = (v: string) => parseFloat(v.replace(/\s/g, "") || "0");
+  const handleAmtBlur = () => {
+    if (payAmountEdited.current) {
+      const d = paymentAmount.replace(/\s/g, "");
+      if (d) setPaymentAmount(fmtAmt(d + "000"));
+      payAmountEdited.current = false;
+    }
+  };
+
   const { has } = useMyPermissions(token, role);
   const isViewer = role === 'viewer';
   const isSuperUser = role === 'sudo' || role === 'superadmin';
@@ -918,6 +942,125 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
       onError: () => toast({ title: "Xatolik", description: "O'chirib bo'lmadi", variant: "destructive" }),
     }
   });
+
+  const updateStatus = useUpdateOrderStatus();
+
+  const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+
+  const handleReady = async (order: any) => {
+    const st = (serviceTypes as any[])?.find((s: any) => s.id === order.serviceTypeId);
+    const needsPayment = st?.nasiyaEnabled && order.clientId;
+    if (needsPayment) {
+      setClientBalanceLoading(true);
+      try {
+        const r = await fetch(`${apiBase}/api/client-accounts/${order.clientId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await r.json();
+        setClientBalance(data.balance ?? 0);
+        setClientInfo(data.client ?? null);
+      } catch {
+        setClientBalance(0);
+        setClientInfo(null);
+      } finally {
+        setClientBalanceLoading(false);
+      }
+      setPaymentMode("naqd");
+      setPaymentAmount("");
+      payAmountEdited.current = false;
+      setPaymentOrder(order);
+      return;
+    }
+    if (order.requireOutputQty) {
+      setReadyQtyInput("");
+      setReadyQtyUnit(order.unit ?? "");
+      setReadyQtyOrder(order);
+      return;
+    }
+    updateStatus.mutate(
+      { id: order.id, data: { status: "ready" } as any },
+      {
+        onSuccess: () => {
+          toast({ title: "✅ Tayyor deb belgilandi!" });
+          queryClient.invalidateQueries({ queryKey: ["getOrders"] });
+        },
+        onError: () => toast({ title: "Xatolik", variant: "destructive" }),
+      }
+    );
+  };
+
+  const doPaymentAndReady = async () => {
+    if (!paymentOrder || !storeId) return;
+    const amount = parseAmt(paymentAmount);
+    if (paymentMode === "qarz" && (!paymentAmount || amount <= 0)) {
+      toast({ title: "Summa kiriting", variant: "destructive" }); return;
+    }
+    setPaymentLoading(true);
+    try {
+      if (paymentOrder.clientId && (paymentMode === "qarz" || paymentMode === "naqd")) {
+        const txAmount = paymentMode === "naqd"
+          ? (paymentAmount && amount > 0 ? amount : 0)
+          : amount;
+        const txRes = await fetch(`${apiBase}/api/client-accounts/${paymentOrder.clientId}/transaction`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            type: paymentMode,
+            amount: txAmount,
+            serviceTypeId: paymentOrder.serviceTypeId,
+            orderId: paymentOrder.id,
+            orderCode: paymentOrder.orderId,
+            note: paymentMode === "naqd"
+              ? `Zakaz ${paymentOrder.orderId} — naqd to'lov`
+              : `Zakaz ${paymentOrder.orderId} uchun nasiya`,
+            storeId,
+          }),
+        });
+        if (!txRes.ok) {
+          const err = await txRes.json();
+          toast({ title: "Tranzaksiya xatosi", description: err.error, variant: "destructive" });
+          setPaymentLoading(false); return;
+        }
+      }
+      updateStatus.mutate(
+        { id: paymentOrder.id, data: { status: "ready" } as any },
+        {
+          onSuccess: () => {
+            toast({ title: paymentMode === "qarz" ? "✅ Tayyor! Qarz yozildi" : "✅ Tayyor! Naqd to'landi" });
+            queryClient.invalidateQueries({ queryKey: ["getOrders"] });
+            setPaymentOrder(null);
+          },
+          onError: () => toast({ title: "Xatolik", variant: "destructive" }),
+        }
+      );
+    } catch {
+      toast({ title: "Tarmoq xatosi", variant: "destructive" });
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  const doReady = () => {
+    if (!readyQtyOrder) return;
+    if (!readyQtyInput || readyQtyInput.trim() === "") {
+      toast({ title: "Chiqish miqdorini kiriting", variant: "destructive" }); return;
+    }
+    const qty = parseFloat(readyQtyInput);
+    if (isNaN(qty) || qty <= 0) {
+      toast({ title: "To'g'ri miqdor kiriting", variant: "destructive" }); return;
+    }
+    updateStatus.mutate(
+      { id: readyQtyOrder.id, data: { status: "ready", outputQuantity: String(qty), outputUnit: readyQtyUnit || undefined } as any },
+      {
+        onSuccess: () => {
+          toast({ title: "✅ Tayyor deb belgilandi!" });
+          queryClient.invalidateQueries({ queryKey: ["getOrders"] });
+          setReadyQtyOrder(null);
+        },
+        onError: () => toast({ title: "Xatolik", variant: "destructive" }),
+      }
+    );
+  };
 
   useSocket(token, storeId);
 
@@ -996,7 +1139,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
     });
   };
 
-  const renderList = (orders: any[] | undefined, isLoading: boolean) => {
+  const renderList = (orders: any[] | undefined, isLoading: boolean, getActionBtn?: (order: any) => React.ReactNode) => {
     if (isLoading) return <div className="flex justify-center p-12"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
     const filtered = filterBySearch(orders);
     if (!filtered.length) return <div className="text-center p-12 text-muted-foreground bg-muted/20 rounded-xl mt-4 border border-dashed">Malumot topilmadi</div>;
@@ -1021,12 +1164,34 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         {filtered.map(order => {
           const isLocked = queueLocked && !oldestIdSet.has(order.id);
           return (
-            <OrderCard key={order.id} order={order} search={search} onOrderClick={isLocked ? undefined : () => setSelectedOrder(order)} canPrint={isLocked ? false : canPrint} canMarkDelivered={isLocked ? false : canMarkDelivered} onDeliver={isLocked ? undefined : () => setDeliveringOrder(order)} locked={isLocked} />
+            <OrderCard
+              key={order.id}
+              order={order}
+              search={search}
+              onOrderClick={isLocked ? undefined : () => setSelectedOrder(order)}
+              canPrint={isLocked ? false : canPrint}
+              canMarkDelivered={isLocked ? false : canMarkDelivered}
+              onDeliver={isLocked ? undefined : () => setDeliveringOrder(order)}
+              locked={isLocked}
+              actionButton={isLocked ? undefined : getActionBtn?.(order)}
+            />
           );
         })}
       </div>
     );
   };
+
+  const tayyorBtn = (order: any) => !isViewer ? (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); handleReady(order); }}
+      disabled={updateStatus.isPending}
+      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-green-600 hover:bg-green-700 active:scale-95 text-white font-bold text-sm transition-all shadow-md disabled:opacity-60"
+    >
+      {updateStatus.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+      TAYYOR
+    </button>
+  ) : null;
 
   return (
     <div className="min-h-screen bg-muted/20 pb-24">
@@ -1128,7 +1293,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
 
       <div className="w-full max-w-[1600px] mx-auto">
         {activeTab === "new" && renderList(newOrders, isNewLoading)}
-        {activeTab === "accepted" && renderList(acceptedOrders, isAcceptedLoading)}
+        {activeTab === "accepted" && renderList(acceptedOrders, isAcceptedLoading, tayyorBtn)}
         {activeTab === "ready" && renderList(readyOrders, isReadyLoading)}
         {activeTab === "history" && renderList(
           historySubTab === "delivered"
@@ -1205,6 +1370,153 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
             >
               {deleteOrderMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               O'chirish
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Chiqish miqdori — TAYYOR bosilganda */}
+      <Dialog open={!!readyQtyOrder} onOpenChange={(v) => { if (!v) setReadyQtyOrder(null); }}>
+        <DialogContent className="w-full max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <CheckCircle className="w-5 h-5" />
+              Chiqish miqdori
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-mono font-bold">{readyQtyOrder?.orderId}</span> zakazidan nechta mahsulot chiqdi?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="text-sm text-muted-foreground">Kirish: <span className="font-bold text-foreground">{readyQtyOrder?.quantity}{readyQtyOrder?.unit ? ` ${readyQtyOrder.unit}` : ""}</span></div>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                inputMode="decimal"
+                placeholder="Miqdor..."
+                value={readyQtyInput}
+                onChange={e => setReadyQtyInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && readyQtyInput) doReady(); }}
+                className="h-12 text-xl font-bold text-center"
+                autoFocus
+              />
+              <Input
+                placeholder="Birlik"
+                value={readyQtyUnit}
+                onChange={e => setReadyQtyUnit(e.target.value)}
+                className="h-12 w-24 text-center font-semibold"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setReadyQtyOrder(null)}>Bekor</Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white gap-2"
+              disabled={!readyQtyInput || updateStatus.isPending}
+              onClick={doReady}
+            >
+              {updateStatus.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+              Tayyor!
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Nasiya Payment Modal — TAYYOR bosilganda */}
+      <Dialog open={!!paymentOrder} onOpenChange={(v) => { if (!v) setPaymentOrder(null); }}>
+        <DialogContent className="w-full max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <CheckCircle className="w-5 h-5" />
+              To'lov & Tayyor
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-mono font-bold">{paymentOrder?.orderId}</span> — to'lov turini tanlang
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {clientBalanceLoading ? (
+              <div className="flex justify-center py-4"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+            ) : (
+              <div className="bg-muted/40 rounded-xl p-3 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Mijoz:</span>
+                  <span className="font-semibold">{clientInfo?.name ?? paymentOrder?.clientName ?? "—"}</span>
+                </div>
+                <div className="flex justify-between border-t border-border/50 pt-1">
+                  <span className="text-muted-foreground">Joriy holat:</span>
+                  <span className={`font-bold tabular-nums ${clientBalance < 0 ? "text-red-500" : clientBalance > 0 ? "text-green-600" : ""}`}>
+                    {clientBalance < 0
+                      ? `−${Math.abs(clientBalance).toLocaleString("uz-UZ")} so'm qarz`
+                      : clientBalance > 0
+                        ? `+${clientBalance.toLocaleString("uz-UZ")} so'm`
+                        : "0"}
+                  </span>
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setPaymentMode("naqd")}
+                className={`h-14 rounded-xl font-bold text-base border-2 transition-all ${paymentMode === "naqd" ? "bg-green-500 text-white border-green-500 shadow" : "border-border bg-card text-muted-foreground hover:border-green-400"}`}
+              >
+                💵 Naqd
+              </button>
+              <button
+                onClick={() => setPaymentMode("qarz")}
+                className={`h-14 rounded-xl font-bold text-base border-2 transition-all ${paymentMode === "qarz" ? "bg-red-500 text-white border-red-500 shadow" : "border-border bg-card text-muted-foreground hover:border-red-400"}`}
+              >
+                📋 Qarz
+              </button>
+            </div>
+            {paymentMode === "qarz" && (
+              <div className="space-y-1">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  Qarz summasi
+                  <span className="text-xs text-muted-foreground font-normal">— 000 avtomatik qo'shiladi</span>
+                </label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="masalan: 150 → 150 000"
+                  value={paymentAmount}
+                  onChange={e => { setPaymentAmount(fmtAmt(e.target.value)); payAmountEdited.current = true; }}
+                  onBlur={handleAmtBlur}
+                  className="h-12 text-xl font-bold text-center tabular-nums"
+                  autoFocus
+                />
+                {paymentAmount && <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold text-center">{paymentAmount} so'm</p>}
+              </div>
+            )}
+            {paymentMode === "naqd" && (
+              <div className="space-y-1">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  Naqd summa (ixtiyoriy)
+                  <span className="text-xs text-muted-foreground font-normal">— 000 avtomatik qo'shiladi</span>
+                </label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="masalan: 150 → 150 000"
+                  value={paymentAmount}
+                  onChange={e => { setPaymentAmount(fmtAmt(e.target.value)); payAmountEdited.current = true; }}
+                  onBlur={handleAmtBlur}
+                  className="h-12 text-xl font-bold text-center tabular-nums"
+                  autoFocus
+                />
+                {paymentAmount && <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold text-center">{paymentAmount} so'm</p>}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPaymentOrder(null)} disabled={paymentLoading}>Bekor</Button>
+            <Button
+              className={`gap-2 ${paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : "bg-green-600 hover:bg-green-700"} text-white`}
+              disabled={paymentLoading || clientBalanceLoading || (paymentMode === "qarz" && (!paymentAmount || parseAmt(paymentAmount) <= 0))}
+              onClick={doPaymentAndReady}
+            >
+              {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+              {paymentMode === "qarz" ? "Qarz yozib Tayyor!" : "Tayyor!"}
             </Button>
           </DialogFooter>
         </DialogContent>
