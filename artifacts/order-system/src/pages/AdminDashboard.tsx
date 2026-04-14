@@ -509,6 +509,7 @@ const ADMIN_DEFAULT_ORDER_FIELDS = [
   { key: "shelf",            label: "Joylashuv (qolib)",      required: false, visible: true,  options: [] as string[] },
   { key: "notes",            label: "Izoh",                   required: false, visible: true,  options: [] as string[] },
   { key: "requireOutputQty", label: "Chiqish miqdori belgisi",required: false, visible: true,  options: [] as string[] },
+  { key: "price",            label: "Narx (so'm)",            required: false, visible: true,  options: [] as string[] },
 ];
 
 function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, open: boolean, onOpenChange: (v: boolean) => void }) {
@@ -527,7 +528,15 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
   const [templateFields, setTemplateFields] = useState<typeof ADMIN_DEFAULT_ORDER_FIELDS>(ADMIN_DEFAULT_ORDER_FIELDS);
   const [extraFields, setExtraFields] = useState<Record<string, string>>({});
   const [priceRaw, setPriceRaw] = useState("");
+  const priceEdited = useRef(false);
   const fmtPrice = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  const handlePriceBlur = () => {
+    if (priceEdited.current) {
+      const d = priceRaw.replace(/\s/g, "");
+      if (d) setPriceRaw(fmtPrice(d + "000"));
+      priceEdited.current = false;
+    }
+  };
   const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
   const { data: allServiceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId] } });
@@ -773,6 +782,29 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
         );
       }
 
+      case "price":
+        return (
+          <div key={key} className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              {label}{req ? " *" : ""}
+              <span className="text-xs text-muted-foreground font-normal">— raqam kiriting, 000 avtomatik qo'shiladi</span>
+            </Label>
+            <Input
+              type="text"
+              inputMode="numeric"
+              placeholder="masalan: 150 → 150 000"
+              value={priceRaw}
+              onChange={e => { setPriceRaw(fmtPrice(e.target.value)); priceEdited.current = true; }}
+              onBlur={handlePriceBlur}
+              className="h-12 bg-card font-semibold text-lg tabular-nums"
+              required={req}
+            />
+            {priceRaw && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold">{priceRaw} so'm</p>
+            )}
+          </div>
+        );
+
       default: {
         if (!key.startsWith("custom_")) return null;
         const field = getField(key);
@@ -815,18 +847,6 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
           <div className="flex-1 overflow-y-auto overscroll-contain">
             <div className="space-y-5 px-6 py-5">
               {templateFields.map(f => renderField(f.key))}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-1.5"><span>Narx (so'm)</span><span className="text-xs text-muted-foreground font-normal">— ixtiyoriy</span></Label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={priceRaw}
-                  onChange={e => setPriceRaw(fmtPrice(e.target.value))}
-                  className="h-12 bg-card font-semibold text-lg tabular-nums"
-                />
-                {priceRaw && <p className="text-xs text-muted-foreground">{priceRaw} so'm</p>}
-              </div>
             </div>
           </div>
           <DialogFooter className="px-6 pb-6 pt-4 border-t shrink-0">

@@ -16,6 +16,7 @@ const ALL_FIELD_KEYS: { key: string; defaultLabel: string; alwaysVisible?: boole
   { key: "shelf",            defaultLabel: "Joylashuv (qolib)" },
   { key: "notes",            defaultLabel: "Izoh" },
   { key: "requireOutputQty", defaultLabel: "Chiqish miqdori belgisi", noOptions: true },
+  { key: "price",            defaultLabel: "Narx (so'm)",             noOptions: true },
 ];
 
 interface TemplateField {

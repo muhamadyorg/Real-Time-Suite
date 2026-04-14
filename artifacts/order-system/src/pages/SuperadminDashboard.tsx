@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Header } from "@/components/Header";
 import { 
@@ -424,6 +424,16 @@ function ClientAccountsView({ storeId, token }: { storeId: number; token: string
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
   const [payLoading, setPayLoading] = useState(false);
+  const payAmountEdited = useRef(false);
+  const fmtPayAmount = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  const parsePayAmount = (v: string) => parseFloat(v.replace(/\s/g, "") || "0");
+  const handlePayAmountBlur = () => {
+    if (payAmountEdited.current) {
+      const d = payAmount.replace(/\s/g, "");
+      if (d) setPayAmount(fmtPayAmount(d + "000"));
+      payAmountEdited.current = false;
+    }
+  };
 
   const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
@@ -453,7 +463,7 @@ function ClientAccountsView({ storeId, token }: { storeId: number; token: string
   };
 
   const handlePay = async () => {
-    if (!payModalClient || !payAmount || parseFloat(payAmount) <= 0) {
+    if (!payModalClient || !payAmount || parsePayAmount(payAmount) <= 0) {
       toast({ title: "Summa kiriting", variant: "destructive" }); return;
     }
     setPayLoading(true);
@@ -461,7 +471,7 @@ function ClientAccountsView({ storeId, token }: { storeId: number; token: string
       const r = await fetch(`${apiBase}/api/client-accounts/${payModalClient.id}/transaction`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ type: payType, sign: paySign, amount: parseFloat(payAmount), storeId, note: payNote || undefined }),
+        body: JSON.stringify({ type: payType, sign: paySign, amount: parsePayAmount(payAmount), storeId, note: payNote || undefined }),
       });
       const data = await r.json();
       if (!r.ok) { toast({ title: data.error ?? "Xatolik", variant: "destructive" }); return; }
@@ -608,11 +618,23 @@ function ClientAccountsView({ storeId, token }: { storeId: number; token: string
               </div>
             )}
             <div className="space-y-1">
-              <Label>Summa (so'm)</Label>
-              <Input type="number" inputMode="decimal" placeholder="0" min="0" step="0.1" value={payAmount}
-                onChange={e => setPayAmount(e.target.value)} className="text-xl font-bold h-12 text-center" autoFocus />
+              <Label className="flex items-center gap-1.5">
+                Summa (so'm)
+                <span className="text-xs text-muted-foreground font-normal">— 000 avtomatik qo'shiladi</span>
+              </Label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="masalan: 150 → 150 000"
+                value={payAmount}
+                onChange={e => { setPayAmount(fmtPayAmount(e.target.value)); payAmountEdited.current = true; }}
+                onBlur={handlePayAmountBlur}
+                className="text-xl font-bold h-12 text-center tabular-nums"
+                autoFocus
+              />
+              {payAmount && <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold text-center">{payAmount} so'm</p>}
             </div>
-            {payAmount && payModalClient && !isNaN(parseFloat(payAmount)) && parseFloat(payAmount) > 0 && (
+            {payAmount && payModalClient && parsePayAmount(payAmount) > 0 && (
               <div className="bg-muted/40 rounded-lg p-3 text-sm space-y-1">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Hozir:</span>
@@ -621,7 +643,7 @@ function ClientAccountsView({ storeId, token }: { storeId: number; token: string
                 <div className="flex justify-between border-t border-border/50 pt-1">
                   <span className="font-medium">Yangi holat:</span>
                   {(() => {
-                    const delta = (payType === "tolov" ? 1 : (paySign === "plus" ? 1 : -1)) * parseFloat(payAmount);
+                    const delta = (payType === "tolov" ? 1 : (paySign === "plus" ? 1 : -1)) * parsePayAmount(payAmount);
                     const nb = (payModalClient.balance ?? 0) + delta;
                     return <span className={`font-bold tabular-nums ${nb < 0 ? "text-red-500" : "text-green-600"}`}>{fmtBalance(nb).text}</span>;
                   })()}
@@ -635,7 +657,7 @@ function ClientAccountsView({ storeId, token }: { storeId: number; token: string
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setPayModalClient(null)} disabled={payLoading}>Bekor</Button>
-            <Button className="bg-green-600 hover:bg-green-700 text-white gap-2" disabled={payLoading || !payAmount || parseFloat(payAmount) <= 0} onClick={handlePay}>
+            <Button className="bg-green-600 hover:bg-green-700 text-white gap-2" disabled={payLoading || !payAmount || parsePayAmount(payAmount) <= 0} onClick={handlePay}>
               {payLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
               Saqlash
             </Button>
