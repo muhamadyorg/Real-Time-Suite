@@ -751,17 +751,9 @@ export default function WorkerDashboard() {
   const [clientInfo, setClientInfo] = useState<any>(null);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [clientBalanceLoading, setClientBalanceLoading] = useState(false);
-  // 3-nol formatlash
-  const wPayAmountEdited = useRef(false);
+  // Summa formatlash (3 raqamda bo'shliq)
   const wFmtAmt = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const wParseAmt = (v: string) => parseFloat(v.replace(/\s/g, "") || "0");
-  const wHandleAmtBlur = () => {
-    if (wPayAmountEdited.current) {
-      const d = paymentAmount.replace(/\s/g, "");
-      if (d) setPaymentAmount(wFmtAmt(d + "000"));
-      wPayAmountEdited.current = false;
-    }
-  };
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { has: hasPerm } = useMyPermissions(token, role);
@@ -849,7 +841,6 @@ export default function WorkerDashboard() {
       }
       setPaymentMode("naqd");
       setPaymentAmount("");
-      wPayAmountEdited.current = false;
       setPaymentOrder(order);
       return;
     }
@@ -1456,21 +1447,16 @@ export default function WorkerDashboard() {
               {/* Qarz bo'lsa — summa kiriting */}
               {paymentMode === "qarz" && (
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium flex items-center gap-1.5">
-                    Qarz summasi (so'm)
-                    <span className="text-xs text-muted-foreground font-normal">— 000 avtomatik qo'shiladi</span>
-                  </Label>
+                  <Label className="text-sm font-medium">Qarz summasi (so'm)</Label>
                   <Input
                     type="text"
                     inputMode="numeric"
-                    placeholder="masalan: 150 → 150 000"
+                    placeholder="0"
                     value={paymentAmount}
-                    onChange={(e) => { setPaymentAmount(wFmtAmt(e.target.value)); wPayAmountEdited.current = true; }}
-                    onBlur={wHandleAmtBlur}
+                    onChange={(e) => setPaymentAmount(wFmtAmt(e.target.value))}
                     autoFocus
                     className="text-xl font-bold h-14 text-center tabular-nums"
                   />
-                  {paymentAmount && <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold text-center">{paymentAmount} so'm</p>}
                   {paymentAmount && wParseAmt(paymentAmount) > 0 && (
                     <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-3 text-sm space-y-1">
                       <div className="flex justify-between">
@@ -1496,20 +1482,15 @@ export default function WorkerDashboard() {
 
               {paymentMode === "naqd" && (
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium flex items-center gap-1.5">
-                    Naqd summasi (so'm)
-                    <span className="text-muted-foreground font-normal text-xs">— ixtiyoriy, 000 qo'shiladi</span>
-                  </Label>
+                  <Label className="text-sm font-medium">Naqd summasi (so'm) <span className="text-muted-foreground font-normal">— ixtiyoriy</span></Label>
                   <Input
                     type="text"
                     inputMode="numeric"
-                    placeholder="masalan: 150 → 150 000"
+                    placeholder="0"
                     value={paymentAmount}
-                    onChange={(e) => { setPaymentAmount(wFmtAmt(e.target.value)); wPayAmountEdited.current = true; }}
-                    onBlur={wHandleAmtBlur}
+                    onChange={(e) => setPaymentAmount(wFmtAmt(e.target.value))}
                     className="text-xl font-bold h-14 text-center tabular-nums"
                   />
-                  {paymentAmount && <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold text-center">{paymentAmount} so'm</p>}
                   <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-2 text-xs text-green-700 dark:text-green-400 text-center">
                     💵 Naqd to'lov — mijoz hisobiga ta'sir etmaydi, faqat tarixga yoziladi
                   </div>

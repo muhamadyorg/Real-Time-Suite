@@ -895,17 +895,9 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
   const [readyQtyOrder, setReadyQtyOrder] = useState<any>(null);
   const [readyQtyInput, setReadyQtyInput] = useState("");
   const [readyQtyUnit, setReadyQtyUnit] = useState("");
-  // 3-nol formatlash
-  const payAmountEdited = useRef(false);
+  // Summa formatlash (3 raqamda bo'shliq)
   const fmtAmt = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const parseAmt = (v: string) => parseFloat(v.replace(/\s/g, "") || "0");
-  const handleAmtBlur = () => {
-    if (payAmountEdited.current) {
-      const d = paymentAmount.replace(/\s/g, "");
-      if (d) setPaymentAmount(fmtAmt(d + "000"));
-      payAmountEdited.current = false;
-    }
-  };
 
   const { has } = useMyPermissions(token, role);
   const isViewer = role === 'viewer';
@@ -967,7 +959,6 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
       }
       setPaymentMode("naqd");
       setPaymentAmount("");
-      payAmountEdited.current = false;
       setPaymentOrder(order);
       return;
     }
@@ -1471,40 +1462,30 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
             </div>
             {paymentMode === "qarz" && (
               <div className="space-y-1">
-                <label className="text-sm font-medium flex items-center gap-1.5">
-                  Qarz summasi
-                  <span className="text-xs text-muted-foreground font-normal">— 000 avtomatik qo'shiladi</span>
-                </label>
+                <label className="text-sm font-medium">Qarz summasi (so'm)</label>
                 <Input
                   type="text"
                   inputMode="numeric"
-                  placeholder="masalan: 150 → 150 000"
+                  placeholder="0"
                   value={paymentAmount}
-                  onChange={e => { setPaymentAmount(fmtAmt(e.target.value)); payAmountEdited.current = true; }}
-                  onBlur={handleAmtBlur}
+                  onChange={e => setPaymentAmount(fmtAmt(e.target.value))}
                   className="h-12 text-xl font-bold text-center tabular-nums"
                   autoFocus
                 />
-                {paymentAmount && <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold text-center">{paymentAmount} so'm</p>}
               </div>
             )}
             {paymentMode === "naqd" && (
               <div className="space-y-1">
-                <label className="text-sm font-medium flex items-center gap-1.5">
-                  Naqd summa (ixtiyoriy)
-                  <span className="text-xs text-muted-foreground font-normal">— 000 avtomatik qo'shiladi</span>
-                </label>
+                <label className="text-sm font-medium">Naqd summasi (so'm) <span className="text-muted-foreground font-normal text-xs">— ixtiyoriy</span></label>
                 <Input
                   type="text"
                   inputMode="numeric"
-                  placeholder="masalan: 150 → 150 000"
+                  placeholder="0"
                   value={paymentAmount}
-                  onChange={e => { setPaymentAmount(fmtAmt(e.target.value)); payAmountEdited.current = true; }}
-                  onBlur={handleAmtBlur}
+                  onChange={e => setPaymentAmount(fmtAmt(e.target.value))}
                   className="h-12 text-xl font-bold text-center tabular-nums"
                   autoFocus
                 />
-                {paymentAmount && <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold text-center">{paymentAmount} so'm</p>}
               </div>
             )}
           </div>

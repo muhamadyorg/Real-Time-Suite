@@ -424,16 +424,8 @@ function ClientAccountsView({ storeId, token }: { storeId: number; token: string
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
   const [payLoading, setPayLoading] = useState(false);
-  const payAmountEdited = useRef(false);
   const fmtPayAmount = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const parsePayAmount = (v: string) => parseFloat(v.replace(/\s/g, "") || "0");
-  const handlePayAmountBlur = () => {
-    if (payAmountEdited.current) {
-      const d = payAmount.replace(/\s/g, "");
-      if (d) setPayAmount(fmtPayAmount(d + "000"));
-      payAmountEdited.current = false;
-    }
-  };
 
   const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
@@ -618,21 +610,16 @@ function ClientAccountsView({ storeId, token }: { storeId: number; token: string
               </div>
             )}
             <div className="space-y-1">
-              <Label className="flex items-center gap-1.5">
-                Summa (so'm)
-                <span className="text-xs text-muted-foreground font-normal">— 000 avtomatik qo'shiladi</span>
-              </Label>
+              <Label>Summa (so'm)</Label>
               <Input
                 type="text"
                 inputMode="numeric"
-                placeholder="masalan: 150 → 150 000"
+                placeholder="0"
                 value={payAmount}
-                onChange={e => { setPayAmount(fmtPayAmount(e.target.value)); payAmountEdited.current = true; }}
-                onBlur={handlePayAmountBlur}
+                onChange={e => setPayAmount(fmtPayAmount(e.target.value))}
                 className="text-xl font-bold h-12 text-center tabular-nums"
                 autoFocus
               />
-              {payAmount && <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold text-center">{payAmount} so'm</p>}
             </div>
             {payAmount && payModalClient && parsePayAmount(payAmount) > 0 && (
               <div className="bg-muted/40 rounded-lg p-3 text-sm space-y-1">
