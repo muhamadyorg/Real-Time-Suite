@@ -1,7 +1,7 @@
 import { Router } from "express";
 import webpush from "web-push";
-import { db, pushSubscriptionsTable, notificationRulesTable, accountsTable, serviceTypesTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, pushSubscriptionsTable, notificationRulesTable, accountsTable } from "@workspace/db";
+import { eq, and, inArray } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 
 const router = Router();
@@ -12,14 +12,16 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY!,
 );
 
-// GET /push/vapid-key — public key for frontend
+// GET /push/vapid-key — public key for frontend (no auth)
 router.get("/vapid-key", (_req, res) => {
   res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
 });
 
 // POST /push/subscribe — save subscription
-router.post("/subscribe", authenticateToken, async (req, res) => {
-  const payload = (req as any).user;
+router.post("/subscribe", async (req, res) => {
+  const payload = await authenticateToken(req.headers.authorization);
+  if (!payload) { res.status(401).json({ error: "Ruxsat yo'q" }); return; }
+
   const { subscription } = req.body as {
     subscription: { endpoint: string; keys: { p256dh: string; auth: string } };
   };
@@ -28,12 +30,11 @@ router.post("/subscribe", authenticateToken, async (req, res) => {
     return;
   }
   try {
-    // Delete old subscription for same endpoint
     await db.delete(pushSubscriptionsTable)
       .where(eq(pushSubscriptionsTable.endpoint, subscription.endpoint));
 
     await db.insert(pushSubscriptionsTable).values({
-      accountId: payload.accountId,
+      accountId: payload.accountId!,
       storeId: payload.storeId ?? null,
       endpoint: subscription.endpoint,
       p256dh: subscription.keys.p256dh,
@@ -47,19 +48,21 @@ router.post("/subscribe", authenticateToken, async (req, res) => {
 });
 
 // DELETE /push/subscribe — remove subscription
-router.delete("/subscribe", authenticateToken, async (req, res) => {
-  const payload = (req as any).user;
+router.delete("/subscribe", async (req, res) => {
+  const payload = await authenticateToken(req.headers.authorization);
+  if (!payload) { res.status(401).json({ error: "Ruxsat yo'q" }); return; }
+
   const { endpoint } = req.body as { endpoint?: string };
   try {
     if (endpoint) {
       await db.delete(pushSubscriptionsTable)
         .where(and(
-          eq(pushSubscriptionsTable.accountId, payload.accountId),
+          eq(pushSubscriptionsTable.accountId, payload.accountId!),
           eq(pushSubscriptionsTable.endpoint, endpoint),
         ));
     } else {
       await db.delete(pushSubscriptionsTable)
-        .where(eq(pushSubscriptionsTable.accountId, payload.accountId));
+        .where(eq(pushSubscriptionsTable.accountId, payload.accountId!));
     }
     res.json({ ok: true });
   } catch (err) {
@@ -67,14 +70,15 @@ router.delete("/subscribe", authenticateToken, async (req, res) => {
   }
 });
 
-// GET /push/rules?storeId=X — get notification rules
-router.get("/rules", authenticateToken, async (req, res) => {
-  const payload = (req as any).user;
-  const storeId = parseInt(String(req.query.storeId || payload.storeId));
-  if (!["sudo", "superadmin"].includes(payload.role) && payload.role !== "admin") {
-    res.status(403).json({ error: "Ruxsat yo'q" });
-    return;
+// GET /push/rules?storeId=X
+router.get("/rules", async (req, res) => {
+  const payload = await authenticateToken(req.headers.authorization);
+  if (!payload) { res.status(401).json({ error: "Ruxsat yo'q" }); return; }
+  if (!["sudo", "superadmin", "admin"].includes(payload.role)) {
+    res.status(403).json({ error: "Ruxsat yo'q" }); return;
   }
+  const storeId = parseInt(String(req.query.storeId || payload.storeId));
+  if (!storeId) { res.status(400).json({ error: "storeId kerak" }); return; }
   try {
     const rules = await db.query.notificationRulesTable.findMany({
       where: eq(notificationRulesTable.storeId, storeId),
@@ -85,15 +89,18 @@ router.get("/rules", authenticateToken, async (req, res) => {
   }
 });
 
-// POST /push/rules — create rule
-router.post("/rules", authenticateToken, async (req, res) => {
-  const payload = (req as any).user;
+// POST /push/rules
+router.post("/rules", async (req, res) => {
+  const payload = await authenticateToken(req.headers.authorization);
+  if (!payload) { res.status(401).json({ error: "Ruxsat yo'q" }); return; }
+  if (!["sudo", "superadmin"].includes(payload.role)) {
+    res.status(403).json({ error: "Faqat superadmin" }); return;
+  }
   const { storeId, serviceTypeId, accountId } = req.body as {
     storeId: number; serviceTypeId: number; accountId: number;
   };
-  if (!["sudo", "superadmin"].includes(payload.role)) {
-    res.status(403).json({ error: "Faqat superadmin" });
-    return;
+  if (!storeId || !serviceTypeId || !accountId) {
+    res.status(400).json({ error: "storeId, serviceTypeId, accountId kerak" }); return;
   }
   try {
     const existing = await db.query.notificationRulesTable.findFirst({
@@ -103,10 +110,7 @@ router.post("/rules", authenticateToken, async (req, res) => {
         eq(notificationRulesTable.accountId, accountId),
       ),
     });
-    if (existing) {
-      res.json(existing);
-      return;
-    }
+    if (existing) { res.json(existing); return; }
     const [rule] = await db.insert(notificationRulesTable)
       .values({ storeId, serviceTypeId, accountId })
       .returning();
@@ -117,11 +121,11 @@ router.post("/rules", authenticateToken, async (req, res) => {
 });
 
 // DELETE /push/rules/:id
-router.delete("/rules/:id", authenticateToken, async (req, res) => {
-  const payload = (req as any).user;
+router.delete("/rules/:id", async (req, res) => {
+  const payload = await authenticateToken(req.headers.authorization);
+  if (!payload) { res.status(401).json({ error: "Ruxsat yo'q" }); return; }
   if (!["sudo", "superadmin"].includes(payload.role)) {
-    res.status(403).json({ error: "Faqat superadmin" });
-    return;
+    res.status(403).json({ error: "Faqat superadmin" }); return;
   }
   try {
     await db.delete(notificationRulesTable)
@@ -132,7 +136,10 @@ router.delete("/rules/:id", authenticateToken, async (req, res) => {
   }
 });
 
-// Helper: send push to a specific account for a given service type and store
+// Helper: send push notifications for a new order
+// Sends to:
+//   1. All subscriptions where account.serviceTypeId = order.serviceTypeId (automatic for workers)
+//   2. All subscriptions listed in notification_rules for this store+serviceType (admin overrides)
 export async function sendOrderPushNotifications(params: {
   storeId: number;
   serviceTypeId: number;
@@ -145,19 +152,28 @@ export async function sendOrderPushNotifications(params: {
   if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
 
   try {
-    // Find which accounts should be notified for this service type
+    // 1. Accounts whose serviceTypeId matches (worker auto-subscribe)
+    const matchingAccounts = await db.query.accountsTable.findMany({
+      where: and(
+        eq(accountsTable.storeId, storeId),
+        eq(accountsTable.serviceTypeId, serviceTypeId),
+      ),
+    });
+    const autoAccountIds = new Set(matchingAccounts.map(a => a.id));
+
+    // 2. Explicit notification_rules for this store+serviceType
     const rules = await db.query.notificationRulesTable.findMany({
       where: and(
         eq(notificationRulesTable.storeId, storeId),
         eq(notificationRulesTable.serviceTypeId, serviceTypeId),
       ),
     });
+    for (const r of rules) autoAccountIds.add(r.accountId);
 
-    if (rules.length === 0) return;
+    if (autoAccountIds.size === 0) return;
 
-    const accountIds = rules.map(r => r.accountId);
-
-    // Get all push subscriptions for these accounts
+    // Find subscriptions for these accounts
+    const accountIds = [...autoAccountIds];
     const subs = await db.query.pushSubscriptionsTable.findMany({
       where: (t, { inArray }) => inArray(t.accountId, accountIds),
     });
@@ -169,8 +185,8 @@ export async function sendOrderPushNotifications(params: {
       clientName ? `👤 ${clientName}` : null,
     ].filter(Boolean).join(" • ") || "Yangi zakaz";
 
-    const payload = JSON.stringify({
-      title: `🆕 ${serviceTypeName} — zakaz #${orderId}`,
+    const pushPayload = JSON.stringify({
+      title: `🆕 ${serviceTypeName} — #${orderId}`,
       body,
       tag: `order-${orderId}`,
       icon: "/icon-192.png",
@@ -178,20 +194,21 @@ export async function sendOrderPushNotifications(params: {
       data: { orderId, serviceTypeId, storeId },
     });
 
-    const sendPromises = subs.map(async (sub) => {
-      try {
-        await webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          payload,
-        );
-      } catch (err: any) {
-        if (err.statusCode === 410 || err.statusCode === 404) {
-          // Subscription expired — remove it
-          await db.delete(pushSubscriptionsTable).where(eq(pushSubscriptionsTable.id, sub.id));
+    await Promise.allSettled(
+      subs.map(async (sub) => {
+        try {
+          await webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            pushPayload,
+          );
+        } catch (err: any) {
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            await db.delete(pushSubscriptionsTable)
+              .where(eq(pushSubscriptionsTable.id, sub.id));
+          }
         }
-      }
-    });
-    await Promise.allSettled(sendPromises);
+      })
+    );
   } catch (err) {
     console.error("sendOrderPushNotifications error", err);
   }
