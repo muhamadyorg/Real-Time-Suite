@@ -213,20 +213,25 @@ function OrderDetailModal({ order, open, onClose, onEdit, onDelete, canEdit, can
   );
 }
 
-// Searchable client selector
+// Searchable client selector — inline input
 function ClientSearch({ clients, value, name: manualName, onChange }: { clients: any[], value: string, name?: string, onChange: (id: string, name: string, phone: string) => void }) {
   const [q, setQ] = useState("");
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLDivElement>(null);
+  const [focused, setFocused] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const selectedClient = clients.find(c => c.id.toString() === value);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) setOpen(false);
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setFocused(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  const displayValue = selectedClient
+    ? `${selectedClient.firstName} ${selectedClient.lastName}${selectedClient.phone ? ` (${selectedClient.phone})` : ""}`
+    : manualName || q;
 
   const filtered = q.trim() === "" ? clients.slice(0, 8) : clients.filter(c => {
     const s = q.toLowerCase();
@@ -240,58 +245,57 @@ function ClientSearch({ clients, value, name: manualName, onChange }: { clients:
   });
 
   const highlight = (text: string) => {
-    if (!q.trim()) return text;
+    if (!q.trim()) return <>{text}</>;
     const parts = text.split(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
-    return parts.map((p, i) => p.toLowerCase() === q.toLowerCase() ? <mark key={i} className="bg-yellow-300 text-black rounded px-0.5">{p}</mark> : p);
+    return <>{parts.map((p, i) => p.toLowerCase() === q.toLowerCase() ? <mark key={i} className="bg-yellow-300 text-black rounded px-0.5">{p}</mark> : p)}</>;
   };
 
-  const handleQuickAdd = () => {
-    onChange("", q.trim(), "");
-    setQ("");
-    setOpen(false);
-  };
+  const showDropdown = focused && !selectedClient && !manualName
+    ? true
+    : focused && q.trim() !== "";
 
   return (
-    <div ref={triggerRef} className="relative">
-      {open && (
-        <div className="absolute bottom-full left-0 right-0 mb-1 z-[200] bg-card border rounded-lg shadow-2xl overflow-hidden">
-          <div className="p-2 border-b">
-            <Input
-              autoFocus
-              placeholder="Ism yoki oxirgi 4 raqam..."
-              value={q}
-              onChange={e => setQ(e.target.value)}
-              className="h-9 text-sm"
-              onClick={e => e.stopPropagation()}
-            />
-          </div>
+    <div ref={containerRef} className="relative">
+      <div className="relative">
+        <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+        <Input
+          ref={inputRef}
+          placeholder="Ism yoki oxirgi 4 raqam..."
+          value={displayValue}
+          onChange={e => {
+            if (selectedClient || manualName) onChange("", "", "");
+            setQ(e.target.value);
+          }}
+          onFocus={() => setFocused(true)}
+          className="pl-9 pr-9 h-12 bg-card"
+        />
+        {(value || manualName) && (
+          <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2"
+            onClick={() => { onChange("", "", ""); setQ(""); inputRef.current?.focus(); }}>
+            <X className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+          </button>
+        )}
+      </div>
+      {showDropdown && (filtered.length > 0 || q.trim() !== "") && (
+        <div className="absolute top-full left-0 right-0 mt-1 z-[200] bg-card border rounded-lg shadow-2xl overflow-hidden">
           <div className="max-h-48 overflow-y-auto">
             {filtered.map(c => (
-              <button
-                key={c.id}
-                type="button"
+              <button key={c.id} type="button"
                 className="w-full text-left px-3 py-2.5 hover:bg-muted/50 flex items-center gap-3 transition-colors"
-                onClick={() => {
-                  onChange(c.id.toString(), c.firstName + " " + c.lastName, c.phone);
-                  setQ("");
-                  setOpen(false);
-                }}
-              >
+                onClick={() => { onChange(c.id.toString(), c.firstName + " " + c.lastName, c.phone); setQ(""); setFocused(false); }}>
                 <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
                   {c.firstName?.[0]?.toUpperCase()}
                 </div>
                 <div>
                   <div className="text-sm font-medium">{highlight(c.firstName + " " + c.lastName)}</div>
-                  <div className="text-xs text-muted-foreground">{highlight(c.phone)}</div>
+                  <div className="text-xs text-muted-foreground">{highlight(c.phone ?? "")}</div>
                 </div>
               </button>
             ))}
             {q.trim() !== "" && filtered.length === 0 && (
-              <button
-                type="button"
+              <button type="button"
                 className="w-full text-left px-3 py-2.5 hover:bg-green-50 dark:hover:bg-green-950/30 flex items-center gap-3 transition-colors border-t"
-                onClick={handleQuickAdd}
-              >
+                onClick={() => { onChange("", q.trim(), ""); setQ(""); setFocused(false); }}>
                 <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/50 text-green-600 flex items-center justify-center text-sm font-bold shrink-0">+</div>
                 <div>
                   <div className="text-sm font-medium text-green-700 dark:text-green-400">«{q.trim()}»</div>
@@ -302,24 +306,6 @@ function ClientSearch({ clients, value, name: manualName, onChange }: { clients:
           </div>
         </div>
       )}
-      <div
-        className="h-12 flex items-center gap-2 px-3 border rounded-lg bg-card cursor-pointer hover:border-primary/50 transition-colors"
-        onClick={() => setOpen(v => !v)}
-      >
-        <Users className="w-4 h-4 text-muted-foreground shrink-0" />
-        {selectedClient ? (
-          <span className="flex-1 text-sm font-medium truncate">{selectedClient.firstName} {selectedClient.lastName} ({selectedClient.phone})</span>
-        ) : manualName ? (
-          <span className="flex-1 text-sm font-medium truncate text-green-700 dark:text-green-400">{manualName}</span>
-        ) : (
-          <span className="flex-1 text-sm text-muted-foreground">Mijoz qidiring...</span>
-        )}
-        {(value || manualName) && (
-          <button type="button" onClick={e => { e.stopPropagation(); onChange("", "", ""); setQ(""); }}>
-            <X className="w-4 h-4 text-muted-foreground hover:text-foreground" />
-          </button>
-        )}
-      </div>
     </div>
   );
 }
@@ -529,15 +515,7 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
   const [templateFields, setTemplateFields] = useState<typeof ADMIN_DEFAULT_ORDER_FIELDS>(ADMIN_DEFAULT_ORDER_FIELDS);
   const [extraFields, setExtraFields] = useState<Record<string, string>>({});
   const [priceRaw, setPriceRaw] = useState("");
-  const priceEdited = useRef(false);
   const fmtPrice = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  const handlePriceBlur = () => {
-    if (priceEdited.current) {
-      const d = priceRaw.replace(/\s/g, "");
-      if (d) setPriceRaw(fmtPrice(d + "000"));
-      priceEdited.current = false;
-    }
-  };
   const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
 
   const { data: allServiceTypes } = useGetServiceTypes({ query: { queryKey: ["getServiceTypes", storeId] } });
@@ -599,6 +577,26 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
     if (!serviceTypeId) {
       toast({ title: "Xatolik", description: "Xizmat turini tanlang", variant: "destructive" }); return;
     }
+    for (const field of templateFields) {
+      if (!field.visible || !field.required) continue;
+      let empty = false;
+      switch (field.key) {
+        case "serviceType": break;
+        case "quantity": empty = !quantity || Number(quantity) < 1; break;
+        case "unit": empty = !unit; break;
+        case "shelf": empty = !shelf; break;
+        case "product": empty = !product; break;
+        case "notes": empty = !notes; break;
+        case "client": empty = !clientId && !clientName; break;
+        case "price": empty = !priceRaw.trim(); break;
+        default:
+          if (field.key.startsWith("custom_")) empty = !extraFields[field.label];
+      }
+      if (empty) {
+        toast({ title: "Majburiy maydon", description: `«${field.label}» to'ldirilishi shart`, variant: "destructive" });
+        return;
+      }
+    }
     createOrder.mutate(
       { data: {
         serviceTypeId: Number(serviceTypeId),
@@ -634,17 +632,14 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
         return (
           <div key={key} className="space-y-2">
             <Label>{label}{req ? " *" : ""}</Label>
-            <Select value={serviceTypeId} onValueChange={setServiceTypeId}>
-              <SelectTrigger className="h-12 bg-card">
-                <SelectValue placeholder="Xizmatni tanlang..." />
-              </SelectTrigger>
-              <SelectContent>
-                {serviceTypes?.map((st: any) => (
-                  <SelectItem key={st.id} value={st.id.toString()}>{st.name}</SelectItem>
-                ))}
-                {!serviceTypes?.length && <div className="p-2 text-sm text-muted-foreground">Xizmat turlari mavjud emas</div>}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap gap-2">
+              {serviceTypes?.map((st: any) => (
+                <button key={st.id} type="button"
+                  onClick={() => setServiceTypeId(st.id.toString())}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${serviceTypeId === st.id.toString() ? "bg-primary text-primary-foreground border-primary shadow-md" : "bg-card border-border hover:border-primary/60 hover:bg-muted/50"}`}
+                >{st.name}</button>
+              ))}
+            </div>
           </div>
         );
 
@@ -786,22 +781,18 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
       case "price":
         return (
           <div key={key} className="space-y-2">
-            <Label className="flex items-center gap-1.5">
-              {label}{req ? " *" : ""}
-              <span className="text-xs text-muted-foreground font-normal">— raqam kiriting, 000 avtomatik qo'shiladi</span>
-            </Label>
+            <Label>{label}{req ? " *" : ""}</Label>
             <Input
               type="text"
               inputMode="numeric"
-              placeholder="masalan: 150 → 150 000"
+              placeholder="Narxni kiriting..."
               value={priceRaw}
-              onChange={e => { setPriceRaw(fmtPrice(e.target.value)); priceEdited.current = true; }}
-              onBlur={handlePriceBlur}
+              onChange={e => setPriceRaw(fmtPrice(e.target.value))}
               className="h-12 bg-card font-semibold text-lg tabular-nums"
               required={req}
             />
             {priceRaw && (
-              <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold">{priceRaw} so'm</p>
+              <p className="text-xs text-muted-foreground">{priceRaw} so'm</p>
             )}
           </div>
         );
@@ -841,21 +832,52 @@ function CreateOrderDialog({ storeId, open, onOpenChange }: { storeId: number, o
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) resetForm(); }}>
       <DialogContent className="w-full max-w-md mx-4 max-h-[90vh] flex flex-col p-0 gap-0">
         <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
-          <DialogTitle className="text-xl font-bold">Yangi Zakaz</DialogTitle>
-          <DialogDescription className="text-sm text-muted-foreground">Mijoz uchun yangi buyurtma yarating</DialogDescription>
+          <DialogTitle className="text-xl font-bold">
+            {serviceTypeId
+              ? (serviceTypes?.find((st: any) => st.id.toString() === serviceTypeId)?.name ?? "Yangi Zakaz")
+              : "Yangi Zakaz"}
+          </DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            {!serviceTypeId ? "Xizmat turini tanlang" : "Buyurtma ma'lumotlarini kiriting"}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto overscroll-contain">
             <div className="space-y-5 px-6 py-5">
-              {templateFields.map(f => renderField(f.key))}
+              {!serviceTypeId ? (
+                <div className="space-y-3">
+                  {(!serviceTypes || serviceTypes.length === 0) && (
+                    <p className="text-sm text-muted-foreground text-center py-4">Xizmat turlari topilmadi</p>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    {serviceTypes?.map((st: any) => (
+                      <button key={st.id} type="button"
+                        onClick={() => setServiceTypeId(st.id.toString())}
+                        className="p-5 border-2 rounded-xl text-center font-bold text-base hover:border-primary hover:bg-primary/5 transition-all active:scale-95">
+                        {st.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {templateFields.filter(f => f.key !== "serviceType").map(f => renderField(f.key))}
+                </>
+              )}
             </div>
           </div>
-          <DialogFooter className="px-6 pb-6 pt-4 border-t shrink-0">
-            <Button type="submit" size="lg" className="w-full h-14 text-lg font-bold" disabled={createOrder.isPending}>
-              {createOrder.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
-              SAQLASH
-            </Button>
-          </DialogFooter>
+          {serviceTypeId && (
+            <DialogFooter className="px-6 pb-6 pt-4 border-t shrink-0 flex-col gap-2">
+              <button type="button" onClick={() => setServiceTypeId("")}
+                className="text-sm text-muted-foreground hover:text-foreground underline self-start">
+                ← Xizmat turini o'zgartirish
+              </button>
+              <Button type="submit" size="lg" className="w-full h-14 text-lg font-bold" disabled={createOrder.isPending}>
+                {createOrder.isPending ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
+                SAQLASH
+              </Button>
+            </DialogFooter>
+          )}
         </form>
       </DialogContent>
     </Dialog>

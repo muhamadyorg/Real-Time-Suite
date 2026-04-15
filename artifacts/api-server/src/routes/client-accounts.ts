@@ -85,13 +85,31 @@ router.get("/", async (req, res) => {
       );
     });
 
-    // Har bir mijoz uchun account balance
+    // Har bir mijoz uchun account balance + transaction count
     const results = await Promise.all(filtered.map(async (client) => {
       const whereConditions = storeId
         ? and(eq(clientAccountsTable.clientId, client.id), eq(clientAccountsTable.storeId, storeId))
         : eq(clientAccountsTable.clientId, client.id);
       const accounts = await db.query.clientAccountsTable.findMany({ where: whereConditions });
       const totalBalance = accounts.reduce((sum, a) => sum + parseFloat(a.balance ?? "0"), 0);
+
+      let transactionCount = 0;
+      if (storeId) {
+        const { pool } = await import("@workspace/db");
+        const txRes = await pool.query(
+          `SELECT COUNT(*)::int AS cnt FROM client_transactions WHERE client_id = $1 AND store_id = $2`,
+          [client.id, storeId]
+        );
+        transactionCount = txRes.rows[0]?.cnt ?? 0;
+      } else {
+        const { pool } = await import("@workspace/db");
+        const txRes = await pool.query(
+          `SELECT COUNT(*)::int AS cnt FROM client_transactions WHERE client_id = $1`,
+          [client.id]
+        );
+        transactionCount = txRes.rows[0]?.cnt ?? 0;
+      }
+
       return {
         id: client.id,
         firstName: client.firstName,
@@ -100,6 +118,7 @@ router.get("/", async (req, res) => {
         telegramUserId: client.telegramUserId,
         status: client.status,
         balance: totalBalance,
+        transactionCount,
         accounts,
       };
     }));

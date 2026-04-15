@@ -140,7 +140,14 @@ export function ClientAccountsView({ storeId, token, role = "admin" }: ClientAcc
               <Card key={c.id} className="overflow-hidden">
                 <div className="p-4 flex items-center gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold truncate">{c.firstName} {c.lastName}</div>
+                    <div className="font-semibold truncate flex items-center gap-2">
+                      {c.firstName} {c.lastName}
+                      {(c.transactionCount ?? 0) > 0 && (
+                        <span className="text-xs bg-primary/10 text-primary font-bold px-1.5 py-0.5 rounded-full shrink-0">
+                          {c.transactionCount} ta
+                        </span>
+                      )}
+                    </div>
                     {c.phone && (
                       <div className="text-sm text-muted-foreground flex items-center gap-1">
                         <Phone className="w-3 h-3" />{c.phone}
