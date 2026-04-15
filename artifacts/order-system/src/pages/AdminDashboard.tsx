@@ -1037,7 +1037,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         }
       }
       updateStatus.mutate(
-        { id: paymentOrder.id, data: { status: "ready" } as any },
+        { id: paymentOrder.id, data: { status: "ready", paymentType: paymentMode } as any },
         {
           onSuccess: () => {
             toast({ title: paymentMode === "qarz" ? "✅ Tayyor! Qarz yozildi" : "✅ Tayyor! Naqd to'landi" });

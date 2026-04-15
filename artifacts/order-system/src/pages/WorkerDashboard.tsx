@@ -931,7 +931,7 @@ export default function WorkerDashboard() {
       }
       // Zakaz tayyor deb belgilash
       updateStatus.mutate(
-        { id: paymentOrder.id, data: { status: "ready" } as any },
+        { id: paymentOrder.id, data: { status: "ready", paymentType: paymentMode } as any },
         {
           onSuccess: () => {
             toast({ title: paymentMode === "qarz" ? "✅ Tayyor! Qarz yozildi" : "✅ Tayyor! Naqd to'landi" });
