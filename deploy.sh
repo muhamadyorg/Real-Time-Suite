@@ -222,6 +222,27 @@ echo -e "${BLUE}[5/9] Database tekshirilmoqda...${NC}"
 ACTUAL_DB=$(node -e "try{const u=new URL(process.env.DATABASE_URL||'');console.log(u.pathname.replace('/',''))}catch(e){console.log('zakaz_db')}" 2>/dev/null || echo "zakaz_db")
 ACTUAL_USER=$(node -e "try{const u=new URL(process.env.DATABASE_URL||'');console.log(u.username)}catch(e){console.log('zakaz_user')}" 2>/dev/null || echo "zakaz_user")
 
+# DB foydalanuvchi mavjudligini tekshir, yo'q bo'lsa yaratib ol
+ACTUAL_PASS=$(node -e "try{const u=new URL(process.env.DATABASE_URL||'');console.log(u.password)}catch(e){console.log('')}" 2>/dev/null || echo "")
+USER_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$ACTUAL_USER'" 2>/dev/null | tr -d '[:space:]' || echo "")
+if [ "$USER_EXISTS" = "1" ]; then
+  ok "DB foydalanuvchi '$ACTUAL_USER' mavjud"
+else
+  warn "DB foydalanuvchi '$ACTUAL_USER' topilmadi — yaratilmoqda..."
+  if [ -n "$ACTUAL_PASS" ]; then
+    sudo -u postgres psql -c "CREATE USER $ACTUAL_USER WITH PASSWORD '$ACTUAL_PASS';" 2>/dev/null || \
+    fail "DB foydalanuvchi yaratib bo'lmadi: $ACTUAL_USER"
+  else
+    ACTUAL_PASS=$(openssl rand -hex 16)
+    sudo -u postgres psql -c "CREATE USER $ACTUAL_USER WITH PASSWORD '$ACTUAL_PASS';" 2>/dev/null || \
+    fail "DB foydalanuvchi yaratib bo'lmadi: $ACTUAL_USER"
+    warn "Yangi parol yaratildi — .env yangilanmoqda..."
+    sed -i "s|DATABASE_URL=.*|DATABASE_URL=postgresql://${ACTUAL_USER}:${ACTUAL_PASS}@localhost:5432/${ACTUAL_DB}|" "$ENV_FILE"
+    set -a; source "$ENV_FILE"; set +a
+  fi
+  ok "DB foydalanuvchi '$ACTUAL_USER' yaratildi"
+fi
+
 DB_EXISTS=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$ACTUAL_DB'" 2>/dev/null | tr -d '[:space:]' || echo "")
 if [ "$DB_EXISTS" = "1" ]; then
   ok "Database '$ACTUAL_DB' mavjud — barcha ma'lumotlar saqlanib qoladi ✅"
