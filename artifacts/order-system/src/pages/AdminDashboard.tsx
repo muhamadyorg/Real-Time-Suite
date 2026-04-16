@@ -29,7 +29,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { QRCodeSVG } from "qrcode.react";
-import { PushNotificationButton } from "@/components/PushNotificationButton";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   new:          { label: "Yangi",          color: "text-blue-600 bg-blue-50 border border-blue-200" },
@@ -1209,9 +1208,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
 
   return (
     <div className="min-h-screen bg-muted/20 pb-24">
-      {!hideHeader && <Header title={`${isViewer ? 'Kuzatuvchi' : 'Admin'}: ${accountName}`} showLogout={true} rightContent={
-        <PushNotificationButton token={token} apiBase={(import.meta.env.BASE_URL ?? "/").replace(/\/$/, "")} />
-      } />}
+      {!hideHeader && <Header title={`${isViewer ? 'Kuzatuvchi' : 'Admin'}: ${accountName}`} showLogout={true} />}
       
       {summary && showAnalytics && (
         <div className="grid grid-cols-4 gap-2 p-4 pb-3">

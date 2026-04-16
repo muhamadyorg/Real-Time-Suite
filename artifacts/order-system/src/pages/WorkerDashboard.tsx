@@ -25,7 +25,6 @@ import { QRCodeSVG } from "qrcode.react";
 import { useMyPermissions } from "@/hooks/useMyPermissions";
 import { useBTPrinterContext } from "@/hooks/useBTPrinter";
 import { ClientAccountsView } from "@/components/ClientAccountsView";
-import { PushNotificationButton } from "@/components/PushNotificationButton";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   new: { label: "Yangi", color: "text-blue-600 bg-blue-50 border border-blue-200" },
@@ -1235,7 +1234,6 @@ export default function WorkerDashboard() {
         onLogout={() => { clearPinAuth(); setLocation("/pin"); }}
         rightContent={
           <div className="flex items-center gap-1 mr-1">
-            <PushNotificationButton token={token} apiBase={(import.meta.env.BASE_URL ?? "/").replace(/\/$/, "")} />
             <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-full shadow-sm border text-sm font-medium">
               <span className="relative flex h-2.5 w-2.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>

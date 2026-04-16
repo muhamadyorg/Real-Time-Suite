@@ -371,18 +371,6 @@ router.post("/", async (req, res) => {
     const response = mapOrder(order, showLockPin);
     io?.to(`store:${storeId}`).emit("order:created", mapOrder(order, true));
 
-    // Send PWA push notifications
-    try {
-      const { sendOrderPushNotifications } = await import("./push");
-      await sendOrderPushNotifications({
-        storeId,
-        serviceTypeId: order.serviceTypeId!,
-        serviceTypeName: order.serviceTypeName!,
-        orderId: order.orderId,
-        product: order.product,
-        clientName: order.clientName,
-      });
-    } catch (_e) { /* ignore */ }
 
     // Notify store admin about new order
     try {
