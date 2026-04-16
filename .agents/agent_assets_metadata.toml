@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "5c10ONkspujC0yo66xFRK"
+uri = "file://deploy.sh.gz"
+type = "unspecified"
+title = "deploy.sh.gz — yuklab oling, keyin: gunzip deploy.sh.gz"
