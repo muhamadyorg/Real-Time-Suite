@@ -1489,7 +1489,6 @@ export default function SuperadminDashboard() {
         <TabsContent value="settings" className="p-5 focus-visible:outline-none">
           <PermissionsView token={token} storeId={storeId} />
         </TabsContent>
-
       </Tabs>
     </div>
   );

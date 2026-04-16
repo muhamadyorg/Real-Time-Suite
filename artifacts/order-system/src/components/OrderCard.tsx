@@ -60,11 +60,6 @@ export function OrderCard({ order, search = "", actionButton, onOrderClick, canP
             >
               <HighlightText text={order.orderId} search={search} />
             </button>
-            {order.paymentType === "qarz" && (
-              <span className="text-xs font-black px-2 py-0.5 rounded-full bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400 border border-red-300 dark:border-red-700 shrink-0 tracking-wide">
-                N
-              </span>
-            )}
             {order.splitGroup && order.splitPart != null && (
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 border border-violet-200 dark:border-violet-700 shrink-0">
                 Part {order.splitPart}

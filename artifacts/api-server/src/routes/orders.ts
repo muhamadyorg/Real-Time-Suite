@@ -55,7 +55,6 @@ function mapOrder(o: typeof ordersTable.$inferSelect, showLockPin = true) {
     deliveredByName: o.deliveredByName,
     extraFields: o.extraFields ?? {},
     price: o.price ? parseFloat(o.price) : null,
-    paymentType: o.paymentType ?? null,
     lockPin: showLockPin ? o.lockPin : undefined,
     isLocked: !!o.lockPin,
     splitGroup: o.splitGroup,
@@ -371,7 +370,6 @@ router.post("/", async (req, res) => {
     const response = mapOrder(order, showLockPin);
     io?.to(`store:${storeId}`).emit("order:created", mapOrder(order, true));
 
-
     // Notify store admin about new order
     try {
       const { notifyStoreAdmin } = await import("./telegram");
@@ -432,12 +430,11 @@ router.patch("/:id/status", async (req, res) => {
     }
 
     const id = parseInt(req.params.id);
-    const { status, lockPin: providedLockPin, outputQuantity, outputUnit, paymentType } = req.body as {
+    const { status, lockPin: providedLockPin, outputQuantity, outputUnit } = req.body as {
       status: "new" | "accepted" | "ready" | "topshirildi";
       lockPin?: string;
       outputQuantity?: number;
       outputUnit?: string;
-      paymentType?: string;
     };
 
     const order = await db.query.ordersTable.findFirst({ where: eq(ordersTable.id, id) });
@@ -502,7 +499,6 @@ router.patch("/:id/status", async (req, res) => {
       updates.deliveredByName = null;
       if (outputQuantity !== undefined) updates.outputQuantity = String(outputQuantity);
       if (outputUnit !== undefined) updates.outputUnit = outputUnit;
-      if (paymentType !== undefined) updates.paymentType = paymentType;
     } else if (status === "new") {
       updates.deliveredAt = null;
       updates.deliveredByName = null;

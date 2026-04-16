@@ -40,7 +40,6 @@ export const ordersTable = pgTable("orders", {
   deliveredByName: text("delivered_by_name"),
   extraFields: jsonb("extra_fields").$type<Record<string, string>>(),
   price: numeric("price", { precision: 15, scale: 2 }),
-  paymentType: text("payment_type"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

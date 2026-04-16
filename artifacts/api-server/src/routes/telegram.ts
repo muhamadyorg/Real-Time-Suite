@@ -92,7 +92,7 @@ function setupBotHandlers(bot: TelegramBot, storeId: number | null, storeName = 
           await db.update(clientsTable).set({
             registrationStep: "first_name",
             tempData: null,
-            status: "approved",
+            status: "pending",
             botStoreId: storeId,
           }).where(eq(clientsTable.id, client.id));
         } else {
@@ -102,7 +102,7 @@ function setupBotHandlers(bot: TelegramBot, storeId: number | null, storeName = 
             phone: "",
             telegramUserId: chatId,
             botStoreId: storeId,
-            status: "approved",
+            status: "pending",
             registrationStep: "first_name",
             tempData: null,
           }).returning();
@@ -160,12 +160,11 @@ function setupBotHandlers(bot: TelegramBot, storeId: number | null, storeName = 
           lastName: autoLastName,
           phone: tempData.phone,
           registrationStep: "done",
-          status: "approved",
           tempData: null,
         }).where(eq(clientsTable.id, client.id));
         await bot.sendMessage(
           chatId,
-          `🎉 <b>Tabriklaymiz, ${tempData.firstName}!</b>\n\n✅ Siz muvaffaqiyatli ro'yxatdan o'tdingiz!\n\n👤 Ism: <b>${tempData.firstName}</b>\n📱 Telefon: <b>${tempData.phone}</b>\n\n💎 Endi siz bizning rasmiy mijozimiz bo'ldingiz!\n🛍 Buyurtmalaringiz holati haqida xabar berib boramiz.`,
+          `🎊 <b>Ro'yxatdan bo'ldingiz!</b>\n\n👤 Ism: <b>${tempData.firstName}</b>\n📱 Telefon: <b>${tempData.phone}</b>\n\n⏳ So'rovingiz admin tomonidan ko'rib chiqilmoqda.\n✨ Tasdiqlangandan so'ng siz bizning <b>rasmiy mijozimiz</b> bo'lasiz!`,
           { parse_mode: "HTML" }
         );
 
