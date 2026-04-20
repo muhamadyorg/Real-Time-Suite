@@ -250,22 +250,45 @@ router.post("/:clientId/transaction", async (req, res) => {
 
     // Telegram bildirishnomalar (fon rejimida, javobni kutmasdan)
     const typeLabel = type === "qarz" ? "📦 Nasiya" : type === "tolov" ? "💰 To'lov" : type === "tuzatish" ? "✏️ Tuzatish" : "💵 Naqd";
-    const balanceStr = balanceAfter >= 0 ? `+${balanceAfter.toFixed(0)}` : balanceAfter.toFixed(0);
-    const storeTag = serviceTypeName ? ` (${serviceTypeName})` : "";
-    const noteStr = note ? `\n📝 ${note}` : "";
+    const balanceSign = balanceAfter < 0 ? "−" : balanceAfter > 0 ? "+" : "";
+    const balanceStr = `${balanceSign}${Math.abs(balanceAfter).toLocaleString("uz-UZ", { maximumFractionDigits: 0 })} so'm`;
+    const balanceLabel = balanceAfter < 0 ? "🔴 Qarz" : balanceAfter > 0 ? "🟢 Haq" : "⚪ Nol";
+    const storeTag = serviceTypeName ? ` — ${serviceTypeName}` : "";
+    const noteStr = note ? `\n📝 Izoh: ${note}` : "";
     const orderStr = orderCode ? `\n🔖 Buyurtma: #${orderCode}` : "";
+    const amountFmt = `${Math.abs(safeAmount).toLocaleString("uz-UZ", { maximumFractionDigits: 0 })} so'm`;
 
     // Mijoz to'liq ismi
     const clientFullName = [(client as any).firstName, (client as any).lastName].filter(Boolean).join(" ") || "Noma'lum";
 
     // Mijozga to'g'ridan-to'g'ri xabar (agar Telegram bog'langan bo'lsa)
+    // botStoreId — mijoz qaysi do'kon boti orqali ro'yxatdan o'tgan
     if ((client as any).telegramUserId) {
-      const clientMsg = `${typeLabel}${storeTag}\n👤 Mijoz: ${clientFullName}\n📞 Telefon: ${(client as any).phone || "—"}\nSumma: ${safeAmount.toFixed(0)} so'm\nBalans: ${balanceStr} so'm${orderStr}${noteStr}\nBajaruvchi: ${payload.name}`;
-      sendTelegramNotification((client as any).telegramUserId, clientMsg, storeId).catch(() => {});
+      const clientMsg = [
+        `${typeLabel}${storeTag}`,
+        `👤 Mijoz: <b>${clientFullName}</b>`,
+        `📞 Telefon: ${(client as any).phone || "—"}`,
+        `💵 Summa: <b>${amountFmt}</b>`,
+        `${balanceLabel} Balans: <b>${balanceStr}</b>`,
+        orderStr,
+        noteStr,
+        `👨‍💼 Bajaruvchi: ${payload.name}`,
+      ].filter(Boolean).join("\n");
+      const clientBotStoreId = (client as any).botStoreId ?? storeId;
+      sendTelegramNotification((client as any).telegramUserId, clientMsg, clientBotStoreId).catch(() => {});
     }
 
     // Do'kon adminga bildirishnoma
-    const adminMsg = `${typeLabel}${storeTag}\n👤 ${clientFullName}\n📞 ${(client as any).phone || "—"}\nSumma: ${safeAmount.toFixed(0)} so'm\nBalans: ${balanceStr} so'm${orderStr}${noteStr}\nBajaruvchi: ${payload.name}`;
+    const adminMsg = [
+      `${typeLabel}${storeTag}`,
+      `👤 Mijoz: <b>${clientFullName}</b>`,
+      `📞 ${(client as any).phone || "—"}`,
+      `💵 Summa: <b>${amountFmt}</b>`,
+      `${balanceLabel} Balans: <b>${balanceStr}</b>`,
+      orderStr,
+      noteStr,
+      `👨‍💼 Bajaruvchi: ${payload.name}`,
+    ].filter(Boolean).join("\n");
     notifyStoreAdmin(storeId, adminMsg).catch(() => {});
   } catch (err) {
     req.log.error(err);
