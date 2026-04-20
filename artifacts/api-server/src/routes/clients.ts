@@ -26,12 +26,8 @@ router.get("/", async (req, res) => {
       orderBy: (t, { desc }) => desc(t.createdAt),
     });
 
-    // Workers and viewers can only see approved clients
-    if (isWorkerOrViewer) {
-      clients = clients.filter((c) => c.status === "approved");
-    } else if (status && ["pending", "approved", "rejected"].includes(status)) {
-      clients = clients.filter((c) => c.status === status);
-    }
+    // Faqat ro'yxatdan to'liq o'tganlarni ko'rsat
+    clients = clients.filter((c) => c.registrationStep === "done" || c.registrationStep === null);
 
     if (search) {
       const q = search.toLowerCase();

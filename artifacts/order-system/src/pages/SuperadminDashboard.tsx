@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { 
   useGetAccounts, useCreateAccount, useDeleteAccount, useUpdateAccount,
   useGetServiceTypes, useCreateServiceType, useDeleteServiceType,
-  useGetClients, useApproveClient, useRejectClient,
+  useGetClients,
   getGetAccountsQueryKey, getGetServiceTypesQueryKey, getGetClientsQueryKey
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, CheckCircle, XCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil, Users, Save, Send, RefreshCw, Bot, CreditCard, Wallet, TrendingDown, TrendingUp, ArrowDownLeft, ArrowUpRight, Phone, User, ChevronDown, ChevronUp, Timer, FileText } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil, Users, Save, Send, RefreshCw, Bot, CreditCard, Wallet, TrendingDown, TrendingUp, ArrowDownLeft, ArrowUpRight, Phone, User, ChevronDown, ChevronUp, Timer, FileText } from "lucide-react";
 import TemplatesView from "@/components/TemplatesView";
 import { AnalyticsView } from "@/components/AnalyticsView";
 import { Switch } from "@/components/ui/switch";
@@ -656,32 +656,11 @@ function ClientAccountsView({ storeId, token }: { storeId: number; token: string
 }
 
 function ClientsView() {
-  const [status, setStatus] = useState<any>("pending");
-  const { data, isLoading, refetch } = useGetClients({ status }, { query: { queryKey: getGetClientsQueryKey({ status }) } });
-  const approve = useApproveClient();
-  const reject = useRejectClient();
+  const { data, isLoading } = useGetClients({}, { query: { queryKey: getGetClientsQueryKey({}) } });
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { token } = useAuth();
   const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
-
-  const handleApprove = (id: number) => {
-    approve.mutate({ id }, {
-      onSuccess: () => {
-        toast({ title: "Mijoz tasdiqlandi" });
-        queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey({ status }) });
-      }
-    });
-  };
-
-  const handleReject = (id: number) => {
-    reject.mutate({ id }, {
-      onSuccess: () => {
-        toast({ title: "Mijoz rad etildi" });
-        queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey({ status }) });
-      }
-    });
-  };
 
   const handleDelete = async (id: number, name: string) => {
     if (!confirm(`"${name}" mijozni o'chirasizmi? Bu amalni qaytarib bo'lmaydi.`)) return;
@@ -692,7 +671,7 @@ function ClientsView() {
       });
       if (!r.ok) throw new Error();
       toast({ title: "Mijoz o'chirildi" });
-      queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey({ status }) });
+      queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey({}) });
     } catch {
       toast({ title: "Xatolik yuz berdi", variant: "destructive" });
     }
@@ -700,17 +679,7 @@ function ClientsView() {
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-between items-center">
-        <h2 className="text-lg font-bold">Mijozlar</h2>
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pending">Kutilmoqda</SelectItem>
-            <SelectItem value="approved">Tasdiqlangan</SelectItem>
-            <SelectItem value="rejected">Rad etilgan</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <h2 className="text-lg font-bold">Mijozlar</h2>
       <Card>
         <Table>
           <TableHeader>
@@ -725,27 +694,19 @@ function ClientsView() {
               <TableRow><TableCell colSpan={3} className="text-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin mx-auto" />
               </TableCell></TableRow>
-            ) : data?.map(c => (
+            ) : !data?.length ? (
+              <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                Hozircha mijozlar yo'q
+              </TableCell></TableRow>
+            ) : data.map(c => (
               <TableRow key={c.id}>
                 <TableCell className="font-medium">{c.firstName} {c.lastName}</TableCell>
                 <TableCell className="text-sm">{c.phone}</TableCell>
                 <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    {c.status === "pending" && (
-                      <>
-                        <Button variant="outline" size="icon" className="text-green-600 hover:bg-green-50" onClick={() => handleApprove(c.id)}>
-                          <CheckCircle className="w-4 h-4" />
-                        </Button>
-                        <Button variant="outline" size="icon" className="text-red-600 hover:bg-red-50" onClick={() => handleReject(c.id)}>
-                          <XCircle className="w-4 h-4" />
-                        </Button>
-                      </>
-                    )}
-                    <Button variant="outline" size="icon" className="text-destructive hover:bg-destructive/10 hover:border-destructive"
-                      onClick={() => handleDelete(c.id, `${c.firstName} ${c.lastName}`)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
+                  <Button variant="outline" size="icon" className="text-destructive hover:bg-destructive/10 hover:border-destructive"
+                    onClick={() => handleDelete(c.id, `${c.firstName} ${c.lastName}`)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
