@@ -69,22 +69,11 @@ function setupBotHandlers(bot: TelegramBot, storeId: number | null, storeName = 
 
       if (text === "/start") {
         if (client && client.registrationStep === "done") {
-          if (client.status === "rejected") {
-            await bot.sendMessage(
-              chatId,
-              `👋 <b>Xush kelibsiz!</b>\n\n❌ Afsuski, so'rovingiz rad etilgan.\n\nQayta ro'yxatdan o'tish uchun /reregister buyrug'ini yuboring.`,
-              { parse_mode: "HTML" }
-            );
-          } else {
-            const statusText = client.status === "approved"
-              ? "✅ <b>Tasdiqlangan mijoz</b>"
-              : "⏳ <b>Tasdiqlanish kutilmoqda</b>";
-            await bot.sendMessage(
-              chatId,
-              `👋 <b>Xush kelibsiz!</b>\n\nℹ️ Siz allaqachon ro'yxatdan o'tgansiz:\n\n👤 Ism: <b>${client.firstName} ${client.lastName}</b>\n📱 Telefon: <b>${client.phone}</b>\n📊 Holat: ${statusText}`,
-              { parse_mode: "HTML" }
-            );
-          }
+          await bot.sendMessage(
+            chatId,
+            `👋 <b>Xush kelibsiz, ${client.firstName}!</b>\n\n✅ Siz bizning mijozimiz siz.\n\n👤 Ism: <b>${client.firstName} ${client.lastName}</b>\n📱 Telefon: <b>${client.phone}</b>\n\n💎 Buyurtmalaringiz haqida xabar olasiz.`,
+            { parse_mode: "HTML" }
+          );
           return;
         }
 
@@ -170,13 +159,7 @@ function setupBotHandlers(bot: TelegramBot, storeId: number | null, storeName = 
         );
 
       } else if (step === "done") {
-        if (client.status === "approved") {
-          await bot.sendMessage(chatId, "🌟 <b>Siz tasdiqlangan mijozimiz!</b>\n\n✅ Buyurtmalaringiz holati haqida xabar olasiz.\n\n💎 Bizga ishonganingiz uchun rahmat!", { parse_mode: "HTML" });
-        } else if (client.status === "pending") {
-          await bot.sendMessage(chatId, "⏳ <b>So'rovingiz ko'rib chiqilmoqda...</b>\n\nAdmin tasdiqlashi bilanoq sizga xabar beramiz. Sabr qiling! 🙏", { parse_mode: "HTML" });
-        } else {
-          await bot.sendMessage(chatId, "❌ <b>Afsuski, so'rovingiz rad etildi.</b>\n\nQayta ro'yxatdan o'tish uchun /start ni bosing.", { parse_mode: "HTML" });
-        }
+        await bot.sendMessage(chatId, "🌟 <b>Siz bizning mijozimiz siz!</b>\n\n✅ Buyurtmalaringiz holati haqida xabar olasiz.\n\n💎 Bizga ishonganingiz uchun rahmat!", { parse_mode: "HTML" });
       }
     } catch (err) {
       logger.error({ err }, "Telegram bot message handler error");
