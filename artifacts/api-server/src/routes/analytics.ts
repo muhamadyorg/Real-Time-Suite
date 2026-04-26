@@ -182,22 +182,30 @@ router.get("/", async (req, res) => {
   }
 });
 
-// GET /api/analytics/orders — individual orders for drill-down
-// Query params: storeId, periodStart=YYYY-MM-DD, periodEnd=YYYY-MM-DD, serviceTypeId
+// GET /api/analytics/orders — individual orders for drill-down or full list
+// Query params: storeId, periodStart=YYYY-MM-DD, periodEnd=YYYY-MM-DD, serviceTypeId, days=N
 router.get("/orders", async (req, res) => {
   try {
     const access = await canAccess(req);
     if (!access.ok) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
 
     const storeId = Number(req.query.storeId ?? access.storeId);
-    const periodStart = req.query.periodStart as string;
-    const periodEnd = req.query.periodEnd as string;
+    const periodStart = req.query.periodStart as string | undefined;
+    const periodEnd = req.query.periodEnd as string | undefined;
     const serviceTypeId = req.query.serviceTypeId ? Number(req.query.serviceTypeId) : null;
+    const serviceTypeIds = req.query.serviceTypeIds
+      ? (req.query.serviceTypeIds as string).split(",").map(Number).filter(Boolean)
+      : null;
     const clientId = req.query.clientId ? Number(req.query.clientId) : null;
+    const days = req.query.days ? Math.min(Number(req.query.days), 365) : null;
 
     const conditions: string[] = ["store_id = $1"];
     const params: any[] = [storeId];
 
+    if (days && !periodStart && !periodEnd) {
+      params.push(days);
+      conditions.push(`created_at >= NOW() - ($${params.length} || ' days')::interval`);
+    }
     if (periodStart) {
       params.push(periodStart);
       conditions.push(`(created_at + interval '5 hours') >= $${params.length}::timestamptz`);
@@ -210,6 +218,10 @@ router.get("/orders", async (req, res) => {
       params.push(serviceTypeId);
       conditions.push(`service_type_id = $${params.length}`);
     }
+    if (serviceTypeIds?.length) {
+      params.push(serviceTypeIds);
+      conditions.push(`service_type_id = ANY($${params.length}::int[])`);
+    }
     if (clientId) {
       params.push(clientId);
       conditions.push(`client_id = $${params.length}`);
@@ -219,6 +231,7 @@ router.get("/orders", async (req, res) => {
       SELECT
         id,
         order_id,
+        order_code,
         service_type_id,
         service_type_name,
         client_id,
@@ -226,16 +239,18 @@ router.get("/orders", async (req, res) => {
         client_phone,
         quantity,
         unit,
+        output_quantity,
+        output_unit,
         price,
-        shelf,
-        product,
+        extra_fields,
         notes,
         status,
-        created_at
+        created_at,
+        (date_trunc('day', created_at + interval '5 hours'))::date AS day
       FROM orders
       WHERE ${conditions.join(" AND ")}
       ORDER BY created_at DESC
-      LIMIT 200
+      LIMIT 500
     `;
 
     const result = await pool.query(sql, params);

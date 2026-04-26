@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, RefreshCw, TrendingUp, ShoppingBag, Wallet, ChevronDown, ChevronUp, Calendar, X } from "lucide-react";
+import { Loader2, RefreshCw, TrendingUp, ShoppingBag, Wallet, ChevronDown, ChevronUp, Calendar, X, Layers } from "lucide-react";
 
 interface AnalyticsViewProps {
   storeId: number;
@@ -12,9 +12,9 @@ interface AnalyticsViewProps {
 
 type Period = "daily" | "weekly" | "monthly";
 const PERIOD_LABELS: Record<Period, string> = {
-  daily: "Kunlik (30 kun)",
-  weekly: "Haftalik (12 hafta)",
-  monthly: "Oylik (12 oy)",
+  daily: "30 kun",
+  weekly: "12 hafta",
+  monthly: "12 oy",
 };
 const PERIOD_DAYS: Record<Period, number> = { daily: 30, weekly: 84, monthly: 365 };
 
@@ -37,6 +37,29 @@ const fmtDateLabel = (iso: string) => {
   return d.toLocaleDateString("uz-UZ", { day: "2-digit", month: "long", year: "numeric" });
 };
 
+const fmtDay = (iso: string) => {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("uz-UZ", { day: "2-digit", month: "2-digit", year: "2-digit" });
+};
+
+const fmtTime = (val: any) => {
+  try {
+    return new Date(val).toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" });
+  } catch { return ""; }
+};
+
+const fmtPrice = (v: any) => {
+  const n = parseFloat(v ?? "0");
+  if (!n) return null;
+  return Math.round(n).toLocaleString("uz-UZ") + " so'm";
+};
+
+const fmtQty = (qty: any, unit: any) => {
+  const n = parseFloat(qty ?? "0");
+  if (!n) return null;
+  return Math.round(n).toLocaleString("uz-UZ") + (unit ? ` ${unit}` : " dona");
+};
+
 const STATUS_LABELS: Record<string, string> = {
   new: "Yangi", accepted: "Qabul", ready: "Tayyor", delivered: "Yetkazildi", cancelled: "Bekor",
 };
@@ -45,19 +68,28 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
   const [period, setPeriod] = useState<Period>("daily");
   const [selTypes, setSelTypes] = useState<number[]>([]);
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [lastFetch, setLastFetch] = useState<Date | null>(null);
+  const [view, setView] = useState<"batafsil" | "jami">("batafsil");
 
+  // Aggregated
+  const [aggData, setAggData] = useState<any>(null);
+  const [aggLoading, setAggLoading] = useState(false);
+
+  // Individual orders (batafsil)
+  const [orders, setOrders] = useState<any[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+
+  const [lastFetch, setLastFetch] = useState<Date | null>(null);
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
+
+  // Jami drill-down (eski)
   const [specificDate, setSpecificDate] = useState<string>("");
   const [useSpecificDate, setUseSpecificDate] = useState(false);
-
   const [expandedPeriod, setExpandedPeriod] = useState<string | null>(null);
   const [drillOrders, setDrillOrders] = useState<any[]>([]);
   const [drillLoading, setDrillLoading] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchAgg = useCallback(async () => {
+    setAggLoading(true);
     try {
       const ids = selTypes.length ? `&serviceTypeIds=${selTypes.join(",")}` : "";
       let url: string;
@@ -67,31 +99,46 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
         url = `${apiBase}/api/analytics?storeId=${storeId}&period=${period}&days=${PERIOD_DAYS[period]}${ids}`;
       }
       const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      if (r.ok) {
-        setData(await r.json());
-        setLastFetch(new Date());
-      }
+      if (r.ok) setAggData(await r.json());
     } catch {}
-    setLoading(false);
+    setAggLoading(false);
   }, [storeId, period, selTypes, token, apiBase, useSpecificDate, specificDate]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const fetchOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    try {
+      const ids = selTypes.length ? `&serviceTypeIds=${selTypes.join(",")}` : "";
+      const r = await fetch(
+        `${apiBase}/api/analytics/orders?storeId=${storeId}&days=${PERIOD_DAYS[period]}${ids}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (r.ok) setOrders(await r.json());
+    } catch {}
+    setOrdersLoading(false);
+  }, [storeId, period, selTypes, token, apiBase]);
+
+  const fetchAll = useCallback(async () => {
+    await Promise.all([fetchAgg(), fetchOrders()]);
+    setLastFetch(new Date());
+  }, [fetchAgg, fetchOrders]);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
   useEffect(() => {
     if (useSpecificDate) return;
-    const t = setInterval(fetchData, 30000);
+    const t = setInterval(fetchAll, 30000);
     return () => clearInterval(t);
-  }, [fetchData, useSpecificDate]);
+  }, [fetchAll, useSpecificDate]);
 
   const toggleType = (id: number) =>
     setSelTypes(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
+  // Jami drill-down
   const fetchDrillOrders = async (periodStart: string, periodEnd: string, serviceTypeId?: number) => {
     setDrillLoading(true);
     try {
       const stId = serviceTypeId ? `&serviceTypeId=${serviceTypeId}` : "";
-      const ids = selTypes.length && !serviceTypeId ? `&serviceTypeId=${selTypes[0]}` : stId;
       const r = await fetch(
-        `${apiBase}/api/analytics/orders?storeId=${storeId}&periodStart=${periodStart}&periodEnd=${periodEnd}${ids}`,
+        `${apiBase}/api/analytics/orders?storeId=${storeId}&periodStart=${periodStart}&periodEnd=${periodEnd}${stId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (r.ok) setDrillOrders(await r.json());
@@ -110,21 +157,6 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
     }
   };
 
-  const summary = data?.summary;
-  const rows: any[] = data?.rows ?? [];
-
-  const periodGroups = rows.reduce((acc: any, row: any) => {
-    const key = row.period;
-    if (!acc[key]) acc[key] = { period: key, orderCount: 0, totalPrice: 0, unitTotals: {}, types: [] };
-    acc[key].orderCount += row.order_count;
-    acc[key].totalPrice += row.total_price;
-    const unitKey = row.unit || "dona";
-    acc[key].unitTotals[unitKey] = (acc[key].unitTotals[unitKey] ?? 0) + row.total_quantity;
-    acc[key].types.push(row);
-    return acc;
-  }, {});
-  const periodList = Object.values(periodGroups) as any[];
-
   const getPeriodRange = (periodStr: string, p: Period) => {
     const d = new Date(periodStr);
     let start: Date, end: Date;
@@ -142,65 +174,122 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
     return { start: fmt(start), end: fmt(end) };
   };
 
+  // Aggregated groups for Jami view
+  const aggRows: any[] = aggData?.rows ?? [];
+  const aggSummary = aggData?.summary;
   const activePeriod = useSpecificDate ? "daily" : period;
+
+  const periodGroups = aggRows.reduce((acc: any, row: any) => {
+    const key = row.period;
+    if (!acc[key]) acc[key] = { period: key, orderCount: 0, totalPrice: 0, unitTotals: {}, types: [] };
+    acc[key].orderCount += row.order_count;
+    acc[key].totalPrice += row.total_price;
+    const unitKey = row.unit || "dona";
+    acc[key].unitTotals[unitKey] = (acc[key].unitTotals[unitKey] ?? 0) + row.total_quantity;
+    acc[key].types.push(row);
+    return acc;
+  }, {});
+  const periodList = Object.values(periodGroups) as any[];
+
+  // Individual orders grouped by day — day comes as "2026-04-25" string from ::date cast
+  const dayGroups = orders.reduce((acc: any, o: any) => {
+    const key = typeof o.day === "string"
+      ? o.day.slice(0, 10)
+      : o.created_at
+        ? new Date(o.created_at).toISOString().slice(0, 10)
+        : "unknown";
+    if (!acc[key]) acc[key] = { day: key, orders: [], totalPrice: 0 };
+    acc[key].orders.push(o);
+    acc[key].totalPrice += parseFloat(o.price ?? "0");
+    return acc;
+  }, {});
+  const dayList = Object.values(dayGroups) as any[];
+
+  const toggleDay = (day: string) =>
+    setCollapsedDays(prev => { const n = new Set(prev); n.has(day) ? n.delete(day) : n.add(day); return n; });
+
+  const summary = view === "batafsil"
+    ? { total_orders: orders.length, total_price: orders.reduce((s, o) => s + parseFloat(o.price ?? "0"), 0) }
+    : aggSummary;
+
+  const loading = aggLoading || ordersLoading;
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-bold">Hisobotlar</h2>
           {lastFetch && (
             <span className="text-xs text-muted-foreground">
-              · {lastFetch.toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              · {lastFetch.toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" })}
             </span>
           )}
         </div>
-        <Button size="sm" variant="outline" onClick={fetchData} disabled={loading} className="gap-1.5">
+        <Button size="sm" variant="outline" onClick={fetchAll} disabled={loading} className="gap-1.5">
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
           Yangilash
         </Button>
       </div>
 
-      {/* Period selector + Calendar */}
-      <div className="space-y-2">
-        <div className="flex gap-2 flex-wrap items-center">
-          {!useSpecificDate && (["daily", "weekly", "monthly"] as Period[]).map(p => (
-            <button key={p} onClick={() => setPeriod(p)}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all ${
-                period === p
-                  ? "bg-primary text-primary-foreground border-primary shadow-md"
-                  : "bg-card border-border text-muted-foreground hover:border-primary/50"
-              }`}>
-              {PERIOD_LABELS[p]}
-            </button>
-          ))}
+      {/* View + Period selectors */}
+      <div className="flex flex-wrap gap-2 items-center">
+        {/* View toggle */}
+        <div className="flex rounded-xl border border-border overflow-hidden">
           <button
-            onClick={() => { setUseSpecificDate(v => !v); if (!specificDate) setSpecificDate(new Date().toISOString().slice(0, 10)); }}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold border-2 transition-all ${
-              useSpecificDate
-                ? "bg-primary text-primary-foreground border-primary shadow-md"
-                : "bg-card border-border text-muted-foreground hover:border-primary/50"
-            }`}>
-            <Calendar className="w-3.5 h-3.5" />
-            Kun tanlash
+            onClick={() => setView("batafsil")}
+            className={`px-3 py-1.5 text-sm font-semibold transition-all ${view === "batafsil" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"}`}
+          >
+            Batafsil
+          </button>
+          <button
+            onClick={() => setView("jami")}
+            className={`px-3 py-1.5 text-sm font-semibold transition-all ${view === "jami" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"}`}
+          >
+            Jami
           </button>
         </div>
-        {useSpecificDate && (
-          <div className="flex items-center gap-2">
-            <Input
-              type="date"
-              value={specificDate}
-              onChange={e => setSpecificDate(e.target.value)}
-              className="h-9 w-44"
-            />
-            <span className="text-sm font-medium text-primary">{specificDate ? fmtDateLabel(specificDate) : ""}</span>
-            <button onClick={() => setUseSpecificDate(false)} className="ml-auto text-muted-foreground hover:text-foreground">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+
+        {/* Period */}
+        {(["daily", "weekly", "monthly"] as Period[]).map(p => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={`px-3 py-1.5 rounded-xl text-sm font-semibold border-2 transition-all ${
+              period === p
+                ? "bg-primary text-primary-foreground border-primary shadow-md"
+                : "bg-card border-border text-muted-foreground hover:border-primary/50"
+            }`}
+          >
+            {PERIOD_LABELS[p]}
+          </button>
+        ))}
+
+        {/* Calendar (only Jami) */}
+        {view === "jami" && (
+          <button
+            onClick={() => { setUseSpecificDate(v => !v); if (!specificDate) setSpecificDate(new Date().toISOString().slice(0, 10)); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold border-2 transition-all ${
+              useSpecificDate ? "bg-primary text-primary-foreground border-primary shadow-md" : "bg-card border-border text-muted-foreground hover:border-primary/50"
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            Kun
+          </button>
         )}
       </div>
+
+      {/* Specific date input (Jami only) */}
+      {view === "jami" && useSpecificDate && (
+        <div className="flex items-center gap-2">
+          <Input type="date" value={specificDate} onChange={e => setSpecificDate(e.target.value)} className="h-9 w-44" />
+          <span className="text-sm font-medium text-primary">{specificDate ? fmtDateLabel(specificDate) : ""}</span>
+          <button onClick={() => setUseSpecificDate(false)} className="ml-auto text-muted-foreground hover:text-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Service type filter */}
       {serviceTypes.length > 0 && (
@@ -211,18 +300,14 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
             return (
               <button key={st.id} onClick={() => toggleType(st.id)}
                 className={`px-3 py-1 rounded-lg text-xs font-medium border transition-all ${
-                  sel
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-card border-border text-muted-foreground hover:border-primary/40"
+                  sel ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground hover:border-primary/40"
                 }`}>
                 {st.name}
               </button>
             );
           })}
           {selTypes.length > 0 && (
-            <button onClick={() => setSelTypes([])} className="text-xs text-muted-foreground hover:text-foreground underline">
-              Barchasi
-            </button>
+            <button onClick={() => setSelTypes([])} className="text-xs text-muted-foreground hover:text-foreground underline">Barchasi</button>
           )}
         </div>
       )}
@@ -236,12 +321,11 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
               <span className="text-xs font-medium">Zakazlar</span>
             </div>
             <div className="text-2xl font-black tabular-nums">
-              {loading && !data ? <Loader2 className="w-5 h-5 animate-spin" /> : fmtNum(summary?.total_orders)}
+              {loading && !aggData && !orders.length ? <Loader2 className="w-5 h-5 animate-spin" /> : fmtNum(summary?.total_orders)}
             </div>
             <div className="text-xs text-muted-foreground">ta</div>
           </CardContent>
         </Card>
-
         <Card className="border-amber-200 dark:border-amber-800">
           <CardContent className="p-3">
             <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 mb-1">
@@ -249,107 +333,185 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
               <span className="text-xs font-medium">Jami summa</span>
             </div>
             <div className="text-xl font-black tabular-nums leading-tight">
-              {loading && !data ? <Loader2 className="w-5 h-5 animate-spin" /> : fmtMoney(summary?.total_price)}
+              {loading && !aggData && !orders.length ? <Loader2 className="w-5 h-5 animate-spin" /> : fmtMoney(summary?.total_price)}
             </div>
             <div className="text-xs text-muted-foreground">so'm</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Breakdown table */}
-      {loading && !data ? (
-        <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-      ) : periodList.length === 0 ? (
-        <div className="text-center py-10 text-muted-foreground text-sm">Ma'lumot topilmadi</div>
-      ) : (
-        <div className="space-y-2">
-          {periodList.map((group: any) => {
-            const pKey = group.period;
-            const { start, end } = getPeriodRange(pKey, activePeriod);
-            const isExpanded = expandedPeriod === pKey;
-            const unitStr = Object.entries(group.unitTotals as Record<string, number>)
-              .map(([u, q]) => `${fmtNum(q)} ${u}`)
-              .join(" · ");
-            return (
-              <Card key={pKey} className="overflow-hidden">
-                <button
-                  type="button"
-                  className="w-full px-4 py-2.5 bg-muted/50 flex items-center justify-between hover:bg-muted/80 transition-colors"
-                  onClick={() => togglePeriod(pKey, start, end)}
-                >
-                  <span className="font-semibold text-sm">{fmtPeriod(pKey, activePeriod)}</span>
-                  <div className="flex gap-3 items-center text-xs text-muted-foreground">
-                    <span><b className="text-foreground">{fmtNum(group.orderCount)}</b> ta</span>
-                    {unitStr && <span className="text-foreground font-medium">{unitStr}</span>}
-                    {group.totalPrice > 0 && (
-                      <span><b className="text-amber-600 dark:text-amber-400">{fmtMoney(group.totalPrice)}</b> so'm</span>
-                    )}
-                    {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                  </div>
-                </button>
-
-                {/* Service type breakdown */}
-                {group.types.length > 1 && (
-                  <div className="divide-y divide-border/50 border-t">
-                    {group.types.map((r: any) => (
-                      <div key={`${r.period}-${r.service_type_id}-${r.unit}`}
-                        className="px-4 py-2 flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground font-medium">{r.service_type_name}</span>
-                        <div className="flex gap-3 text-xs">
-                          <span className="text-foreground">{fmtNum(r.order_count)} ta</span>
-                          <span className="text-foreground">{fmtNum(r.total_quantity)} {r.unit || "dona"}</span>
-                          {r.total_price > 0 && (
-                            <span className="text-amber-600 dark:text-amber-400">{fmtMoney(r.total_price)} so'm</span>
-                          )}
-                        </div>
+      {/* ===== BATAFSIL VIEW ===== */}
+      {view === "batafsil" && (
+        <>
+          {ordersLoading && !orders.length ? (
+            <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : dayList.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground text-sm">Ma'lumot topilmadi</div>
+          ) : (
+            <div className="space-y-2">
+              {dayList.map((group: any) => {
+                const collapsed = collapsedDays.has(group.day);
+                return (
+                  <Card key={group.day} className="overflow-hidden">
+                    {/* Day header */}
+                    <button
+                      className="w-full px-4 py-2.5 bg-muted/50 flex items-center justify-between hover:bg-muted/80 transition-colors"
+                      onClick={() => toggleDay(group.day)}
+                    >
+                      <div className="flex items-center gap-2">
+                        {collapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
+                        <span className="font-bold text-sm">{fmtDay(group.day)}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <div className="flex gap-3 text-xs text-muted-foreground">
+                        <span><b className="text-foreground">{group.orders.length}</b> ta zakaz</span>
+                        {group.totalPrice > 0 && (
+                          <span className="hidden sm:inline"><b className="text-amber-600 dark:text-amber-400">{fmtMoney(group.totalPrice)} so'm</b></span>
+                        )}
+                      </div>
+                    </button>
 
-                {/* Drill-down individual orders */}
-                {isExpanded && (
-                  <div className="border-t bg-background">
-                    {drillLoading ? (
-                      <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-                    ) : drillOrders.length === 0 ? (
-                      <div className="text-center py-4 text-xs text-muted-foreground">Zakazlar topilmadi</div>
-                    ) : (
-                      <div className="divide-y divide-border/30 max-h-80 overflow-y-auto">
-                        {drillOrders.map((o: any) => (
-                          <div key={o.id} className="px-4 py-2.5 flex items-start gap-3 text-sm">
-                            <div className="font-mono text-xs text-primary font-bold shrink-0 pt-0.5">#{o.order_id}</div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-medium">{o.service_type_name}</span>
-                                {o.client_name && (
-                                  <span className="text-xs text-muted-foreground">— {o.client_name}</span>
-                                )}
+                    {/* Order rows */}
+                    {!collapsed && (
+                      <div className="divide-y divide-border/40">
+                        {group.orders.map((o: any) => {
+                          const price = fmtPrice(o.price);
+                          const qty = fmtQty(o.quantity, o.unit);
+                          return (
+                            <div key={o.id} className="px-4 py-2.5">
+                              {/* Mobile layout */}
+                              <div className="flex items-center justify-between gap-2 sm:hidden">
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-sm truncate">{o.service_type_name}</div>
+                                  {o.client_name && <div className="text-xs text-muted-foreground truncate">{o.client_name}</div>}
+                                </div>
+                                <div className="text-right shrink-0">
+                                  {qty && <div className="text-xs">{qty}</div>}
+                                  {price
+                                    ? <div className="text-xs font-semibold text-amber-600 dark:text-amber-400">{price}</div>
+                                    : <div className="text-xs text-muted-foreground italic">narx yo'q</div>}
+                                </div>
                               </div>
-                              <div className="flex gap-3 text-xs text-muted-foreground mt-0.5">
-                                <span>{fmtNum(parseFloat(o.quantity))} {o.unit || ""}</span>
-                                {o.price && parseFloat(o.price) > 0 && (
-                                  <span className="text-amber-600 dark:text-amber-400 font-semibold">
-                                    {fmtMoney(parseFloat(o.price))} so'm
-                                  </span>
-                                )}
-                                {o.product && <span>{o.product}</span>}
-                                <span>{STATUS_LABELS[o.status] ?? o.status}</span>
+                              {/* Desktop layout */}
+                              <div className="hidden sm:flex items-center gap-4 text-sm">
+                                <div className="text-xs text-muted-foreground w-10 shrink-0">{fmtTime(o.created_at)}</div>
+                                <div className="flex-1 min-w-0">
+                                  <span className="font-medium">{o.service_type_name}</span>
+                                  {o.client_name && <span className="ml-2 text-xs text-muted-foreground">{o.client_name}</span>}
+                                  {o.client_phone && <span className="ml-1 text-xs text-muted-foreground">· {o.client_phone}</span>}
+                                </div>
+                                <div className="text-xs w-24 text-right">{qty ?? "—"}</div>
+                                <div className="text-xs w-32 text-right">
+                                  {price
+                                    ? <span className="font-semibold text-amber-600 dark:text-amber-400">{price}</span>
+                                    : <span className="text-muted-foreground italic">narx yo'q</span>}
+                                </div>
+                                <div className="text-xs text-muted-foreground w-16 text-right">#{o.order_code ?? o.order_id ?? o.id}</div>
                               </div>
                             </div>
-                            <div className="text-xs text-muted-foreground shrink-0">
-                              {new Date(o.created_at).toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" })}
+                          );
+                        })}
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ===== JAMI VIEW (old aggregated + drill-down) ===== */}
+      {view === "jami" && (
+        <>
+          {aggLoading && !aggData ? (
+            <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : periodList.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground text-sm">Ma'lumot topilmadi</div>
+          ) : (
+            <div className="space-y-2">
+              {periodList.map((group: any) => {
+                const pKey = group.period;
+                const { start, end } = getPeriodRange(pKey, activePeriod);
+                const isExpanded = expandedPeriod === pKey;
+                const unitStr = Object.entries(group.unitTotals as Record<string, number>)
+                  .map(([u, q]) => `${fmtNum(q)} ${u}`)
+                  .join(" · ");
+                return (
+                  <Card key={pKey} className="overflow-hidden">
+                    <button
+                      type="button"
+                      className="w-full px-4 py-2.5 bg-muted/50 flex items-center justify-between hover:bg-muted/80 transition-colors"
+                      onClick={() => togglePeriod(pKey, start, end)}
+                    >
+                      <span className="font-semibold text-sm">{fmtPeriod(pKey, activePeriod)}</span>
+                      <div className="flex gap-3 items-center text-xs text-muted-foreground">
+                        <span><b className="text-foreground">{fmtNum(group.orderCount)}</b> ta</span>
+                        {unitStr && <span className="text-foreground font-medium">{unitStr}</span>}
+                        {group.totalPrice > 0 && (
+                          <span><b className="text-amber-600 dark:text-amber-400">{fmtMoney(group.totalPrice)}</b> so'm</span>
+                        )}
+                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      </div>
+                    </button>
+
+                    {group.types.length > 1 && (
+                      <div className="divide-y divide-border/50 border-t">
+                        {group.types.map((r: any) => (
+                          <div key={`${r.period}-${r.service_type_id}-${r.unit}`}
+                            className="px-4 py-2 flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground font-medium">{r.service_type_name}</span>
+                            <div className="flex gap-3 text-xs">
+                              <span className="text-foreground">{fmtNum(r.order_count)} ta</span>
+                              <span className="text-foreground">{fmtNum(r.total_quantity)} {r.unit || "dona"}</span>
+                              {r.total_price > 0 && (
+                                <span className="text-amber-600 dark:text-amber-400">{fmtMoney(r.total_price)} so'm</span>
+                              )}
                             </div>
                           </div>
                         ))}
                       </div>
                     )}
-                  </div>
-                )}
-              </Card>
-            );
-          })}
-        </div>
+
+                    {isExpanded && (
+                      <div className="border-t bg-background">
+                        {drillLoading ? (
+                          <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                        ) : drillOrders.length === 0 ? (
+                          <div className="text-center py-4 text-xs text-muted-foreground">Zakazlar topilmadi</div>
+                        ) : (
+                          <div className="divide-y divide-border/30 max-h-80 overflow-y-auto">
+                            {drillOrders.map((o: any) => (
+                              <div key={o.id} className="px-4 py-2.5 flex items-start gap-3 text-sm">
+                                <div className="font-mono text-xs text-primary font-bold shrink-0 pt-0.5">#{o.order_id}</div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-medium">{o.service_type_name}</span>
+                                    {o.client_name && <span className="text-xs text-muted-foreground">— {o.client_name}</span>}
+                                  </div>
+                                  <div className="flex gap-3 text-xs text-muted-foreground mt-0.5">
+                                    <span>{fmtNum(parseFloat(o.quantity))} {o.unit || ""}</span>
+                                    {o.price && parseFloat(o.price) > 0 && (
+                                      <span className="text-amber-600 dark:text-amber-400 font-semibold">{fmtMoney(parseFloat(o.price))} so'm</span>
+                                    )}
+                                    {o.product && <span>{o.product}</span>}
+                                    <span>{STATUS_LABELS[o.status] ?? o.status}</span>
+                                  </div>
+                                </div>
+                                <div className="text-xs text-muted-foreground shrink-0">
+                                  {fmtTime(o.created_at)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
