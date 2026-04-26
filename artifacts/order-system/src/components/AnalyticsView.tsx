@@ -106,6 +106,33 @@ const STATUS_LABELS: Record<string, string> = {
   new: "Yangi", accepted: "Qabul", ready: "Tayyor", delivered: "Yetkazildi", cancelled: "Bekor",
 };
 
+// Batafsil view uchun: period ga qarab guruhlash kaliti
+const getGroupKey = (dateStr: string, p: Period): string => {
+  const s = typeof dateStr === "string" ? dateStr.slice(0, 10) : "";
+  if (!s) return "unknown";
+  if (p === "daily") return s;
+  if (p === "monthly") return s.slice(0, 7); // "YYYY-MM"
+  // weekly → Dushanba kunini topamiz
+  const d = new Date(s + "T00:00:00");
+  const day = d.getDay(); // 0=Yak, 1=Du, ...
+  const offset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d.getTime() + offset * 86400000);
+  return monday.toISOString().slice(0, 10);
+};
+
+// Guruhlash header labelini format qilish
+const fmtGroupHeader = (key: string, p: Period): string => {
+  if (p === "daily") return fmtDay(key);
+  if (p === "monthly") {
+    const d = new Date(key + "-01T00:00:00");
+    return d.toLocaleDateString("uz-UZ", { month: "long", year: "numeric" });
+  }
+  // weekly — bosh kundan 6 kun keyingi sana
+  const start = new Date(key + "T00:00:00");
+  const end = new Date(start.getTime() + 6 * 86400000);
+  return `${fmtDay(key)} – ${fmtDay(end.toISOString().slice(0, 10))}`;
+};
+
 export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsViewProps) {
   const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
   const [period, setPeriod] = useState<Period>("daily");
@@ -165,6 +192,9 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   }, [fetchAgg, fetchOrders]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    setCollapsedDays(new Set());
+  }, [period]);
   useEffect(() => {
     if (useSpecificDate) return;
     const t = setInterval(fetchAll, 30000);
@@ -233,19 +263,20 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   }, {});
   const periodList = Object.values(periodGroups) as any[];
 
-  // Individual orders grouped by day — day comes as "2026-04-25" string from ::date cast
+  // Individual orders grouped by period (daily/weekly/monthly)
   const dayGroups = orders.reduce((acc: any, o: any) => {
-    const key = typeof o.day === "string"
+    const rawDate = typeof o.day === "string"
       ? o.day.slice(0, 10)
       : o.created_at
         ? new Date(o.created_at).toISOString().slice(0, 10)
         : "unknown";
+    const key = getGroupKey(rawDate, period);
     if (!acc[key]) acc[key] = { day: key, orders: [], totalPrice: 0 };
     acc[key].orders.push(o);
     acc[key].totalPrice += parseFloat(o.price ?? "0");
     return acc;
   }, {});
-  const dayList = Object.values(dayGroups) as any[];
+  const dayList = (Object.values(dayGroups) as any[]).sort((a, b) => b.day.localeCompare(a.day));
 
   const toggleDay = (day: string) =>
     setCollapsedDays(prev => { const n = new Set(prev); n.has(day) ? n.delete(day) : n.add(day); return n; });
@@ -404,7 +435,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                     >
                       <div className="flex items-center gap-2">
                         {collapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
-                        <span className="font-bold text-sm">{fmtDay(group.day)}</span>
+                        <span className="font-bold text-sm">{fmtGroupHeader(group.day, period)}</span>
                       </div>
                       <div className="flex gap-2 text-xs text-muted-foreground flex-wrap justify-end">
                         <span><b className="text-foreground">{group.orders.length}</b> ta</span>
