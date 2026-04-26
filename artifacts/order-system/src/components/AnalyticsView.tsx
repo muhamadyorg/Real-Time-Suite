@@ -675,7 +675,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                   const t = o.payment_type as string | null;
                   if (t) payBrk[t] = (payBrk[t] ?? 0) + Math.abs(parseFloat(o.price ?? "0"));
                 }
-                const dokongaBerish = (payBrk.naqd ?? 0) + (payBrk.click ?? 0) + (payBrk.dokonga ?? 0);
+                const dokongaBerish = (payBrk.naqd ?? 0) + (payBrk.dokonga ?? 0);
                 const qarzSum = payBrk.qarz ?? 0;
                 const hasPayBreakdown = Object.keys(payBrk).length > 0;
 
@@ -1058,7 +1058,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
         const ordClick   = dokonOrders.filter(o => o.payment_type === "click").reduce((s, o) => s + parseFloat(o.price ?? "0"), 0);
         const ordDokonga = dokonOrders.filter(o => o.payment_type === "dokonga").reduce((s, o) => s + parseFloat(o.price ?? "0"), 0);
         const ordQarz    = dokonOrders.filter(o => o.payment_type === "qarz").reduce((s, o) => s + parseFloat(o.price ?? "0"), 0);
-        const dokonJami  = ordNaqd + ordClick + ordDokonga;
+        const dokonJami  = ordNaqd + ordDokonga;
         const txTolov    = dokonTx.filter(t => t.type === "tolov").reduce((s, t) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
         const txNaqd     = dokonTx.filter(t => t.type === "naqd").reduce((s, t) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
         const txClick    = dokonTx.filter(t => t.type === "click").reduce((s, t) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
