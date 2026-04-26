@@ -248,7 +248,8 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
 
   // Group individual orders by day
   const dayGroups = orders.reduce((acc: any, o: any) => {
-    const key = o.day?.slice(0, 10) ?? o.created_at?.slice(0, 10);
+    const raw = o.day ?? o.created_at;
+    const key = raw ? new Date(raw).toISOString().slice(0, 10) : "unknown";
     if (!acc[key]) acc[key] = { day: key, orders: [], totalPrice: 0, totalQty: 0 };
     acc[key].orders.push(o);
     acc[key].totalPrice += parseFloat(o.price ?? "0");
