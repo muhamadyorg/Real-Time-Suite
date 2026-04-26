@@ -100,4 +100,42 @@ router.get("/", async (req, res) => {
   }
 });
 
+// GET /api/analytics/orders — har bir zakaz alohida qator
+router.get("/orders", async (req, res) => {
+  try {
+    const access = await canAccess(req);
+    if (!access.ok) { res.status(403).json({ error: "Ruxsat yo'q" }); return; }
+
+    const storeId = Number(req.query.storeId ?? access.storeId);
+    const rawIds = req.query.serviceTypeIds as string | undefined;
+    const serviceTypeIds = rawIds ? rawIds.split(",").map(Number).filter(Boolean) : null;
+    const days = Math.min(Number(req.query.days ?? 30), 365);
+
+    const serviceFilter = serviceTypeIds?.length
+      ? `AND service_type_id = ANY($3::int[])`
+      : "";
+
+    const queryParams: any[] = [storeId, days];
+    if (serviceTypeIds?.length) queryParams.push(serviceTypeIds);
+
+    const sql = `
+      SELECT
+        id, order_code, service_type_id, service_type_name,
+        quantity, unit, price, client_name, client_phone,
+        extra_fields, created_at, status, output_quantity, output_unit,
+        date_trunc('day', created_at + interval '5 hours') AS day
+      FROM orders
+      WHERE store_id = $1
+        AND created_at >= NOW() - ($2 || ' days')::interval
+        ${serviceFilter}
+      ORDER BY created_at DESC
+    `;
+
+    const result = await pool.query(sql, queryParams);
+    res.json(result.rows);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;
