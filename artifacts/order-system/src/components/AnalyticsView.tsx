@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, RefreshCw, TrendingUp, ShoppingBag, Wallet, ChevronDown, ChevronUp, Calendar, X, Layers } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, RefreshCw, TrendingUp, ShoppingBag, Wallet, ChevronDown, ChevronUp, Calendar, X, Layers, Search, Phone, TrendingDown, BadgeCheck, Users } from "lucide-react";
 
 interface AnalyticsViewProps {
   storeId: number;
@@ -11,6 +13,23 @@ interface AnalyticsViewProps {
 }
 
 type Period = "daily" | "weekly" | "monthly";
+type ViewMode = "batafsil" | "jami" | "mijozlar";
+type TxType = "naqd" | "qarz" | "tolov" | "tuzatish" | "click" | "dokonga";
+const TX_META: Record<TxType, { label: string; icon: string; color: string }> = {
+  naqd:     { label: "Naqd",     icon: "💵", color: "text-green-600 bg-green-50 dark:bg-green-950/30" },
+  click:    { label: "Click",    icon: "📲", color: "text-blue-600 bg-blue-50 dark:bg-blue-950/30" },
+  dokonga:  { label: "Dokonga",  icon: "🏪", color: "text-orange-600 bg-orange-50 dark:bg-orange-950/30" },
+  qarz:     { label: "Nasiya",   icon: "📋", color: "text-red-600 bg-red-50 dark:bg-red-950/30" },
+  tolov:    { label: "To'lov",   icon: "💰", color: "text-purple-600 bg-purple-50 dark:bg-purple-950/30" },
+  tuzatish: { label: "Tuzatish", icon: "✏️", color: "text-gray-600 bg-gray-50 dark:bg-gray-950/30" },
+};
+const STORE_PAY_TYPES: TxType[] = ["naqd", "click", "dokonga"];
+const fmtDate = (d: string | Date) => {
+  try { return new Date(d).toLocaleDateString("uz-UZ", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }); }
+  catch { return "—"; }
+};
+const fmtAmt = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+const balNum = (v: any) => parseFloat(String(v ?? "0"));
 const PERIOD_LABELS: Record<Period, string> = {
   daily: "Kun",
   weekly: "Hafta",
@@ -148,7 +167,24 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   const [selTypes, setSelTypes] = useState<number[]>([]);
   const [selClientId, setSelClientId] = useState<number | null>(null);
   const [clients, setClients] = useState<any[]>([]);
-  const [view, setView] = useState<"batafsil" | "jami">("batafsil");
+  const [view, setView] = useState<ViewMode>("batafsil");
+
+  // Mijozlar (nasiya) state
+  const [allTx, setAllTx] = useState<any[]>([]);
+  const [nasiyaServiceTypes, setNasiyaServiceTypes] = useState<any[]>([]);
+  const [nasiyaLoading, setNasiyaLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [showOnlyDebt, setShowOnlyDebt] = useState(false);
+  const [expandedClient, setExpandedClient] = useState<number | null>(null);
+  const [clientTx, setClientTx] = useState<Record<number, any[]>>({});
+  const [clientTxLoading, setClientTxLoading] = useState<number | null>(null);
+  // Payment modal
+  const [payClient, setPayClient] = useState<any>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [payType, setPayType] = useState<TxType>("tolov");
+  const [payNote, setPayNote] = useState("");
+  const [payLoading, setPayLoading] = useState(false);
+  const [payServiceTypeId, setPayServiceTypeId] = useState<string>("");
 
   // Aggregated
   const [aggData, setAggData] = useState<any>(null);
@@ -168,13 +204,69 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   const [drillOrders, setDrillOrders] = useState<any[]>([]);
   const [drillLoading, setDrillLoading] = useState(false);
 
-  // Fetch clients for filter
-  useEffect(() => {
-    fetch(`${apiBase}/api/client-accounts`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.ok ? r.json() : [])
-      .then(data => setClients(Array.isArray(data) ? data : []))
-      .catch(() => {});
+  // Fetch clients + allTx + nasiyaServiceTypes
+  const fetchNasiyaData = useCallback(async () => {
+    setNasiyaLoading(true);
+    try {
+      const [cRes, stRes, txRes] = await Promise.all([
+        fetch(`${apiBase}/api/client-accounts`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${apiBase}/api/service-types`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${apiBase}/api/client-accounts/all/transactions?limit=500`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (cRes.ok) { const d = await cRes.json(); setClients(Array.isArray(d) ? d : []); }
+      if (stRes.ok) {
+        const all = await stRes.json();
+        setNasiyaServiceTypes((all as any[]).filter((s: any) => s.nasiyaEnabled));
+      }
+      if (txRes.ok) { const d = await txRes.json(); setAllTx(Array.isArray(d) ? d : []); }
+    } catch {}
+    setNasiyaLoading(false);
   }, [storeId, token, apiBase]);
+
+  useEffect(() => { fetchNasiyaData(); }, [fetchNasiyaData]);
+
+  const loadClientTx = async (clientId: number) => {
+    if (clientTx[clientId]) return;
+    setClientTxLoading(clientId);
+    try {
+      const r = await fetch(`${apiBase}/api/client-accounts/${clientId}/transactions?limit=200`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) { const data = await r.json(); setClientTx(prev => ({ ...prev, [clientId]: data })); }
+    } catch {}
+    setClientTxLoading(null);
+  };
+
+  const toggleExpand = async (clientId: number) => {
+    if (expandedClient === clientId) { setExpandedClient(null); return; }
+    setExpandedClient(clientId);
+    await loadClientTx(clientId);
+  };
+
+  const doPayment = async () => {
+    if (!payClient) return;
+    const amount = parseFloat(payAmount.replace(/\s/g, "") || "0");
+    if (amount <= 0) return;
+    setPayLoading(true);
+    try {
+      const r = await fetch(`${apiBase}/api/client-accounts/${payClient.id}/transaction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ type: payType, amount, note: payNote || undefined, storeId, serviceTypeId: payServiceTypeId ? Number(payServiceTypeId) : undefined }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error); }
+      const closedClient = payClient;
+      setPayClient(null); setPayAmount(""); setPayNote("");
+      await fetchNasiyaData();
+      setClientTx(prev => { const n = { ...prev }; delete n[closedClient.id]; return n; });
+    } catch {}
+    setPayLoading(false);
+  };
+
+  const clientBreakdown = (clientId: number) => {
+    const txs = allTx.filter((t: any) => t.client_id === clientId);
+    const bd: Record<TxType, number> = { naqd: 0, qarz: 0, tolov: 0, tuzatish: 0, click: 0, dokonga: 0 };
+    for (const t of txs) { const k = t.type as TxType; if (bd[k] !== undefined) bd[k] += Math.abs(parseFloat(t.amount ?? "0")); }
+    return { ...bd, dokonBerishi: bd.naqd + bd.click + bd.dokonga };
+  };
 
   const fetchAgg = useCallback(async () => {
     setAggLoading(true);
@@ -342,6 +434,12 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
             className={`px-3 py-1.5 text-sm font-semibold transition-all ${view === "jami" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"}`}
           >
             Jami
+          </button>
+          <button
+            onClick={() => setView("mijozlar")}
+            className={`px-3 py-1.5 text-sm font-semibold transition-all flex items-center gap-1 ${view === "mijozlar" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"}`}
+          >
+            <Users className="w-3.5 h-3.5" />Mijozlar
           </button>
         </div>
 
