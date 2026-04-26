@@ -12,11 +12,53 @@ interface AnalyticsViewProps {
 
 type Period = "daily" | "weekly" | "monthly";
 const PERIOD_LABELS: Record<Period, string> = {
-  daily: "30 kun",
-  weekly: "12 hafta",
-  monthly: "12 oy",
+  daily: "Kun",
+  weekly: "Hafta",
+  monthly: "Oylik",
 };
 const PERIOD_DAYS: Record<Period, number> = { daily: 30, weekly: 84, monthly: 365 };
+
+// Balon tsex — maxsus hisoblash
+const BALON_SERVICE_NAME = "Balon tsex";
+const BALON_SM_UNITS = new Set(["20", "30", "40", "50", "60", "70", "80", "90"]);
+
+// Aggregated rows (Jami view) dan balon totalni hisoblash
+const calcBalonFromRows = (rows: any[]) => {
+  let cm = 0, kardon = 0;
+  for (const r of rows) {
+    if (r.service_type_name !== BALON_SERVICE_NAME) continue;
+    const q = Number(r.total_quantity ?? 0);
+    if (r.unit === "metr") cm += q * 100;
+    else if (r.unit === "kardon") kardon += Math.round(q);
+    else if (BALON_SM_UNITS.has(String(r.unit))) cm += q * parseInt(r.unit);
+  }
+  return { metr: Math.floor(cm / 100), sm: cm % 100, kardon };
+};
+
+// Individual orders (Batafsil view) dan balon totalni hisoblash
+const calcBalonFromOrders = (orders: any[]) => {
+  let cm = 0, kardon = 0;
+  for (const o of orders) {
+    if (o.service_type_name !== BALON_SERVICE_NAME) continue;
+    const q = Number(o.quantity ?? 0);
+    if (o.unit === "metr") cm += q * 100;
+    else if (o.unit === "kardon") kardon += Math.round(q);
+    else if (BALON_SM_UNITS.has(String(o.unit))) cm += q * parseInt(o.unit);
+  }
+  return { metr: Math.floor(cm / 100), sm: cm % 100, kardon };
+};
+
+// Balon totalini chiroyli matn sifatida ko'rsatish
+const fmtBalon = (metr: number, sm: number, kardon: number): string | null => {
+  const parts: string[] = [];
+  if (metr > 0 || sm > 0) {
+    let s = `${metr} metr`;
+    if (sm > 0) s += ` ${sm} sm`;
+    parts.push(s);
+  }
+  if (kardon > 0) parts.push(`${kardon} kardon`);
+  return parts.length ? parts.join(" va ") : null;
+};
 
 const fmtNum = (n: number | null | undefined) =>
   n == null ? "0" : Math.round(n).toLocaleString("uz-UZ");
@@ -351,6 +393,8 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
             <div className="space-y-2">
               {dayList.map((group: any) => {
                 const collapsed = collapsedDays.has(group.day);
+                const dayBalon = calcBalonFromOrders(group.orders);
+                const dayBalonStr = fmtBalon(dayBalon.metr, dayBalon.sm, dayBalon.kardon);
                 return (
                   <Card key={group.day} className="overflow-hidden">
                     {/* Day header */}
@@ -362,10 +406,13 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                         {collapsed ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
                         <span className="font-bold text-sm">{fmtDay(group.day)}</span>
                       </div>
-                      <div className="flex gap-3 text-xs text-muted-foreground">
-                        <span><b className="text-foreground">{group.orders.length}</b> ta zakaz</span>
+                      <div className="flex gap-2 text-xs text-muted-foreground flex-wrap justify-end">
+                        <span><b className="text-foreground">{group.orders.length}</b> ta</span>
+                        {dayBalonStr && (
+                          <span className="text-violet-600 dark:text-violet-400 font-semibold">{dayBalonStr}</span>
+                        )}
                         {group.totalPrice > 0 && (
-                          <span className="hidden sm:inline"><b className="text-amber-600 dark:text-amber-400">{fmtMoney(group.totalPrice)} so'm</b></span>
+                          <span><b className="text-amber-600 dark:text-amber-400">{fmtMoney(group.totalPrice)} so'm</b></span>
                         )}
                       </div>
                     </button>
@@ -433,7 +480,19 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                 const pKey = group.period;
                 const { start, end } = getPeriodRange(pKey, activePeriod);
                 const isExpanded = expandedPeriod === pKey;
-                const unitStr = Object.entries(group.unitTotals as Record<string, number>)
+
+                // Balon tsex totali
+                const balonTotals = calcBalonFromRows(group.types);
+                const balonStr = fmtBalon(balonTotals.metr, balonTotals.sm, balonTotals.kardon);
+
+                // Boshqa (non-balon) unit totallari
+                const nonBalonUnitTotals: Record<string, number> = {};
+                for (const r of group.types) {
+                  if (r.service_type_name === BALON_SERVICE_NAME) continue;
+                  const uk = r.unit || "dona";
+                  nonBalonUnitTotals[uk] = (nonBalonUnitTotals[uk] ?? 0) + r.total_quantity;
+                }
+                const unitStr = Object.entries(nonBalonUnitTotals)
                   .map(([u, q]) => `${fmtNum(q)} ${u}`)
                   .join(" · ");
                 return (
@@ -444,9 +503,12 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                       onClick={() => togglePeriod(pKey, start, end)}
                     >
                       <span className="font-semibold text-sm">{fmtPeriod(pKey, activePeriod)}</span>
-                      <div className="flex gap-3 items-center text-xs text-muted-foreground">
+                      <div className="flex gap-3 items-center text-xs text-muted-foreground flex-wrap justify-end">
                         <span><b className="text-foreground">{fmtNum(group.orderCount)}</b> ta</span>
                         {unitStr && <span className="text-foreground font-medium">{unitStr}</span>}
+                        {balonStr && (
+                          <span className="text-violet-600 dark:text-violet-400 font-semibold">{balonStr}</span>
+                        )}
                         {group.totalPrice > 0 && (
                           <span><b className="text-amber-600 dark:text-amber-400">{fmtMoney(group.totalPrice)}</b> so'm</span>
                         )}
@@ -454,23 +516,55 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                       </div>
                     </button>
 
-                    {group.types.length > 1 && (
-                      <div className="divide-y divide-border/50 border-t">
-                        {group.types.map((r: any) => (
-                          <div key={`${r.period}-${r.service_type_id}-${r.unit}`}
-                            className="px-4 py-2 flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground font-medium">{r.service_type_name}</span>
-                            <div className="flex gap-3 text-xs">
-                              <span className="text-foreground">{fmtNum(r.order_count)} ta</span>
-                              <span className="text-foreground">{fmtNum(r.total_quantity)} {r.unit || "dona"}</span>
-                              {r.total_price > 0 && (
-                                <span className="text-amber-600 dark:text-amber-400">{fmtMoney(r.total_price)} so'm</span>
-                              )}
+                    {group.types.length > 1 && (() => {
+                      // Balon tsex qatorlarini bitta qilib ko'rsat
+                      const balonRows = group.types.filter((r: any) => r.service_type_name === BALON_SERVICE_NAME);
+                      const otherRows = group.types.filter((r: any) => r.service_type_name !== BALON_SERVICE_NAME);
+                      const balonOrderCount = balonRows.reduce((s: number, r: any) => s + (r.order_count ?? 0), 0);
+                      const balonPrice = balonRows.reduce((s: number, r: any) => s + (r.total_price ?? 0), 0);
+                      const balonB = calcBalonFromRows(balonRows);
+                      const balonDisplayStr = fmtBalon(balonB.metr, balonB.sm, balonB.kardon);
+
+                      // Unique non-balon rows (service_type_id level, merge units per type)
+                      const otherMerged: Record<number, any> = {};
+                      for (const r of otherRows) {
+                        if (!otherMerged[r.service_type_id]) {
+                          otherMerged[r.service_type_id] = { ...r };
+                        } else {
+                          otherMerged[r.service_type_id].order_count += r.order_count;
+                          otherMerged[r.service_type_id].total_price += r.total_price;
+                          otherMerged[r.service_type_id].total_quantity += r.total_quantity;
+                        }
+                      }
+
+                      const allDisplayRows = [
+                        ...Object.values(otherMerged),
+                        ...(balonRows.length ? [{ _isBalon: true, order_count: balonOrderCount, total_price: balonPrice }] : []),
+                      ];
+
+                      return (
+                        <div className="divide-y divide-border/50 border-t">
+                          {allDisplayRows.map((r: any, i: number) => (
+                            <div key={r._isBalon ? "balon" : `${r.service_type_id}-${i}`}
+                              className="px-4 py-2 flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground font-medium">
+                                {r._isBalon ? BALON_SERVICE_NAME : r.service_type_name}
+                              </span>
+                              <div className="flex gap-3 text-xs flex-wrap justify-end">
+                                <span className="text-foreground">{fmtNum(r.order_count)} ta</span>
+                                {r._isBalon
+                                  ? balonDisplayStr && <span className="text-violet-600 dark:text-violet-400 font-semibold">{balonDisplayStr}</span>
+                                  : <span className="text-foreground">{fmtNum(r.total_quantity)} {r.unit || "dona"}</span>
+                                }
+                                {r.total_price > 0 && (
+                                  <span className="text-amber-600 dark:text-amber-400">{fmtMoney(r.total_price)} so'm</span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      );
+                    })()}
 
                     {isExpanded && (
                       <div className="border-t bg-background">
