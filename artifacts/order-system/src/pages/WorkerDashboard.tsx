@@ -743,7 +743,10 @@ export default function WorkerDashboard() {
   const [readyQtyOrder, setReadyQtyOrder] = useState<any>(null);
   const [readyQtyInput, setReadyQtyInput] = useState("");
   const [readyQtyUnit, setReadyQtyUnit] = useState("");
-  // Payment modal
+  // Tayyor bosqidagi summa modal
+  const [summaryOrder, setSummaryOrder] = useState<any>(null);
+  const [summaryAmount, setSummaryAmount] = useState("");
+  // Olib ketildi bosqidagi payment modal (nasiya)
   const [paymentOrder, setPaymentOrder] = useState<any>(null);
   const [paymentMode, setPaymentMode] = useState<"naqd" | "qarz">("naqd");
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -818,30 +821,14 @@ export default function WorkerDashboard() {
   };
 
   const handleReady = async (order: any) => {
-    // Nasiya tekshiruvi: service type nasiyaEnabled va clientId bo'lsa payment modal
     const st = serviceTypes?.find((s: any) => s.id === order.serviceTypeId);
-    const needsPayment = st?.nasiyaEnabled && order.clientId;
+    const needsSumma = st?.nasiyaEnabled && order.clientId;
 
-    if (needsPayment) {
-      // Client balance yuklash
-      setClientBalanceLoading(true);
-      try {
-        const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
-        const r = await fetch(`${apiBase}/api/client-accounts/${order.clientId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await r.json();
-        setClientBalance(data.balance ?? 0);
-        setClientInfo(data.client ?? null);
-      } catch {
-        setClientBalance(0);
-        setClientInfo(null);
-      } finally {
-        setClientBalanceLoading(false);
-      }
-      setPaymentMode("naqd");
-      setPaymentAmount("");
-      setPaymentOrder(order);
+    if (needsSumma) {
+      // Faqat summa so'raladi — naqd/qarz bu yerda so'ralMaydi
+      const existing = order.price ? wFmtAmt(String(Math.round(Number(order.price)))) : "";
+      setSummaryAmount(existing);
+      setSummaryOrder(order);
       return;
     }
 
@@ -864,7 +851,25 @@ export default function WorkerDashboard() {
     setReadyQtyOrder(order);
   };
 
-  const doPaymentAndReady = async () => {
+  // Nasiya zakaz uchun tayyor bosqichi: faqat summani saqlash
+  const doReadyWithSumma = () => {
+    if (!summaryOrder) return;
+    const amount = wParseAmt(summaryAmount);
+    updateStatus.mutate(
+      { id: summaryOrder.id, data: { status: "ready", ...(amount > 0 ? { price: amount } : {}) } as any },
+      {
+        onSuccess: () => {
+          toast({ title: "✅ Tayyor deb belgilandi!" });
+          queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
+          setSummaryOrder(null);
+        },
+        onError: () => toast({ title: "Xatolik", variant: "destructive" })
+      }
+    );
+  };
+
+  // Nasiya zakaz uchun olib ketildi bosqichi: naqd/qarz + tranzaksiya
+  const doDeliverWithPayment = async () => {
     if (!paymentOrder || !storeId) return;
     const amount = wParseAmt(paymentAmount);
     if (paymentMode === "qarz" && (!paymentAmount || amount <= 0)) {
@@ -873,8 +878,7 @@ export default function WorkerDashboard() {
     setPaymentLoading(true);
     try {
       const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
-      // Tranzaksiya: naqd yoki qarz bo'lsa ham yaratiladi (naqd balansga ta'sir etmaydi)
-      if (paymentOrder.clientId && (paymentMode === "qarz" || paymentMode === "naqd")) {
+      if (paymentOrder.clientId) {
         const txAmount = paymentMode === "naqd"
           ? (paymentAmount && amount > 0 ? amount : 0)
           : amount;
@@ -899,12 +903,11 @@ export default function WorkerDashboard() {
           setPaymentLoading(false); return;
         }
       }
-      // Zakaz tayyor deb belgilash
       updateStatus.mutate(
-        { id: paymentOrder.id, data: { status: "ready" } as any },
+        { id: paymentOrder.id, data: { status: "topshirildi" } as any },
         {
           onSuccess: () => {
-            toast({ title: paymentMode === "qarz" ? "✅ Tayyor! Qarz yozildi" : "✅ Tayyor! Naqd to'landi" });
+            toast({ title: paymentMode === "qarz" ? "✅ Olib ketildi! Qarz yozildi" : "✅ Olib ketildi!" });
             queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
             setPaymentOrder(null);
           },
@@ -949,7 +952,33 @@ export default function WorkerDashboard() {
     );
   };
 
-  const handleDeliver = (order: any) => {
+  const handleDeliver = async (order: any) => {
+    const st = serviceTypes?.find((s: any) => s.id === order.serviceTypeId);
+    const needsPayment = st?.nasiyaEnabled && order.clientId;
+
+    if (needsPayment) {
+      // Balansni yuklash va payment modal ko'rsatish
+      setClientBalanceLoading(true);
+      try {
+        const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+        const r = await fetch(`${apiBase}/api/client-accounts/${order.clientId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await r.json();
+        setClientBalance(data.balance ?? 0);
+        setClientInfo(data.client ?? null);
+      } catch {
+        setClientBalance(0);
+        setClientInfo(null);
+      } finally {
+        setClientBalanceLoading(false);
+      }
+      setPaymentMode("naqd");
+      setPaymentAmount("");
+      setPaymentOrder(order);
+      return;
+    }
+
     setQrDeliverOrder(order);
   };
 
@@ -1387,13 +1416,60 @@ export default function WorkerDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Nasiya Payment Modal — TAYYOR bosilganda */}
+      {/* Tayyor summa modal — TAYYOR bosilganda faqat summa so'raladi */}
+      <Dialog open={!!summaryOrder} onOpenChange={(v) => { if (!v) setSummaryOrder(null); }}>
+        <DialogContent className="w-full max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <Check className="w-5 h-5" />
+              Tayyor — summa
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-mono font-bold">{summaryOrder?.orderId}</span> zakazi uchun summani kiriting
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            {summaryOrder?.price && (
+              <div className="bg-muted/50 rounded-lg px-3 py-2 text-sm flex justify-between">
+                <span className="text-muted-foreground">Joriy narx</span>
+                <span className="font-bold">{Math.round(Number(summaryOrder.price)).toLocaleString("uz-UZ")} so'm</span>
+              </div>
+            )}
+            <div className="space-y-1">
+              <Label className="text-sm font-medium">Summa (so'm)</Label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="0"
+                value={summaryAmount}
+                onChange={(e) => setSummaryAmount(wFmtAmt(e.target.value))}
+                onKeyDown={(e) => { if (e.key === "Enter") doReadyWithSumma(); }}
+                autoFocus
+                className="text-xl font-bold h-14 text-center tabular-nums"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setSummaryOrder(null)}>Bekor</Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white gap-2"
+              disabled={updateStatus.isPending}
+              onClick={doReadyWithSumma}
+            >
+              {updateStatus.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Tayyor!
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Nasiya Payment Modal — OLIB KETILDI bosilganda naqd/qarz so'raladi */}
       <Dialog open={!!paymentOrder} onOpenChange={(v) => { if (!v) setPaymentOrder(null); }}>
         <DialogContent className="w-full max-w-sm mx-4">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-primary" />
-              To'lov holati
+              <Truck className="w-5 h-5 text-purple-600" />
+              Olib ketildi — to'lov
             </DialogTitle>
             <DialogDescription>
               <span className="font-mono font-bold">{paymentOrder?.orderId}</span> — to'lov turini tanlang
@@ -1502,12 +1578,12 @@ export default function WorkerDashboard() {
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setPaymentOrder(null)} disabled={paymentLoading}>Bekor</Button>
             <Button
-              className={`gap-2 ${paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : "bg-green-600 hover:bg-green-700"} text-white`}
+              className={`gap-2 ${paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : "bg-purple-600 hover:bg-purple-700"} text-white`}
               disabled={paymentLoading || clientBalanceLoading || (paymentMode === "qarz" && (!paymentAmount || wParseAmt(paymentAmount) <= 0))}
-              onClick={doPaymentAndReady}
+              onClick={doDeliverWithPayment}
             >
-              {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              {paymentMode === "qarz" ? "Qarz yozib Tayyor!" : "Tayyor!"}
+              {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4" />}
+              {paymentMode === "qarz" ? "Qarz yozib olib ketildi!" : "Olib ketildi!"}
             </Button>
           </DialogFooter>
         </DialogContent>

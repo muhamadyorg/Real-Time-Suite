@@ -430,11 +430,12 @@ router.patch("/:id/status", async (req, res) => {
     }
 
     const id = parseInt(req.params.id);
-    const { status, lockPin: providedLockPin, outputQuantity, outputUnit } = req.body as {
+    const { status, lockPin: providedLockPin, outputQuantity, outputUnit, price } = req.body as {
       status: "new" | "accepted" | "ready" | "topshirildi";
       lockPin?: string;
       outputQuantity?: number;
       outputUnit?: string;
+      price?: number;
     };
 
     const order = await db.query.ordersTable.findFirst({ where: eq(ordersTable.id, id) });
@@ -499,6 +500,7 @@ router.patch("/:id/status", async (req, res) => {
       updates.deliveredByName = null;
       if (outputQuantity !== undefined) updates.outputQuantity = String(outputQuantity);
       if (outputUnit !== undefined) updates.outputUnit = outputUnit;
+      if (price != null && price > 0) updates.price = String(price);
     } else if (status === "new") {
       updates.deliveredAt = null;
       updates.deliveredByName = null;

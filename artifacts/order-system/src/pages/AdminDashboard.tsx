@@ -883,7 +883,10 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
   const [deliveringOrder, setDeliveringOrder] = useState<any>(null);
   const [historySubTab, setHistorySubTab] = useState<"pending" | "delivered">("pending");
 
-  // TAYYOR: nasiya payment modal
+  // TAYYOR bosqichi: faqat summa modal
+  const [summaryOrder, setSummaryOrder] = useState<any>(null);
+  const [summaryAmount, setSummaryAmount] = useState("");
+  // OLIB KETILDI bosqichi: naqd/qarz payment modal
   const [paymentOrder, setPaymentOrder] = useState<any>(null);
   const [paymentMode, setPaymentMode] = useState<"naqd" | "qarz">("naqd");
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -941,25 +944,11 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
 
   const handleReady = async (order: any) => {
     const st = (serviceTypes as any[])?.find((s: any) => s.id === order.serviceTypeId);
-    const needsPayment = st?.nasiyaEnabled && order.clientId;
-    if (needsPayment) {
-      setClientBalanceLoading(true);
-      try {
-        const r = await fetch(`${apiBase}/api/client-accounts/${order.clientId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await r.json();
-        setClientBalance(data.balance ?? 0);
-        setClientInfo(data.client ?? null);
-      } catch {
-        setClientBalance(0);
-        setClientInfo(null);
-      } finally {
-        setClientBalanceLoading(false);
-      }
-      setPaymentMode("naqd");
-      setPaymentAmount("");
-      setPaymentOrder(order);
+    const needsSumma = st?.nasiyaEnabled && order.clientId;
+    if (needsSumma) {
+      const existing = order.price ? fmtAmt(String(Math.round(Number(order.price)))) : "";
+      setSummaryAmount(existing);
+      setSummaryOrder(order);
       return;
     }
     if (order.requireOutputQty) {
@@ -980,7 +969,23 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
     );
   };
 
-  const doPaymentAndReady = async () => {
+  const doReadyWithSumma = () => {
+    if (!summaryOrder) return;
+    const amount = parseAmt(summaryAmount);
+    updateStatus.mutate(
+      { id: summaryOrder.id, data: { status: "ready", ...(amount > 0 ? { price: amount } : {}) } as any },
+      {
+        onSuccess: () => {
+          toast({ title: "✅ Tayyor deb belgilandi!" });
+          queryClient.invalidateQueries({ queryKey: ["getOrders"] });
+          setSummaryOrder(null);
+        },
+        onError: () => toast({ title: "Xatolik", variant: "destructive" }),
+      }
+    );
+  };
+
+  const doDeliverWithPayment = async () => {
     if (!paymentOrder || !storeId) return;
     const amount = parseAmt(paymentAmount);
     if (paymentMode === "qarz" && (!paymentAmount || amount <= 0)) {
@@ -988,7 +993,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
     }
     setPaymentLoading(true);
     try {
-      if (paymentOrder.clientId && (paymentMode === "qarz" || paymentMode === "naqd")) {
+      if (paymentOrder.clientId) {
         const txAmount = paymentMode === "naqd"
           ? (paymentAmount && amount > 0 ? amount : 0)
           : amount;
@@ -1014,10 +1019,10 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         }
       }
       updateStatus.mutate(
-        { id: paymentOrder.id, data: { status: "ready" } as any },
+        { id: paymentOrder.id, data: { status: "topshirildi" } as any },
         {
           onSuccess: () => {
-            toast({ title: paymentMode === "qarz" ? "✅ Tayyor! Qarz yozildi" : "✅ Tayyor! Naqd to'landi" });
+            toast({ title: paymentMode === "qarz" ? "✅ Olib ketildi! Qarz yozildi" : "✅ Olib ketildi!" });
             queryClient.invalidateQueries({ queryKey: ["getOrders"] });
             setPaymentOrder(null);
           },
@@ -1051,6 +1056,33 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         onError: () => toast({ title: "Xatolik", variant: "destructive" }),
       }
     );
+  };
+
+  const handleDeliverAdmin = async (order: any) => {
+    if (!order) return;
+    const st = (serviceTypes as any[])?.find((s: any) => s.id === order.serviceTypeId);
+    const needsPayment = st?.nasiyaEnabled && order.clientId;
+    if (needsPayment) {
+      setClientBalanceLoading(true);
+      try {
+        const r = await fetch(`${apiBase}/api/client-accounts/${order.clientId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await r.json();
+        setClientBalance(data.balance ?? 0);
+        setClientInfo(data.client ?? null);
+      } catch {
+        setClientBalance(0);
+        setClientInfo(null);
+      } finally {
+        setClientBalanceLoading(false);
+      }
+      setPaymentMode("naqd");
+      setPaymentAmount("");
+      setPaymentOrder(order);
+      return;
+    }
+    setDeliveringOrder(order);
   };
 
   useSocket(token, storeId);
@@ -1162,7 +1194,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
               onOrderClick={isLocked ? undefined : () => setSelectedOrder(order)}
               canPrint={isLocked ? false : canPrint}
               canMarkDelivered={isLocked ? false : canMarkDelivered}
-              onDeliver={isLocked ? undefined : () => setDeliveringOrder(order)}
+              onDeliver={isLocked ? undefined : () => handleDeliverAdmin(order)}
               locked={isLocked}
               actionButton={isLocked ? undefined : getActionBtn?.(order)}
             />
@@ -1331,7 +1363,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         canMarkDelivered={canMarkDelivered}
         onEdit={() => setEditingOrder(selectedOrder)}
         onDelete={() => setDeletingOrder(selectedOrder)}
-        onDeliver={() => setDeliveringOrder(selectedOrder)}
+        onDeliver={() => { handleDeliverAdmin(selectedOrder); setSelectedOrder(null); }}
       />
 
       <EditOrderModal
@@ -1413,19 +1445,72 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
         </DialogContent>
       </Dialog>
 
-      {/* Nasiya Payment Modal — TAYYOR bosilganda */}
-      <Dialog open={!!paymentOrder} onOpenChange={(v) => { if (!v) setPaymentOrder(null); }}>
-        <DialogContent className="w-full max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+      {/* Tayyor summa modal — TAYYOR bosilganda faqat summa so'raladi */}
+      <Dialog open={!!summaryOrder} onOpenChange={(v) => { if (!v) setSummaryOrder(null); }}>
+        <DialogContent className="w-full max-w-sm mx-4">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-green-600">
               <CheckCircle className="w-5 h-5" />
-              To'lov & Tayyor
+              Tayyor — summa
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-mono font-bold">{summaryOrder?.orderId}</span> zakazi uchun summani kiriting
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2">
+            {summaryOrder?.price && (
+              <div className="bg-muted/50 rounded-lg px-3 py-2 text-sm flex justify-between">
+                <span className="text-muted-foreground">Joriy narx</span>
+                <span className="font-bold">{Math.round(Number(summaryOrder.price)).toLocaleString("uz-UZ")} so'm</span>
+              </div>
+            )}
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Summa (so'm)</label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="0"
+                value={summaryAmount}
+                onChange={(e) => setSummaryAmount(fmtAmt(e.target.value))}
+                onKeyDown={(e) => { if (e.key === "Enter") doReadyWithSumma(); }}
+                autoFocus
+                className="text-xl font-bold h-14 text-center tabular-nums"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setSummaryOrder(null)}>Bekor</Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white gap-2"
+              disabled={updateStatus.isPending}
+              onClick={doReadyWithSumma}
+            >
+              {updateStatus.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+              Tayyor!
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Nasiya Payment Modal — OLIB KETILDI bosilganda naqd/qarz so'raladi */}
+      <Dialog open={!!paymentOrder} onOpenChange={(v) => { if (!v) setPaymentOrder(null); }}>
+        <DialogContent className="w-full max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-purple-600">
+              <Truck className="w-5 h-5" />
+              Olib ketildi — to'lov
             </DialogTitle>
             <DialogDescription>
               <span className="font-mono font-bold">{paymentOrder?.orderId}</span> — to'lov turini tanlang
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {paymentOrder?.price && (
+              <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg px-3 py-2 text-sm flex justify-between">
+                <span className="text-amber-700 dark:text-amber-400">Zakaz summasi:</span>
+                <span className="font-bold text-amber-700 dark:text-amber-400">{Math.round(Number(paymentOrder.price)).toLocaleString("uz-UZ")} so'm</span>
+              </div>
+            )}
             {clientBalanceLoading ? (
               <div className="flex justify-center py-4"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
             ) : (
@@ -1492,12 +1577,12 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setPaymentOrder(null)} disabled={paymentLoading}>Bekor</Button>
             <Button
-              className={`gap-2 ${paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : "bg-green-600 hover:bg-green-700"} text-white`}
+              className={`gap-2 ${paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : "bg-purple-600 hover:bg-purple-700"} text-white`}
               disabled={paymentLoading || clientBalanceLoading || (paymentMode === "qarz" && (!paymentAmount || parseAmt(paymentAmount) <= 0))}
-              onClick={doPaymentAndReady}
+              onClick={doDeliverWithPayment}
             >
-              {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-              {paymentMode === "qarz" ? "Qarz yozib Tayyor!" : "Tayyor!"}
+              {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4" />}
+              {paymentMode === "qarz" ? "Qarz yozib olib ketildi!" : "Olib ketildi!"}
             </Button>
           </DialogFooter>
         </DialogContent>
