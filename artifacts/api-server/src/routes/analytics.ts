@@ -6,6 +6,19 @@ import { and, eq } from "drizzle-orm";
 
 const router = Router();
 
+function parseSummary(row: any) {
+  if (!row) return row;
+  return {
+    total_orders: row.total_orders,
+    total_quantity: parseFloat(row.total_quantity ?? "0"),
+    total_price: parseFloat(row.total_price ?? "0"),
+    naqd_total: parseFloat(row.naqd_total ?? "0"),
+    click_total: parseFloat(row.click_total ?? "0"),
+    dokonga_total: parseFloat(row.dokonga_total ?? "0"),
+    qarz_total: parseFloat(row.qarz_total ?? "0"),
+  };
+}
+
 async function canAccess(req: any): Promise<{ ok: boolean; storeId?: number; role?: string; accountId?: number }> {
   const auth = req.headers.authorization?.split(" ")[1];
   if (!auth) return { ok: false };
@@ -53,8 +66,8 @@ router.get("/", async (req, res) => {
       // Re-order params
       if (serviceTypeIds?.length) {
         queryParams = [storeId, serviceTypeIds, specificDate];
-        const svcFilter2 = `AND service_type_id = ANY($2::int[])`;
-        const dateFilter2 = `AND (created_at + interval '5 hours')::date = $3::date`;
+        const svcFilter2 = `AND o.service_type_id = ANY($2::int[])`;
+        const dateFilter2 = `AND (o.created_at + interval '5 hours')::date = $3::date`;
         const sql = `
           SELECT
             date_trunc('day', created_at + interval '5 hours') AS period,
@@ -66,21 +79,28 @@ router.get("/", async (req, res) => {
             unit
           FROM orders
           WHERE store_id = $1
-            ${svcFilter2}
-            ${dateFilter2}
+            AND service_type_id = ANY($2::int[])
+            AND (created_at + interval '5 hours')::date = $3::date
           GROUP BY period, service_type_id, service_type_name, unit
           ORDER BY period DESC, service_type_name
         `;
         const summaryRes = await pool.query(`
-          SELECT COUNT(*)::int AS total_orders,
-            COALESCE(SUM(quantity::numeric), 0) AS total_quantity,
-            COALESCE(SUM(price::numeric), 0) AS total_price
-          FROM orders
-          WHERE store_id = $1 ${svcFilter2} ${dateFilter2}
+          SELECT COUNT(DISTINCT o.id)::int AS total_orders,
+            COALESCE(SUM(o.quantity::numeric), 0) AS total_quantity,
+            COALESCE(SUM(o.price::numeric), 0) AS total_price,
+            COALESCE(SUM(CASE WHEN ct.type = 'naqd'    THEN o.price::numeric ELSE 0 END), 0) AS naqd_total,
+            COALESCE(SUM(CASE WHEN ct.type = 'click'   THEN o.price::numeric ELSE 0 END), 0) AS click_total,
+            COALESCE(SUM(CASE WHEN ct.type = 'dokonga' THEN o.price::numeric ELSE 0 END), 0) AS dokonga_total,
+            COALESCE(SUM(CASE WHEN ct.type = 'qarz'    THEN o.price::numeric ELSE 0 END), 0) AS qarz_total
+          FROM orders o
+          LEFT JOIN LATERAL (
+            SELECT type FROM client_transactions WHERE order_id = o.id ORDER BY created_at DESC LIMIT 1
+          ) ct ON true
+          WHERE o.store_id = $1 ${svcFilter2} ${dateFilter2}
         `, queryParams);
         const result = await pool.query(sql, queryParams);
         res.json({
-          summary: summaryRes.rows[0],
+          summary: parseSummary(summaryRes.rows[0]),
           rows: result.rows.map(r => ({
             ...r,
             total_quantity: parseFloat(r.total_quantity),
@@ -89,7 +109,7 @@ router.get("/", async (req, res) => {
         });
         return;
       } else {
-        const dateFilter2 = `AND (created_at + interval '5 hours')::date = $2::date`;
+        const dateFilter2 = `AND (o.created_at + interval '5 hours')::date = $2::date`;
         const sql = `
           SELECT
             date_trunc('day', created_at + interval '5 hours') AS period,
@@ -100,19 +120,27 @@ router.get("/", async (req, res) => {
             COALESCE(SUM(price::numeric), 0) AS total_price,
             unit
           FROM orders
-          WHERE store_id = $1 ${dateFilter2}
+          WHERE store_id = $1 AND (created_at + interval '5 hours')::date = $2::date
           GROUP BY period, service_type_id, service_type_name, unit
           ORDER BY period DESC, service_type_name
         `;
         const summaryRes = await pool.query(`
-          SELECT COUNT(*)::int AS total_orders,
-            COALESCE(SUM(quantity::numeric), 0) AS total_quantity,
-            COALESCE(SUM(price::numeric), 0) AS total_price
-          FROM orders WHERE store_id = $1 ${dateFilter2}
+          SELECT COUNT(DISTINCT o.id)::int AS total_orders,
+            COALESCE(SUM(o.quantity::numeric), 0) AS total_quantity,
+            COALESCE(SUM(o.price::numeric), 0) AS total_price,
+            COALESCE(SUM(CASE WHEN ct.type = 'naqd'    THEN o.price::numeric ELSE 0 END), 0) AS naqd_total,
+            COALESCE(SUM(CASE WHEN ct.type = 'click'   THEN o.price::numeric ELSE 0 END), 0) AS click_total,
+            COALESCE(SUM(CASE WHEN ct.type = 'dokonga' THEN o.price::numeric ELSE 0 END), 0) AS dokonga_total,
+            COALESCE(SUM(CASE WHEN ct.type = 'qarz'    THEN o.price::numeric ELSE 0 END), 0) AS qarz_total
+          FROM orders o
+          LEFT JOIN LATERAL (
+            SELECT type FROM client_transactions WHERE order_id = o.id ORDER BY created_at DESC LIMIT 1
+          ) ct ON true
+          WHERE o.store_id = $1 ${dateFilter2}
         `, [storeId, specificDate]);
         const result = await pool.query(sql, [storeId, specificDate]);
         res.json({
-          summary: summaryRes.rows[0],
+          summary: parseSummary(summaryRes.rows[0]),
           rows: result.rows.map(r => ({
             ...r,
             total_quantity: parseFloat(r.total_quantity),
@@ -138,6 +166,9 @@ router.get("/", async (req, res) => {
     queryParams = [storeId, days];
     if (serviceTypeIds?.length) queryParams.push(serviceTypeIds);
 
+    const svcFilterAgg = serviceTypeIds?.length ? `AND service_type_id = ANY($3::int[])` : "";
+    const svcFilterAggO = serviceTypeIds?.length ? `AND o.service_type_id = ANY($3::int[])` : "";
+
     const sql = `
       SELECT
         date_trunc('${truncUnit}', created_at + interval '5 hours') AS period,
@@ -150,7 +181,7 @@ router.get("/", async (req, res) => {
       FROM orders
       WHERE store_id = $1
         AND created_at >= NOW() - ($2 || ' days')::interval
-        ${serviceFilter}
+        ${svcFilterAgg}
       GROUP BY period, service_type_id, service_type_name, unit
       ORDER BY period DESC, service_type_name
     `;
@@ -159,17 +190,24 @@ router.get("/", async (req, res) => {
 
     const summaryRes = await pool.query(`
       SELECT
-        COUNT(*)::int AS total_orders,
-        COALESCE(SUM(quantity::numeric), 0) AS total_quantity,
-        COALESCE(SUM(price::numeric), 0) AS total_price
-      FROM orders
-      WHERE store_id = $1
-        AND created_at >= NOW() - ($2 || ' days')::interval
-        ${serviceFilter}
+        COUNT(DISTINCT o.id)::int AS total_orders,
+        COALESCE(SUM(o.quantity::numeric), 0) AS total_quantity,
+        COALESCE(SUM(o.price::numeric), 0) AS total_price,
+        COALESCE(SUM(CASE WHEN ct.type = 'naqd'    THEN o.price::numeric ELSE 0 END), 0) AS naqd_total,
+        COALESCE(SUM(CASE WHEN ct.type = 'click'   THEN o.price::numeric ELSE 0 END), 0) AS click_total,
+        COALESCE(SUM(CASE WHEN ct.type = 'dokonga' THEN o.price::numeric ELSE 0 END), 0) AS dokonga_total,
+        COALESCE(SUM(CASE WHEN ct.type = 'qarz'    THEN o.price::numeric ELSE 0 END), 0) AS qarz_total
+      FROM orders o
+      LEFT JOIN LATERAL (
+        SELECT type FROM client_transactions WHERE order_id = o.id ORDER BY created_at DESC LIMIT 1
+      ) ct ON true
+      WHERE o.store_id = $1
+        AND o.created_at >= NOW() - ($2 || ' days')::interval
+        ${svcFilterAggO}
     `, queryParams);
 
     res.json({
-      summary: summaryRes.rows[0],
+      summary: parseSummary(summaryRes.rows[0]),
       rows: result.rows.map(r => ({
         ...r,
         period: r.period,

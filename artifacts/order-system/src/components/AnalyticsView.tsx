@@ -435,8 +435,25 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   const toggleDay = (day: string) =>
     setCollapsedDays(prev => { const n = new Set(prev); n.has(day) ? n.delete(day) : n.add(day); return n; });
 
+  const batafsiliPayBreak = (() => {
+    if (view !== "batafsil") return null;
+    const m: Record<string, number> = {};
+    for (const o of orders) {
+      const t = o.payment_type as string | null;
+      if (t) m[t] = (m[t] ?? 0) + Math.abs(parseFloat(o.price ?? "0"));
+    }
+    return m;
+  })();
+
   const summary = view === "batafsil"
-    ? { total_orders: orders.length, total_price: orders.reduce((s, o) => s + parseFloat(o.price ?? "0"), 0) }
+    ? {
+        total_orders: orders.length,
+        total_price: orders.reduce((s, o) => s + parseFloat(o.price ?? "0"), 0),
+        naqd_total: batafsiliPayBreak?.naqd ?? 0,
+        click_total: batafsiliPayBreak?.click ?? 0,
+        dokonga_total: batafsiliPayBreak?.dokonga ?? 0,
+        qarz_total: batafsiliPayBreak?.qarz ?? 0,
+      }
     : aggSummary;
 
   const loading = aggLoading || ordersLoading;
@@ -574,32 +591,69 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
       )}
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="border-blue-200 dark:border-blue-800">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 mb-1">
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span className="text-xs font-medium">Zakazlar</span>
-            </div>
-            <div className="text-2xl font-black tabular-nums">
-              {loading && !aggData && !orders.length ? <Loader2 className="w-5 h-5 animate-spin" /> : fmtNum(summary?.total_orders)}
-            </div>
-            <div className="text-xs text-muted-foreground">ta</div>
-          </CardContent>
-        </Card>
-        <Card className="border-amber-200 dark:border-amber-800">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 mb-1">
-              <Wallet className="w-3.5 h-3.5" />
-              <span className="text-xs font-medium">Jami summa</span>
-            </div>
-            <div className="text-xl font-black tabular-nums leading-tight">
-              {loading && !aggData && !orders.length ? <Loader2 className="w-5 h-5 animate-spin" /> : fmtMoney(summary?.total_price)}
-            </div>
-            <div className="text-xs text-muted-foreground">so'm</div>
-          </CardContent>
-        </Card>
-      </div>
+      {(() => {
+        const sNaqd    = summary?.naqd_total    ?? 0;
+        const sClick   = summary?.click_total   ?? 0;
+        const sDokonga = summary?.dokonga_total  ?? 0;
+        const sQarz    = summary?.qarz_total     ?? 0;
+        const hasPayBreak = (sNaqd + sClick + sDokonga + sQarz) > 0;
+        return (
+          <div className="grid grid-cols-2 gap-3">
+            <Card className="border-blue-200 dark:border-blue-800">
+              <CardContent className="p-3">
+                <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 mb-1">
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <span className="text-xs font-medium">Zakazlar</span>
+                </div>
+                <div className="text-2xl font-black tabular-nums">
+                  {loading && !aggData && !orders.length ? <Loader2 className="w-5 h-5 animate-spin" /> : fmtNum(summary?.total_orders)}
+                </div>
+                <div className="text-xs text-muted-foreground">ta</div>
+              </CardContent>
+            </Card>
+            <Card className="border-amber-200 dark:border-amber-800">
+              <CardContent className="p-3">
+                <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 mb-1">
+                  <Wallet className="w-3.5 h-3.5" />
+                  <span className="text-xs font-medium">Jami summa</span>
+                </div>
+                <div className="text-xl font-black tabular-nums leading-tight">
+                  {loading && !aggData && !orders.length ? <Loader2 className="w-5 h-5 animate-spin" /> : fmtMoney(summary?.total_price)}
+                </div>
+                <div className="text-xs text-muted-foreground">so'm</div>
+              </CardContent>
+            </Card>
+            {hasPayBreak && (
+              <Card className="col-span-2 border-border/50">
+                <CardContent className="p-3">
+                  <div className="flex flex-wrap gap-2">
+                    {sNaqd > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2.5 py-1 rounded-full font-semibold">
+                        💵 Naqd: <b>{fmtMoney(sNaqd)}</b>
+                      </span>
+                    )}
+                    {sClick > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2.5 py-1 rounded-full font-semibold">
+                        📲 Click: <b>{fmtMoney(sClick)}</b>
+                      </span>
+                    )}
+                    {sDokonga > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 px-2.5 py-1 rounded-full font-semibold">
+                        🏪 Dokonga: <b>{fmtMoney(sDokonga)}</b>
+                      </span>
+                    )}
+                    {sQarz > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-2.5 py-1 rounded-full font-semibold">
+                        📋 Nasiya: <b>{fmtMoney(sQarz)}</b>
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ===== BATAFSIL VIEW ===== */}
       {view === "batafsil" && (
