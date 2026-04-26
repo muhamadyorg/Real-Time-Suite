@@ -18,7 +18,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2, CheckCircle, Wrench, Bluetooth, Settings, KeyRound, ShieldCheck, X, UserPlus, Pencil, Users, Save, Send, RefreshCw, Bot, CreditCard, Wallet, TrendingDown, TrendingUp, ArrowDownLeft, ArrowUpRight, Phone, User, ChevronDown, ChevronUp, Timer, FileText } from "lucide-react";
 import TemplatesView from "@/components/TemplatesView";
 import { AnalyticsView } from "@/components/AnalyticsView";
-import NasiyaPanel from "@/components/NasiyaPanel";
 import { Switch } from "@/components/ui/switch";
 import AdminDashboard from "./AdminDashboard";
 import ProductsView from "@/components/ProductsView";
@@ -1378,9 +1377,6 @@ export default function SuperadminDashboard() {
             <TabsTrigger value="hisoblar" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
               <CreditCard className="w-3 h-3 hidden sm:block" />Hisoblar
             </TabsTrigger>
-            <TabsTrigger value="nasiya" className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
-              <TrendingDown className="w-3 h-3 hidden sm:block" />Nasiya
-            </TabsTrigger>
             <TabsTrigger value="printer"  className="text-xs sm:text-sm px-3 shrink-0 flex items-center gap-1">
               <Bluetooth className="w-3 h-3 hidden sm:block" />Printer
             </TabsTrigger>
@@ -1429,17 +1425,6 @@ export default function SuperadminDashboard() {
 
         <TabsContent value="hisoblar" className="p-5 max-w-4xl mx-auto focus-visible:outline-none">
           <ClientAccountsView storeId={storeId} token={token ?? ""} />
-        </TabsContent>
-
-        <TabsContent value="nasiya" className="p-4 max-w-4xl mx-auto focus-visible:outline-none">
-          <div className="mb-4">
-            <h2 className="text-lg font-bold flex items-center gap-2">
-              <TrendingDown className="w-5 h-5 text-red-500" />
-              Nasiya boshqaruvi
-            </h2>
-            <p className="text-sm text-muted-foreground mt-0.5">Nasiya, to'lov va hisob-kitob paneli</p>
-          </div>
-          <NasiyaPanel storeId={storeId} token={token ?? ""} />
         </TabsContent>
 
         <TabsContent value="printer" className="p-5 focus-visible:outline-none">

@@ -13,7 +13,7 @@ interface AnalyticsViewProps {
 }
 
 type Period = "daily" | "weekly" | "monthly";
-type ViewMode = "batafsil" | "jami" | "mijozlar";
+type ViewMode = "batafsil" | "jami" | "mijozlar" | "dokon";
 type TxType = "naqd" | "qarz" | "tolov" | "tuzatish" | "click" | "dokonga";
 const TX_META: Record<TxType, { label: string; icon: string; color: string }> = {
   naqd:     { label: "Naqd",     icon: "💵", color: "text-green-600 bg-green-50 dark:bg-green-950/30" },
@@ -186,6 +186,15 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   const [payLoading, setPayLoading] = useState(false);
   const [payServiceTypeId, setPayServiceTypeId] = useState<string>("");
 
+  // DOKON view state
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [dokonDate, setDokonDate] = useState(todayStr);
+  const [dokonClientId, setDokonClientId] = useState<number | null>(null);
+  const [dokonServiceTypeId, setDokonServiceTypeId] = useState<number | null>(null);
+  const [dokonOrders, setDokonOrders] = useState<any[]>([]);
+  const [dokonTx, setDokonTx] = useState<any[]>([]);
+  const [dokonLoading, setDokonLoading] = useState(false);
+
   // Aggregated
   const [aggData, setAggData] = useState<any>(null);
   const [aggLoading, setAggLoading] = useState(false);
@@ -267,6 +276,38 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
     for (const t of txs) { const k = t.type as TxType; if (bd[k] !== undefined) bd[k] += Math.abs(parseFloat(t.amount ?? "0")); }
     return { ...bd, dokonBerishi: bd.naqd + bd.click + bd.dokonga };
   };
+
+  // DOKON view fetch
+  const fetchDokon = useCallback(async () => {
+    setDokonLoading(true);
+    try {
+      const tz = "+05:00";
+      const pStart = `${dokonDate}T00:00:00${tz}`;
+      const pEnd   = `${dokonDate}T23:59:59${tz}`;
+      const cid  = dokonClientId ? `&clientId=${dokonClientId}` : "";
+      const stid = dokonServiceTypeId ? `&serviceTypeIds=${dokonServiceTypeId}` : "";
+      const [ordRes, txRes] = await Promise.all([
+        fetch(`${apiBase}/api/analytics/orders?storeId=${storeId}&periodStart=${encodeURIComponent(pStart)}&periodEnd=${encodeURIComponent(pEnd)}${cid}${stid}`,
+          { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${apiBase}/api/client-accounts/all/transactions?limit=1000`,
+          { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (ordRes.ok) setDokonOrders(await ordRes.json());
+      if (txRes.ok) {
+        const allTxData = await txRes.json();
+        // Filter to the selected date
+        setDokonTx((allTxData as any[]).filter((t: any) => {
+          const d = new Date(t.created_at).toISOString().slice(0, 10);
+          if (d !== dokonDate) return false;
+          if (dokonClientId && t.client_id !== dokonClientId) return false;
+          return true;
+        }));
+      }
+    } catch {}
+    setDokonLoading(false);
+  }, [storeId, token, apiBase, dokonDate, dokonClientId, dokonServiceTypeId]);
+
+  useEffect(() => { if (view === "dokon") fetchDokon(); }, [view, fetchDokon]);
 
   const fetchAgg = useCallback(async () => {
     setAggLoading(true);
@@ -441,10 +482,16 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
           >
             <Users className="w-3.5 h-3.5" />Mijozlar
           </button>
+          <button
+            onClick={() => setView("dokon")}
+            className={`px-3 py-1.5 text-sm font-semibold transition-all flex items-center gap-1 ${view === "dokon" ? "bg-amber-500 text-white" : "bg-card text-muted-foreground hover:text-foreground"}`}
+          >
+            🏪 DOKON
+          </button>
         </div>
 
-        {/* Period */}
-        {(["daily", "weekly", "monthly"] as Period[]).map(p => (
+        {/* Period — only for batafsil/jami */}
+        {(view === "batafsil" || view === "jami") && (["daily", "weekly", "monthly"] as Period[]).map(p => (
           <button
             key={p}
             onClick={() => setPeriod(p)}
@@ -814,6 +861,351 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
           )}
         </>
       )}
+
+      {/* ===== MIJOZLAR VIEW ===== */}
+      {view === "mijozlar" && (() => {
+        const filteredClients = clients.filter(c => {
+          const bal = balNum(c.balance);
+          if (showOnlyDebt && bal >= 0) return false;
+          if (search) {
+            const s = search.toLowerCase();
+            if (!(`${c.firstName ?? ""} ${c.lastName ?? ""}`.toLowerCase().includes(s) || (c.phone ?? "").includes(s))) return false;
+          }
+          return true;
+        });
+        const totalDebt   = clients.reduce((s, c) => s + (balNum(c.balance) < 0 ? Math.abs(balNum(c.balance)) : 0), 0);
+        const totalHaq    = clients.reduce((s, c) => s + (balNum(c.balance) > 0 ? balNum(c.balance) : 0), 0);
+        const totalDokon  = allTx.filter((t: any) => STORE_PAY_TYPES.includes(t.type as TxType)).reduce((s: number, t: any) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
+        return (
+          <div className="space-y-4">
+            {nasiyaLoading && !clients.length ? (
+              <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+            ) : (
+              <>
+                {/* Summary */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-red-50 dark:bg-red-950/20 rounded-xl p-3 border border-red-200 dark:border-red-800 text-center">
+                    <div className="text-base font-bold text-red-600">{fmtMoney(totalDebt)}</div>
+                    <div className="text-[10px] text-red-500 mt-0.5">Jami qarz</div>
+                  </div>
+                  <div className="bg-orange-50 dark:bg-orange-950/20 rounded-xl p-3 border border-orange-200 dark:border-orange-800 text-center">
+                    <div className="text-base font-bold text-orange-600">{fmtMoney(totalDokon)}</div>
+                    <div className="text-[10px] text-orange-500 mt-0.5">Dokonga berishi</div>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-950/20 rounded-xl p-3 border border-green-200 dark:border-green-800 text-center">
+                    <div className="text-base font-bold text-green-600">{fmtMoney(totalHaq)}</div>
+                    <div className="text-[10px] text-green-500 mt-0.5">Ortiqcha to'lov</div>
+                  </div>
+                </div>
+
+                {/* Search + filter */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input placeholder="Mijoz qidirish..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
+                  </div>
+                  <button
+                    onClick={() => setShowOnlyDebt(!showOnlyDebt)}
+                    className={`h-9 px-3 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5 shrink-0 ${showOnlyDebt ? "bg-red-500 text-white border-red-500" : "bg-card border-border text-muted-foreground"}`}
+                  >
+                    <TrendingDown className="w-3.5 h-3.5" />Qarzdorlar
+                  </button>
+                  <Button variant="ghost" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={fetchNasiyaData}>
+                    <RefreshCw className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                {/* Client list */}
+                <div className="space-y-2">
+                  {filteredClients.length === 0 && <div className="text-center py-8 text-muted-foreground text-sm">Mijoz topilmadi</div>}
+                  {filteredClients.map(client => {
+                    const isExp = expandedClient === client.id;
+                    const bd = clientBreakdown(client.id);
+                    const bal = balNum(client.balance);
+                    return (
+                      <div key={client.id} className="bg-card rounded-xl border shadow-sm overflow-hidden">
+                        <div className="w-full text-left p-3 flex items-center gap-3">
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggleExpand(client.id)}>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-sm">{[client.firstName, client.lastName].filter(Boolean).join(" ") || "Noma'lum"}</span>
+                              {client.phone && <span className="text-xs text-muted-foreground flex items-center gap-0.5"><Phone className="w-3 h-3" />{client.phone}</span>}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {bal < 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 font-semibold">−{fmtMoney(bal)} qarz</span>}
+                              {bal > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 font-semibold">+{fmtMoney(bal)} haq</span>}
+                              {bal === 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">0</span>}
+                              {bd.dokonBerishi > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600">🏪 {fmtMoney(bd.dokonBerishi)}</span>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
+                              onClick={e => { e.stopPropagation(); setPayClient(client); setPayAmount(""); setPayNote(""); setPayType("tolov"); setPayServiceTypeId(""); }}>
+                              <Wallet className="w-3 h-3 mr-1" />To'lov
+                            </Button>
+                            <button className="text-muted-foreground" onClick={() => toggleExpand(client.id)}>
+                              {isExp ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </div>
+                        {isExp && (
+                          <div className="border-t">
+                            <div className="p-3 bg-muted/20 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                              {bd.qarz > 0 && <div className="flex justify-between bg-red-50 dark:bg-red-950/30 rounded-lg px-2 py-1.5"><span className="text-red-500">📋 Nasiya</span><span className="font-bold text-red-600">{fmtMoney(bd.qarz)}</span></div>}
+                              {bd.tolov > 0 && <div className="flex justify-between bg-purple-50 dark:bg-purple-950/30 rounded-lg px-2 py-1.5"><span className="text-purple-500">💰 To'lov</span><span className="font-bold text-purple-600">{fmtMoney(bd.tolov)}</span></div>}
+                              {bd.naqd > 0 && <div className="flex justify-between bg-green-50 dark:bg-green-950/30 rounded-lg px-2 py-1.5"><span className="text-green-500">💵 Naqd</span><span className="font-bold text-green-600">{fmtMoney(bd.naqd)}</span></div>}
+                              {bd.click > 0 && <div className="flex justify-between bg-blue-50 dark:bg-blue-950/30 rounded-lg px-2 py-1.5"><span className="text-blue-500">📲 Click</span><span className="font-bold text-blue-600">{fmtMoney(bd.click)}</span></div>}
+                              {bd.dokonga > 0 && <div className="flex justify-between bg-orange-50 dark:bg-orange-950/30 rounded-lg px-2 py-1.5"><span className="text-orange-500">🏪 Dokonga</span><span className="font-bold text-orange-600">{fmtMoney(bd.dokonga)}</span></div>}
+                              {bd.dokonBerishi > 0 && <div className="col-span-full flex justify-between bg-amber-50 dark:bg-amber-950/30 rounded-lg px-2 py-1.5 border border-amber-200"><span className="text-amber-700 font-semibold">🏪 Dokonga berishi kerak</span><span className="font-bold text-amber-700">{fmtMoney(bd.dokonBerishi)}</span></div>}
+                            </div>
+                            {clientTxLoading === client.id ? (
+                              <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin" /></div>
+                            ) : (
+                              <div className="divide-y divide-border/40 max-h-64 overflow-y-auto">
+                                {(clientTx[client.id] ?? []).length === 0 && <div className="text-center py-4 text-xs text-muted-foreground">Tranzaksiya yo'q</div>}
+                                {(clientTx[client.id] ?? []).map((tx: any) => {
+                                  const meta = TX_META[tx.type as TxType] ?? TX_META.tuzatish;
+                                  return (
+                                    <div key={tx.id} className="flex items-start justify-between px-3 py-2 text-xs">
+                                      <div className="flex items-start gap-2 flex-1 min-w-0">
+                                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${meta.color}`}>{meta.icon} {meta.label}</span>
+                                        <div className="min-w-0">
+                                          <div className="text-muted-foreground truncate">{tx.service_type_name || tx.note || "—"}</div>
+                                          {tx.order_code && <div className="text-muted-foreground/60">#{tx.order_code}</div>}
+                                          <div className="text-muted-foreground/50">{fmtDate(tx.created_at)}</div>
+                                        </div>
+                                      </div>
+                                      <div className="text-right shrink-0 ml-2">
+                                        <div className={`font-bold ${tx.type === "qarz" ? "text-red-500" : tx.type === "tolov" ? "text-purple-600" : tx.type === "naqd" ? "text-green-600" : tx.type === "click" ? "text-blue-600" : tx.type === "dokonga" ? "text-orange-600" : "text-foreground"}`}>
+                                          {tx.type === "qarz" ? "−" : "+"}{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}
+                                        </div>
+                                        <div className="text-muted-foreground/50 text-[10px]">Bal: {balNum(tx.balance_after) < 0 ? `−${fmtMoney(balNum(tx.balance_after))}` : `+${fmtMoney(balNum(tx.balance_after))}`}</div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ===== DOKON VIEW ===== */}
+      {view === "dokon" && (() => {
+        // Summary calculations from dokonOrders + dokonTx
+        const ordNaqd    = dokonOrders.filter(o => o.payment_type === "naqd").reduce((s, o) => s + parseFloat(o.price ?? "0"), 0);
+        const ordClick   = dokonOrders.filter(o => o.payment_type === "click").reduce((s, o) => s + parseFloat(o.price ?? "0"), 0);
+        const ordDokonga = dokonOrders.filter(o => o.payment_type === "dokonga").reduce((s, o) => s + parseFloat(o.price ?? "0"), 0);
+        const ordQarz    = dokonOrders.filter(o => o.payment_type === "qarz").reduce((s, o) => s + parseFloat(o.price ?? "0"), 0);
+        const dokonJami  = ordNaqd + ordClick + ordDokonga;
+        const txTolov    = dokonTx.filter(t => t.type === "tolov").reduce((s, t) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
+        const txNaqd     = dokonTx.filter(t => t.type === "naqd").reduce((s, t) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
+        const txClick    = dokonTx.filter(t => t.type === "click").reduce((s, t) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
+        const txDokonga  = dokonTx.filter(t => t.type === "dokonga").reduce((s, t) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
+        const txQarz     = dokonTx.filter(t => t.type === "qarz").reduce((s, t) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
+
+        return (
+          <div className="space-y-4">
+            {/* Date + filters */}
+            <div className="flex flex-wrap gap-2 items-center">
+              <Input type="date" value={dokonDate} onChange={e => setDokonDate(e.target.value)} className="h-9 w-44" />
+              {clients.length > 0 && (
+                <select
+                  className="h-9 rounded-lg border border-border bg-card text-sm px-2 max-w-[180px]"
+                  value={dokonClientId ?? ""}
+                  onChange={e => setDokonClientId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">— Barcha mijozlar —</option>
+                  {clients.map((c: any) => (
+                    <option key={c.id} value={c.id}>{[c.firstName, c.lastName].filter(Boolean).join(" ") || c.phone || `#${c.id}`}</option>
+                  ))}
+                </select>
+              )}
+              {serviceTypes.length > 0 && (
+                <select
+                  className="h-9 rounded-lg border border-border bg-card text-sm px-2 max-w-[160px]"
+                  value={dokonServiceTypeId ?? ""}
+                  onChange={e => setDokonServiceTypeId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">— Barcha xizmatlar —</option>
+                  {serviceTypes.map((s: any) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              )}
+              <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={fetchDokon} disabled={dokonLoading}>
+                {dokonLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Yangilash
+              </Button>
+            </div>
+
+            {dokonLoading ? (
+              <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+            ) : (
+              <>
+                {/* Payment summary cards */}
+                <div className="grid grid-cols-2 gap-2">
+                  <Card className="border-amber-200 dark:border-amber-800 col-span-2">
+                    <CardContent className="p-3">
+                      <div className="text-xs font-medium text-muted-foreground mb-2">
+                        📅 {new Date(dokonDate + "T12:00:00").toLocaleDateString("uz-UZ", { day: "2-digit", month: "long", year: "numeric" })} — Zakazlar hisobi
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                        <div><span className="text-muted-foreground text-xs">Zakazlar: </span><b>{dokonOrders.length} ta</b></div>
+                        {dokonOrders.length > 0 && (
+                          <div><span className="text-muted-foreground text-xs">Jami summa: </span><b className="text-amber-600">{fmtMoney(dokonOrders.reduce((s, o) => s + parseFloat(o.price ?? "0"), 0))} so'm</b></div>
+                        )}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {ordNaqd > 0 && <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 px-2 py-1 rounded-full font-semibold">💵 Naqd: {fmtMoney(ordNaqd)}</span>}
+                        {ordClick > 0 && <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 px-2 py-1 rounded-full font-semibold">📲 Click: {fmtMoney(ordClick)}</span>}
+                        {ordDokonga > 0 && <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 px-2 py-1 rounded-full font-semibold">🏪 Dokonga: {fmtMoney(ordDokonga)}</span>}
+                        {ordQarz > 0 && <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 px-2 py-1 rounded-full font-semibold">📋 Nasiya: {fmtMoney(ordQarz)}</span>}
+                        {dokonJami > 0 && <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 px-2 py-1 rounded-full font-bold border border-amber-300">🏪 Dokonga jami: {fmtMoney(dokonJami)}</span>}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {(txTolov > 0 || txNaqd > 0 || txClick > 0 || txDokonga > 0 || txQarz > 0) && (
+                    <Card className="border-purple-200 dark:border-purple-800 col-span-2">
+                      <CardContent className="p-3">
+                        <div className="text-xs font-medium text-muted-foreground mb-2">💰 Mijozlar tranzaksiyalari (nasiya to'lovlari)</div>
+                        <div className="flex flex-wrap gap-2">
+                          {txTolov > 0 && <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 px-2 py-1 rounded-full font-semibold">💰 Qarz uzildi: {fmtMoney(txTolov)}</span>}
+                          {txNaqd > 0 && <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 px-2 py-1 rounded-full font-semibold">💵 Naqd tx: {fmtMoney(txNaqd)}</span>}
+                          {txClick > 0 && <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 px-2 py-1 rounded-full font-semibold">📲 Click tx: {fmtMoney(txClick)}</span>}
+                          {txDokonga > 0 && <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 px-2 py-1 rounded-full font-semibold">🏪 Dokonga tx: {fmtMoney(txDokonga)}</span>}
+                          {txQarz > 0 && <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 px-2 py-1 rounded-full font-semibold">📋 Yangi nasiya: {fmtMoney(txQarz)}</span>}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+
+                {/* Order list */}
+                {dokonOrders.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">Bu sanada zakazlar topilmadi</div>
+                ) : (
+                  <Card className="overflow-hidden">
+                    <div className="px-4 py-2.5 bg-muted/50 text-sm font-semibold">Zakazlar ro'yxati ({dokonOrders.length} ta)</div>
+                    <div className="divide-y divide-border/40">
+                      {dokonOrders.map((o: any) => {
+                        const pmeta = o.payment_type ? PAYMENT_META[o.payment_type as string] : null;
+                        const price = fmtPrice(o.price);
+                        const qty = fmtQty(o.quantity, o.unit);
+                        return (
+                          <div key={o.id} className="px-4 py-2.5">
+                            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                              <div className="text-xs text-muted-foreground w-10 shrink-0">{fmtTime(o.created_at)}</div>
+                              <div className="flex-1 min-w-0">
+                                <span className="font-medium text-sm">{o.service_type_name}</span>
+                                {o.client_name && <span className="ml-2 text-xs text-muted-foreground">{o.client_name}</span>}
+                                {o.client_phone && <span className="ml-1 text-xs text-muted-foreground">· {o.client_phone}</span>}
+                              </div>
+                              <div className="flex items-center gap-2 text-xs shrink-0">
+                                {qty && <span className="text-muted-foreground">{qty}</span>}
+                                {pmeta && <span className={`px-1.5 py-0.5 rounded border text-[10px] font-bold ${pmeta.cls}`}>{pmeta.icon} {pmeta.label}</span>}
+                                {price && <span className="font-bold text-amber-600 dark:text-amber-400">{price}</span>}
+                                <span className="text-muted-foreground/50">#{o.order_id ?? o.id}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                )}
+
+                {/* Client tx list */}
+                {dokonTx.length > 0 && (
+                  <Card className="overflow-hidden">
+                    <div className="px-4 py-2.5 bg-muted/50 text-sm font-semibold">Nasiya tranzaksiyalari ({dokonTx.length} ta)</div>
+                    <div className="divide-y divide-border/40">
+                      {dokonTx.map((tx: any) => {
+                        const meta = TX_META[tx.type as TxType] ?? TX_META.tuzatish;
+                        return (
+                          <div key={tx.id} className="px-4 py-2 flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${meta.color}`}>{meta.icon} {meta.label}</span>
+                              <div className="min-w-0">
+                                <div className="font-medium truncate">{tx.client_name ?? "Noma'lum"}</div>
+                                {tx.client_phone && <div className="text-muted-foreground">{tx.client_phone}</div>}
+                                <div className="text-muted-foreground/60">{tx.service_type_name || tx.note || ""}</div>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0 ml-3">
+                              <div className={`font-bold ${tx.type === "qarz" ? "text-red-500" : tx.type === "tolov" ? "text-purple-600" : tx.type === "naqd" ? "text-green-600" : tx.type === "click" ? "text-blue-600" : tx.type === "dokonga" ? "text-orange-600" : "text-foreground"}`}>
+                                {tx.type === "qarz" ? "−" : "+"}{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}
+                              </div>
+                              <div className="text-muted-foreground/50">{fmtTime(tx.created_at)}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Payment Modal (Mijozlar view) */}
+      <Dialog open={!!payClient} onOpenChange={v => { if (!v) setPayClient(null); }}>
+        <DialogContent className="w-full max-w-sm mx-4">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Wallet className="w-5 h-5 text-primary" />To'lov yozish</DialogTitle>
+            <DialogDescription>
+              {payClient && [payClient.firstName, payClient.lastName].filter(Boolean).join(" ")}
+              {payClient && (
+                <span className={`ml-2 font-bold ${balNum(payClient.balance) < 0 ? "text-red-500" : "text-green-600"}`}>
+                  ({balNum(payClient.balance) < 0 ? `−${fmtMoney(balNum(payClient.balance))} qarz` : `+${fmtMoney(balNum(payClient.balance))}`})
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-1.5">
+              {(["tolov", "naqd", "click", "dokonga", "qarz", "tuzatish"] as TxType[]).map(t => {
+                const m = TX_META[t];
+                return (
+                  <button key={t} onClick={() => setPayType(t)}
+                    className={`py-2 rounded-lg text-xs font-bold border-2 transition-all ${payType === t ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground"}`}>
+                    {m.icon} {m.label}
+                  </button>
+                );
+              })}
+            </div>
+            <Input type="text" inputMode="numeric" placeholder="0" value={payAmount}
+              onChange={e => setPayAmount(fmtAmt(e.target.value))} className="text-xl font-bold h-12 text-center tabular-nums" autoFocus />
+            {nasiyaServiceTypes.length > 0 && (
+              <Select value={payServiceTypeId || "__none__"} onValueChange={v => setPayServiceTypeId(v === "__none__" ? "" : v)}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Xizmat turi (ixtiyoriy)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Tanlang —</SelectItem>
+                  {nasiyaServiceTypes.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+            <Input placeholder="Izoh (ixtiyoriy)" value={payNote} onChange={e => setPayNote(e.target.value)} className="h-9 text-sm" />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPayClient(null)} disabled={payLoading}>Bekor</Button>
+            <Button disabled={payLoading || !payAmount} onClick={doPayment} className="gap-2">
+              {payLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BadgeCheck className="w-4 h-4" />}
+              Saqlash
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
