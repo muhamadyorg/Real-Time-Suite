@@ -154,7 +154,7 @@ router.post("/:clientId/transaction", async (req, res) => {
 
     const clientId = parseInt(req.params.clientId);
     const {
-      type,       // "qarz" | "tolov" | "tuzatish" | "naqd"
+      type,       // "qarz" | "tolov" | "tuzatish" | "naqd" | "click" | "dokonga"
       amount,     // musbat son
       sign,       // "plus" | "minus" — tuzatish va tolov uchun
       serviceTypeId,
@@ -162,7 +162,7 @@ router.post("/:clientId/transaction", async (req, res) => {
       orderCode,
       note,
     } = req.body as {
-      type: "qarz" | "tolov" | "tuzatish" | "naqd";
+      type: "qarz" | "tolov" | "tuzatish" | "naqd" | "click" | "dokonga";
       amount: number;
       sign?: "plus" | "minus";
       serviceTypeId?: number;
@@ -172,8 +172,9 @@ router.post("/:clientId/transaction", async (req, res) => {
     };
 
     if (!type) { res.status(400).json({ error: "Tranzaksiya turi ko'rsatilmagan" }); return; }
-    // Naqd uchun amount 0 bo'lishi mumkin (summa kiritilmasa)
-    if (type !== "naqd" && (!amount || amount <= 0)) { res.status(400).json({ error: "Summa noto'g'ri" }); return; }
+    // Naqd/click/dokonga uchun amount 0 bo'lishi mumkin
+    const noAmountTypes = ["naqd", "click", "dokonga"];
+    if (!noAmountTypes.includes(type) && (!amount || amount <= 0)) { res.status(400).json({ error: "Summa noto'g'ri" }); return; }
     const safeAmount = amount ?? 0;
 
     // Ruxsatlar
@@ -218,8 +219,8 @@ router.post("/:clientId/transaction", async (req, res) => {
     } else if (type === "tuzatish") {
       if (!isSuperUser) { res.status(403).json({ error: "Tuzatish faqat admin uchun" }); return; }
       delta = sign === "minus" ? -Math.abs(safeAmount) : Math.abs(safeAmount);
-    } else if (type === "naqd") {
-      delta = 0; // Naqd — balancega ta'sir qilmaydi
+    } else if (type === "naqd" || type === "click" || type === "dokonga") {
+      delta = 0; // Naqd/click/dokonga — balancega ta'sir qilmaydi, faqat qayd uchun
     }
 
     const balanceAfter = balanceBefore + delta;
@@ -249,7 +250,7 @@ router.post("/:clientId/transaction", async (req, res) => {
     res.status(201).json({ transaction: tx, balance: balanceAfter });
 
     // Telegram bildirishnomalar (fon rejimida, javobni kutmasdan)
-    const typeLabel = type === "qarz" ? "📦 Nasiya" : type === "tolov" ? "💰 To'lov" : type === "tuzatish" ? "✏️ Tuzatish" : "💵 Naqd";
+    const typeLabel = type === "qarz" ? "📦 Nasiya" : type === "tolov" ? "💰 To'lov" : type === "tuzatish" ? "✏️ Tuzatish" : type === "click" ? "📲 Click" : type === "dokonga" ? "🏪 Dokonga" : "💵 Naqd";
     const balanceSign = balanceAfter < 0 ? "−" : balanceAfter > 0 ? "+" : "";
     const balanceStr = `${balanceSign}${Math.abs(balanceAfter).toLocaleString("uz-UZ", { maximumFractionDigits: 0 })} so'm`;
     const balanceLabel = balanceAfter < 0 ? "🔴 Qarz" : balanceAfter > 0 ? "🟢 Haq" : "⚪ Nol";

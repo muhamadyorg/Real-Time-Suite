@@ -202,53 +202,63 @@ router.get("/orders", async (req, res) => {
     const conditions: string[] = ["store_id = $1"];
     const params: any[] = [storeId];
 
+    const oConditions: string[] = ["o.store_id = $1"];
+
     if (days && !periodStart && !periodEnd) {
       params.push(days);
-      conditions.push(`created_at >= NOW() - ($${params.length} || ' days')::interval`);
+      oConditions.push(`o.created_at >= NOW() - ($${params.length} || ' days')::interval`);
     }
     if (periodStart) {
       params.push(periodStart);
-      conditions.push(`(created_at + interval '5 hours') >= $${params.length}::timestamptz`);
+      oConditions.push(`(o.created_at + interval '5 hours') >= $${params.length}::timestamptz`);
     }
     if (periodEnd) {
       params.push(periodEnd);
-      conditions.push(`(created_at + interval '5 hours') < $${params.length}::timestamptz`);
+      oConditions.push(`(o.created_at + interval '5 hours') < $${params.length}::timestamptz`);
     }
     if (serviceTypeId) {
       params.push(serviceTypeId);
-      conditions.push(`service_type_id = $${params.length}`);
+      oConditions.push(`o.service_type_id = $${params.length}`);
     }
     if (serviceTypeIds?.length) {
       params.push(serviceTypeIds);
-      conditions.push(`service_type_id = ANY($${params.length}::int[])`);
+      oConditions.push(`o.service_type_id = ANY($${params.length}::int[])`);
     }
     if (clientId) {
       params.push(clientId);
-      conditions.push(`client_id = $${params.length}`);
+      oConditions.push(`o.client_id = $${params.length}`);
     }
 
     const sql = `
       SELECT
-        id,
-        order_id,
-        service_type_id,
-        service_type_name,
-        client_id,
-        client_name,
-        client_phone,
-        quantity,
-        unit,
-        output_quantity,
-        output_unit,
-        price,
-        extra_fields,
-        notes,
-        status,
-        created_at,
-        (date_trunc('day', created_at + interval '5 hours'))::date AS day
-      FROM orders
-      WHERE ${conditions.join(" AND ")}
-      ORDER BY created_at DESC
+        o.id,
+        o.order_id,
+        o.service_type_id,
+        o.service_type_name,
+        o.client_id,
+        o.client_name,
+        o.client_phone,
+        o.quantity,
+        o.unit,
+        o.output_quantity,
+        o.output_unit,
+        o.price,
+        o.extra_fields,
+        o.notes,
+        o.status,
+        o.created_at,
+        (date_trunc('day', o.created_at + interval '5 hours'))::date AS day,
+        ct.type AS payment_type,
+        ct.amount AS payment_amount
+      FROM orders o
+      LEFT JOIN LATERAL (
+        SELECT type, amount FROM client_transactions
+        WHERE order_id = o.id
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) ct ON true
+      WHERE ${oConditions.join(" AND ")}
+      ORDER BY o.created_at DESC
       LIMIT 500
     `;
 

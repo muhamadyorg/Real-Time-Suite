@@ -5,7 +5,7 @@ import { accountsTable } from "./accounts";
 import { serviceTypesTable } from "./service_types";
 import { ordersTable } from "./orders";
 
-export const transactionTypeEnum = pgEnum("transaction_type", ["naqd", "qarz", "tolov", "tuzatish"]);
+export const transactionTypeEnum = pgEnum("transaction_type", ["naqd", "qarz", "tolov", "tuzatish", "click", "dokonga"]);
 
 export const clientAccountsTable = pgTable("client_accounts", {
   id: serial("id").primaryKey(),

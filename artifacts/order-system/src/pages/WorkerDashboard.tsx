@@ -748,7 +748,7 @@ export default function WorkerDashboard() {
   const [summaryAmount, setSummaryAmount] = useState("");
   // Olib ketildi bosqidagi payment modal (nasiya)
   const [paymentOrder, setPaymentOrder] = useState<any>(null);
-  const [paymentMode, setPaymentMode] = useState<"naqd" | "qarz">("naqd");
+  const [paymentMode, setPaymentMode] = useState<"naqd" | "qarz" | "click" | "dokonga">("naqd");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [clientBalance, setClientBalance] = useState<number>(0);
   const [clientInfo, setClientInfo] = useState<any>(null);
@@ -890,8 +890,9 @@ export default function WorkerDashboard() {
             serviceTypeId: paymentOrder.serviceTypeId,
             orderId: paymentOrder.id,
             orderCode: paymentOrder.orderId,
-            note: paymentMode === "naqd"
-              ? `Zakaz ${paymentOrder.orderId} — naqd to'lov`
+            note: paymentMode === "naqd" ? `Zakaz ${paymentOrder.orderId} — naqd to'lov`
+              : paymentMode === "click" ? `Zakaz ${paymentOrder.orderId} — Click to'lov`
+              : paymentMode === "dokonga" ? `Zakaz ${paymentOrder.orderId} — Dokonga berildi`
               : `Zakaz ${paymentOrder.orderId} uchun nasiya`,
             storeId,
           }),
@@ -906,7 +907,8 @@ export default function WorkerDashboard() {
         { id: paymentOrder.id, data: { status: "topshirildi" } as any },
         {
           onSuccess: () => {
-            toast({ title: paymentMode === "qarz" ? "✅ Olib ketildi! Qarz yozildi" : "✅ Olib ketildi!" });
+            const msgs: Record<string, string> = { qarz: "✅ Olib ketildi! Qarz yozildi", click: "✅ Olib ketildi! Click", dokonga: "✅ Olib ketildi! Dokonga", naqd: "✅ Olib ketildi!" };
+            toast({ title: msgs[paymentMode] ?? "✅ Olib ketildi!" });
             queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
             setPaymentOrder(null);
           },
@@ -1505,30 +1507,27 @@ export default function WorkerDashboard() {
                 </div>
               )}
 
-              {/* Naqd / Qarz tanlash */}
+              {/* To'lov turini tanlash */}
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setPaymentMode("naqd")}
-                  className={`h-14 rounded-xl font-bold text-base border-2 transition-all ${paymentMode === "naqd" ? "bg-green-500 text-white border-green-500 shadow" : "border-border bg-card text-muted-foreground hover:border-green-400"}`}
-                >
+                <button onClick={() => setPaymentMode("naqd")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${paymentMode === "naqd" ? "bg-green-500 text-white border-green-500 shadow" : "border-border bg-card text-muted-foreground hover:border-green-400"}`}>
                   💵 NAQD
                 </button>
-                <button
-                  onClick={() => setPaymentMode("qarz")}
-                  className={`h-14 rounded-xl font-bold text-base border-2 transition-all ${paymentMode === "qarz" ? "bg-red-500 text-white border-red-500 shadow" : "border-border bg-card text-muted-foreground hover:border-red-400"}`}
-                >
+                <button onClick={() => setPaymentMode("click")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${paymentMode === "click" ? "bg-blue-500 text-white border-blue-500 shadow" : "border-border bg-card text-muted-foreground hover:border-blue-400"}`}>
+                  📲 CLICK
+                </button>
+                <button onClick={() => setPaymentMode("dokonga")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${paymentMode === "dokonga" ? "bg-orange-500 text-white border-orange-500 shadow" : "border-border bg-card text-muted-foreground hover:border-orange-400"}`}>
+                  🏪 DOKONGA
+                </button>
+                <button onClick={() => setPaymentMode("qarz")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${paymentMode === "qarz" ? "bg-red-500 text-white border-red-500 shadow" : "border-border bg-card text-muted-foreground hover:border-red-400"}`}>
                   📋 QARZ
                 </button>
               </div>
 
-              {/* Qarz bo'lsa — yangi balans preview */}
               {paymentMode === "qarz" && paymentOrder?.price && (
                 <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-3 text-sm space-y-1">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Hozir:</span>
-                    <span className={`font-semibold ${clientBalance < 0 ? "text-red-500" : "text-green-600"}`}>
-                      {clientBalance >= 0 ? "+" : ""}{clientBalance.toLocaleString("uz-UZ")} so'm
-                    </span>
+                    <span className={`font-semibold ${clientBalance < 0 ? "text-red-500" : "text-green-600"}`}>{clientBalance >= 0 ? "+" : ""}{clientBalance.toLocaleString("uz-UZ")} so'm</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Qarz qo'shiladi:</span>
@@ -1542,9 +1541,9 @@ export default function WorkerDashboard() {
                   </div>
                 </div>
               )}
-              {paymentMode === "naqd" && (
-                <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-2 text-xs text-green-700 dark:text-green-400 text-center">
-                  💵 Naqd to'lov — mijoz qarz hisobiga ta'sir etmaydi
+              {(paymentMode === "naqd" || paymentMode === "click" || paymentMode === "dokonga") && (
+                <div className={`rounded-lg p-2 text-xs text-center ${paymentMode === "naqd" ? "bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400" : paymentMode === "click" ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400" : "bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400"}`}>
+                  {paymentMode === "naqd" ? "💵 Naqd — qarz hisobiga ta'sir etmaydi" : paymentMode === "click" ? "📲 Click to'lov — qarz hisobiga ta'sir etmaydi" : "🏪 Dokonga beriladi — qarz hisobiga ta'sir etmaydi"}
                 </div>
               )}
             </div>
@@ -1553,12 +1552,12 @@ export default function WorkerDashboard() {
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setPaymentOrder(null)} disabled={paymentLoading}>Bekor</Button>
             <Button
-              className={`gap-2 ${paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : "bg-purple-600 hover:bg-purple-700"} text-white`}
+              className={`gap-2 ${paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : paymentMode === "click" ? "bg-blue-600 hover:bg-blue-700" : paymentMode === "dokonga" ? "bg-orange-500 hover:bg-orange-600" : "bg-purple-600 hover:bg-purple-700"} text-white`}
               disabled={paymentLoading || clientBalanceLoading}
               onClick={doDeliverWithPayment}
             >
               {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4" />}
-              {paymentMode === "qarz" ? "Qarz yozib olib ketildi!" : "Olib ketildi!"}
+              {paymentMode === "qarz" ? "Qarz yozib olib ketildi!" : paymentMode === "click" ? "Click — Olib ketildi!" : paymentMode === "dokonga" ? "Dokonga — Olib ketildi!" : "Olib ketildi!"}
             </Button>
           </DialogFooter>
         </DialogContent>

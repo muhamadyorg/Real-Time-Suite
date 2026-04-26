@@ -133,10 +133,21 @@ const fmtGroupHeader = (key: string, p: Period): string => {
   return `${fmtDay(key)} – ${fmtDay(end.toISOString().slice(0, 10))}`;
 };
 
+// Payment type badge
+const PAYMENT_META: Record<string, { label: string; icon: string; cls: string }> = {
+  naqd:    { label: "Naqd",    icon: "💵", cls: "text-green-600 bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800" },
+  click:   { label: "Click",   icon: "📲", cls: "text-blue-600 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800" },
+  dokonga: { label: "Dokonga", icon: "🏪", cls: "text-orange-600 bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800" },
+  qarz:    { label: "Nasiya",  icon: "📋", cls: "text-red-600 bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800" },
+  tolov:   { label: "To'lov",  icon: "💰", cls: "text-purple-600 bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800" },
+};
+
 export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsViewProps) {
   const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
   const [period, setPeriod] = useState<Period>("daily");
   const [selTypes, setSelTypes] = useState<number[]>([]);
+  const [selClientId, setSelClientId] = useState<number | null>(null);
+  const [clients, setClients] = useState<any[]>([]);
   const [view, setView] = useState<"batafsil" | "jami">("batafsil");
 
   // Aggregated
@@ -157,34 +168,44 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   const [drillOrders, setDrillOrders] = useState<any[]>([]);
   const [drillLoading, setDrillLoading] = useState(false);
 
+  // Fetch clients for filter
+  useEffect(() => {
+    fetch(`${apiBase}/api/client-accounts`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setClients(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [storeId, token, apiBase]);
+
   const fetchAgg = useCallback(async () => {
     setAggLoading(true);
     try {
       const ids = selTypes.length ? `&serviceTypeIds=${selTypes.join(",")}` : "";
+      const cid = selClientId ? `&clientId=${selClientId}` : "";
       let url: string;
       if (useSpecificDate && specificDate) {
-        url = `${apiBase}/api/analytics?storeId=${storeId}&period=daily&date=${specificDate}${ids}`;
+        url = `${apiBase}/api/analytics?storeId=${storeId}&period=daily&date=${specificDate}${ids}${cid}`;
       } else {
-        url = `${apiBase}/api/analytics?storeId=${storeId}&period=${period}&days=${PERIOD_DAYS[period]}${ids}`;
+        url = `${apiBase}/api/analytics?storeId=${storeId}&period=${period}&days=${PERIOD_DAYS[period]}${ids}${cid}`;
       }
       const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (r.ok) setAggData(await r.json());
     } catch {}
     setAggLoading(false);
-  }, [storeId, period, selTypes, token, apiBase, useSpecificDate, specificDate]);
+  }, [storeId, period, selTypes, selClientId, token, apiBase, useSpecificDate, specificDate]);
 
   const fetchOrders = useCallback(async () => {
     setOrdersLoading(true);
     try {
       const ids = selTypes.length ? `&serviceTypeIds=${selTypes.join(",")}` : "";
+      const cid = selClientId ? `&clientId=${selClientId}` : "";
       const r = await fetch(
-        `${apiBase}/api/analytics/orders?storeId=${storeId}&days=${PERIOD_DAYS[period]}${ids}`,
+        `${apiBase}/api/analytics/orders?storeId=${storeId}&days=${PERIOD_DAYS[period]}${ids}${cid}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (r.ok) setOrders(await r.json());
     } catch {}
     setOrdersLoading(false);
-  }, [storeId, period, selTypes, token, apiBase]);
+  }, [storeId, period, selTypes, selClientId, token, apiBase]);
 
   const fetchAll = useCallback(async () => {
     await Promise.all([fetchAgg(), fetchOrders()]);
@@ -367,7 +388,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
       {/* Service type filter */}
       {serviceTypes.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          <span className="text-xs text-muted-foreground self-center">Filtr:</span>
+          <span className="text-xs text-muted-foreground self-center">Xizmat:</span>
           {serviceTypes.map(st => {
             const sel = selTypes.includes(st.id);
             return (
@@ -381,6 +402,28 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
           })}
           {selTypes.length > 0 && (
             <button onClick={() => setSelTypes([])} className="text-xs text-muted-foreground hover:text-foreground underline">Barchasi</button>
+          )}
+        </div>
+      )}
+
+      {/* Client filter */}
+      {clients.length > 0 && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-xs text-muted-foreground">Mijoz:</span>
+          <select
+            className="h-8 rounded-lg border border-border bg-card text-sm px-2 pr-6 text-foreground max-w-[200px]"
+            value={selClientId ?? ""}
+            onChange={e => setSelClientId(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">— Barcha mijozlar —</option>
+            {clients.map((c: any) => (
+              <option key={c.id} value={c.id}>
+                {[c.firstName, c.lastName].filter(Boolean).join(" ") || c.phone || `#${c.id}`}
+              </option>
+            ))}
+          </select>
+          {selClientId && (
+            <button onClick={() => setSelClientId(null)} className="text-xs text-muted-foreground hover:text-foreground underline">Tozalash</button>
           )}
         </div>
       )}
@@ -426,6 +469,17 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                 const collapsed = collapsedDays.has(group.day);
                 const dayBalon = calcBalonFromOrders(group.orders);
                 const dayBalonStr = fmtBalon(dayBalon.metr, dayBalon.sm, dayBalon.kardon);
+
+                // Payment breakdown for this group
+                const payBrk: Record<string, number> = {};
+                for (const o of group.orders) {
+                  const t = o.payment_type as string | null;
+                  if (t) payBrk[t] = (payBrk[t] ?? 0) + Math.abs(parseFloat(o.price ?? "0"));
+                }
+                const dokongaBerish = (payBrk.naqd ?? 0) + (payBrk.click ?? 0) + (payBrk.dokonga ?? 0);
+                const qarzSum = payBrk.qarz ?? 0;
+                const hasPayBreakdown = Object.keys(payBrk).length > 0;
+
                 return (
                   <Card key={group.day} className="overflow-hidden">
                     {/* Day header */}
@@ -448,19 +502,40 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                       </div>
                     </button>
 
+                    {/* Payment breakdown row (always visible if exists) */}
+                    {hasPayBreakdown && (
+                      <div className="px-4 py-1.5 bg-muted/20 border-b border-border/40 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                        {payBrk.naqd > 0 && <span className="text-green-600">💵 {fmtMoney(payBrk.naqd)}</span>}
+                        {payBrk.click > 0 && <span className="text-blue-600">📲 {fmtMoney(payBrk.click)}</span>}
+                        {payBrk.dokonga > 0 && <span className="text-orange-600">🏪 {fmtMoney(payBrk.dokonga)}</span>}
+                        {qarzSum > 0 && <span className="text-red-600">📋 {fmtMoney(qarzSum)} nasiya</span>}
+                        {payBrk.tolov > 0 && <span className="text-purple-600">💰 {fmtMoney(payBrk.tolov)} to'lov</span>}
+                        {dokongaBerish > 0 && (
+                          <span className="ml-auto font-semibold text-amber-700 dark:text-amber-400">🏪 Dokonga: {fmtMoney(dokongaBerish)}</span>
+                        )}
+                      </div>
+                    )}
+
                     {/* Order rows */}
                     {!collapsed && (
                       <div className="divide-y divide-border/40">
                         {group.orders.map((o: any) => {
                           const price = fmtPrice(o.price);
                           const qty = fmtQty(o.quantity, o.unit);
+                          const pmeta = o.payment_type ? PAYMENT_META[o.payment_type as string] : null;
                           return (
                             <div key={o.id} className="px-4 py-2.5">
                               {/* Mobile layout */}
                               <div className="flex items-center justify-between gap-2 sm:hidden">
                                 <div className="flex-1 min-w-0">
-                                  <div className="font-medium text-sm truncate">{o.service_type_name}</div>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-medium text-sm">{o.service_type_name}</span>
+                                    {pmeta && (
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${pmeta.cls}`}>{pmeta.icon} {pmeta.label}</span>
+                                    )}
+                                  </div>
                                   {o.client_name && <div className="text-xs text-muted-foreground truncate">{o.client_name}</div>}
+                                  <div className="text-[10px] text-muted-foreground/60">{fmtTime(o.created_at)} · #{o.order_id ?? o.id}</div>
                                 </div>
                                 <div className="text-right shrink-0">
                                   {qty && <div className="text-xs">{qty}</div>}
@@ -470,7 +545,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                                 </div>
                               </div>
                               {/* Desktop layout */}
-                              <div className="hidden sm:flex items-center gap-4 text-sm">
+                              <div className="hidden sm:flex items-center gap-3 text-sm">
                                 <div className="text-xs text-muted-foreground w-10 shrink-0">{fmtTime(o.created_at)}</div>
                                 <div className="flex-1 min-w-0">
                                   <span className="font-medium">{o.service_type_name}</span>
@@ -478,7 +553,10 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                                   {o.client_phone && <span className="ml-1 text-xs text-muted-foreground">· {o.client_phone}</span>}
                                 </div>
                                 <div className="text-xs w-24 text-right">{qty ?? "—"}</div>
-                                <div className="text-xs w-32 text-right">
+                                {pmeta && (
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold shrink-0 ${pmeta.cls}`}>{pmeta.icon} {pmeta.label}</span>
+                                )}
+                                <div className="text-xs w-28 text-right">
                                   {price
                                     ? <span className="font-semibold text-amber-600 dark:text-amber-400">{price}</span>
                                     : <span className="text-muted-foreground italic">narx yo'q</span>}
