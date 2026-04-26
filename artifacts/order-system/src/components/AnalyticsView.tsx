@@ -405,7 +405,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                                     ? <span className="font-semibold text-amber-600 dark:text-amber-400">{price}</span>
                                     : <span className="text-muted-foreground italic">narx yo'q</span>}
                                 </div>
-                                <div className="text-xs text-muted-foreground w-16 text-right">#{o.order_code ?? o.order_id ?? o.id}</div>
+                                <div className="text-xs text-muted-foreground w-16 text-right">#{o.order_id ?? o.id}</div>
                               </div>
                             </div>
                           );

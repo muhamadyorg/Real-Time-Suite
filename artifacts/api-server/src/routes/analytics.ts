@@ -231,7 +231,6 @@ router.get("/orders", async (req, res) => {
       SELECT
         id,
         order_id,
-        order_code,
         service_type_id,
         service_type_name,
         client_id,
