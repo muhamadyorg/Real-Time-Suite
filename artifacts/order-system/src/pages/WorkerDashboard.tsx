@@ -869,19 +869,18 @@ export default function WorkerDashboard() {
   };
 
   // Nasiya zakaz uchun olib ketildi bosqichi: naqd/qarz + tranzaksiya
+  // Summa — tayyor bosqichida kiritilgan narxdan olinadi (paymentOrder.price)
   const doDeliverWithPayment = async () => {
     if (!paymentOrder || !storeId) return;
-    const amount = wParseAmt(paymentAmount);
-    if (paymentMode === "qarz" && (!paymentAmount || amount <= 0)) {
-      toast({ title: "Summa kiriting", variant: "destructive" }); return;
+    const orderPrice = paymentOrder.price ? Number(paymentOrder.price) : 0;
+    if (orderPrice <= 0) {
+      toast({ title: "Zakaz summasi kiritilmagan", variant: "destructive" }); return;
     }
     setPaymentLoading(true);
     try {
       const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
       if (paymentOrder.clientId) {
-        const txAmount = paymentMode === "naqd"
-          ? (paymentAmount && amount > 0 ? amount : 0)
-          : amount;
+        const txAmount = orderPrice;
         const txRes = await fetch(`${apiBase}/api/client-accounts/${paymentOrder.clientId}/transaction`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -1480,25 +1479,27 @@ export default function WorkerDashboard() {
             <div className="flex justify-center py-6"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
           ) : (
             <div className="space-y-4 py-1">
-              {/* Mijoz ma'lumotlari + balans */}
+              {/* Zakaz summasi — tayyor bosqichida kiritilgan narx */}
+              <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl p-3 flex justify-between items-center">
+                <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Zakaz summasi</span>
+                <span className="text-xl font-black tabular-nums text-amber-700 dark:text-amber-400">
+                  {paymentOrder?.price ? Number(paymentOrder.price).toLocaleString("uz-UZ") : "—"} <span className="text-sm font-normal">so'm</span>
+                </span>
+              </div>
+
+              {/* Mijoz balansi */}
               {clientInfo && (
                 <div className="bg-muted/40 rounded-xl p-3 space-y-2">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <User className="w-4 h-4 text-muted-foreground" />
                     {clientInfo.firstName} {clientInfo.lastName}
                   </div>
-                  {clientInfo.phone && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Phone className="w-3.5 h-3.5" />
-                      {clientInfo.phone}
-                    </div>
-                  )}
                   <div className="flex items-center justify-between pt-1 border-t border-border/50">
                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                       <Wallet className="w-3.5 h-3.5" />Hozirgi holat:
                     </span>
                     <span className={`text-base font-bold tabular-nums ${clientBalance < 0 ? "text-red-500" : clientBalance > 0 ? "text-green-600" : "text-muted-foreground"}`}>
-                      {clientBalance < 0 ? `−${Math.abs(clientBalance).toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm qarz` : clientBalance > 0 ? `+${clientBalance.toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm haq` : "0"}
+                      {clientBalance < 0 ? `−${Math.abs(clientBalance).toLocaleString("uz-UZ")} so'm qarz` : clientBalance > 0 ? `+${clientBalance.toLocaleString("uz-UZ")} so'm` : "0"}
                     </span>
                   </div>
                 </div>
@@ -1520,56 +1521,30 @@ export default function WorkerDashboard() {
                 </button>
               </div>
 
-              {/* Qarz bo'lsa — summa kiriting */}
-              {paymentMode === "qarz" && (
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Qarz summasi (so'm)</Label>
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(wFmtAmt(e.target.value))}
-                    autoFocus
-                    className="text-xl font-bold h-14 text-center tabular-nums"
-                  />
-                  {paymentAmount && wParseAmt(paymentAmount) > 0 && (
-                    <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-3 text-sm space-y-1">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Hozir:</span>
-                        <span className={`font-semibold ${clientBalance < 0 ? "text-red-500" : "text-green-600"}`}>
-                          {clientBalance >= 0 ? "+" : ""}{clientBalance.toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Qo'shiladi:</span>
-                        <span className="text-red-500 font-semibold">−{wParseAmt(paymentAmount).toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm</span>
-                      </div>
-                      <div className="flex justify-between border-t border-border/50 pt-1">
-                        <span className="font-medium">Yangi holat:</span>
-                        <span className={`font-bold tabular-nums ${(clientBalance - wParseAmt(paymentAmount)) < 0 ? "text-red-500" : "text-green-600"}`}>
-                          {(clientBalance - wParseAmt(paymentAmount)) >= 0 ? "+" : ""}{(clientBalance - wParseAmt(paymentAmount)).toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm
-                        </span>
-                      </div>
-                    </div>
-                  )}
+              {/* Qarz bo'lsa — yangi balans preview */}
+              {paymentMode === "qarz" && paymentOrder?.price && (
+                <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-3 text-sm space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Hozir:</span>
+                    <span className={`font-semibold ${clientBalance < 0 ? "text-red-500" : "text-green-600"}`}>
+                      {clientBalance >= 0 ? "+" : ""}{clientBalance.toLocaleString("uz-UZ")} so'm
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Qarz qo'shiladi:</span>
+                    <span className="text-red-500 font-semibold">−{Number(paymentOrder.price).toLocaleString("uz-UZ")} so'm</span>
+                  </div>
+                  <div className="flex justify-between border-t border-border/50 pt-1">
+                    <span className="font-medium">Yangi holat:</span>
+                    <span className={`font-bold tabular-nums ${(clientBalance - Number(paymentOrder.price)) < 0 ? "text-red-500" : "text-green-600"}`}>
+                      {(clientBalance - Number(paymentOrder.price)) >= 0 ? "+" : ""}{(clientBalance - Number(paymentOrder.price)).toLocaleString("uz-UZ")} so'm
+                    </span>
+                  </div>
                 </div>
               )}
-
               {paymentMode === "naqd" && (
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Naqd summasi (so'm) <span className="text-muted-foreground font-normal">— ixtiyoriy</span></Label>
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(wFmtAmt(e.target.value))}
-                    className="text-xl font-bold h-14 text-center tabular-nums"
-                  />
-                  <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-2 text-xs text-green-700 dark:text-green-400 text-center">
-                    💵 Naqd to'lov — mijoz hisobiga ta'sir etmaydi, faqat tarixga yoziladi
-                  </div>
+                <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-2 text-xs text-green-700 dark:text-green-400 text-center">
+                  💵 Naqd to'lov — mijoz qarz hisobiga ta'sir etmaydi
                 </div>
               )}
             </div>
@@ -1579,7 +1554,7 @@ export default function WorkerDashboard() {
             <Button variant="outline" onClick={() => setPaymentOrder(null)} disabled={paymentLoading}>Bekor</Button>
             <Button
               className={`gap-2 ${paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : "bg-purple-600 hover:bg-purple-700"} text-white`}
-              disabled={paymentLoading || clientBalanceLoading || (paymentMode === "qarz" && (!paymentAmount || wParseAmt(paymentAmount) <= 0))}
+              disabled={paymentLoading || clientBalanceLoading}
               onClick={doDeliverWithPayment}
             >
               {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4" />}

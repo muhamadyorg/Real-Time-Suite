@@ -987,16 +987,14 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
 
   const doDeliverWithPayment = async () => {
     if (!paymentOrder || !storeId) return;
-    const amount = parseAmt(paymentAmount);
-    if (paymentMode === "qarz" && (!paymentAmount || amount <= 0)) {
-      toast({ title: "Summa kiriting", variant: "destructive" }); return;
+    const orderPrice = paymentOrder.price ? Number(paymentOrder.price) : 0;
+    if (orderPrice <= 0) {
+      toast({ title: "Zakaz summasi kiritilmagan", variant: "destructive" }); return;
     }
     setPaymentLoading(true);
     try {
       if (paymentOrder.clientId) {
-        const txAmount = paymentMode === "naqd"
-          ? (paymentAmount && amount > 0 ? amount : 0)
-          : amount;
+        const txAmount = orderPrice;
         const txRes = await fetch(`${apiBase}/api/client-accounts/${paymentOrder.clientId}/transaction`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -1545,32 +1543,30 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
                 📋 Qarz
               </button>
             </div>
-            {paymentMode === "qarz" && (
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Qarz summasi (so'm)</label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={paymentAmount}
-                  onChange={e => setPaymentAmount(fmtAmt(e.target.value))}
-                  className="h-12 text-xl font-bold text-center tabular-nums"
-                  autoFocus
-                />
+            {/* Qarz — yangi balans preview */}
+            {paymentMode === "qarz" && paymentOrder?.price && (
+              <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-3 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Hozir:</span>
+                  <span className={`font-semibold ${clientBalance < 0 ? "text-red-500" : "text-green-600"}`}>
+                    {clientBalance >= 0 ? "+" : ""}{clientBalance.toLocaleString("uz-UZ")} so'm
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Qarz qo'shiladi:</span>
+                  <span className="text-red-500 font-semibold">−{Number(paymentOrder.price).toLocaleString("uz-UZ")} so'm</span>
+                </div>
+                <div className="flex justify-between border-t border-border/50 pt-1">
+                  <span className="font-medium">Yangi holat:</span>
+                  <span className={`font-bold tabular-nums ${(clientBalance - Number(paymentOrder.price)) < 0 ? "text-red-500" : "text-green-600"}`}>
+                    {(clientBalance - Number(paymentOrder.price)) >= 0 ? "+" : ""}{(clientBalance - Number(paymentOrder.price)).toLocaleString("uz-UZ")} so'm
+                  </span>
+                </div>
               </div>
             )}
             {paymentMode === "naqd" && (
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Naqd summasi (so'm) <span className="text-muted-foreground font-normal text-xs">— ixtiyoriy</span></label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={paymentAmount}
-                  onChange={e => setPaymentAmount(fmtAmt(e.target.value))}
-                  className="h-12 text-xl font-bold text-center tabular-nums"
-                  autoFocus
-                />
+              <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-2 text-xs text-green-700 dark:text-green-400 text-center">
+                💵 Naqd to'lov — mijoz qarz hisobiga ta'sir etmaydi
               </div>
             )}
           </div>
@@ -1578,7 +1574,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
             <Button variant="outline" onClick={() => setPaymentOrder(null)} disabled={paymentLoading}>Bekor</Button>
             <Button
               className={`gap-2 ${paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : "bg-purple-600 hover:bg-purple-700"} text-white`}
-              disabled={paymentLoading || clientBalanceLoading || (paymentMode === "qarz" && (!paymentAmount || parseAmt(paymentAmount) <= 0))}
+              disabled={paymentLoading || clientBalanceLoading}
               onClick={doDeliverWithPayment}
             >
               {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4" />}
