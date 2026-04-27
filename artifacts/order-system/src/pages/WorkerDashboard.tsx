@@ -754,6 +754,9 @@ export default function WorkerDashboard() {
   const [clientInfo, setClientInfo] = useState<any>(null);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [clientBalanceLoading, setClientBalanceLoading] = useState(false);
+  // Bo'lib to'lash
+  const [splitPayment, setSplitPayment] = useState(false);
+  const [splitAmount, setSplitAmount] = useState("");
   // Summa formatlash (3 raqamda bo'shliq)
   const wFmtAmt = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const wParseAmt = (v: string) => parseFloat(v.replace(/\s/g, "") || "0");
@@ -876,39 +879,64 @@ export default function WorkerDashboard() {
     if (orderPrice <= 0) {
       toast({ title: "Zakaz summasi kiritilmagan", variant: "destructive" }); return;
     }
+    const splitAmt = splitPayment ? wParseAmt(splitAmount) : 0;
+    if (splitPayment && (splitAmt <= 0 || splitAmt >= orderPrice)) {
+      toast({ title: "To'g'ri qisman summa kiriting", variant: "destructive" }); return;
+    }
     setPaymentLoading(true);
     try {
       const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
       if (paymentOrder.clientId) {
-        const txAmount = orderPrice;
-        const txRes = await fetch(`${apiBase}/api/client-accounts/${paymentOrder.clientId}/transaction`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            type: paymentMode,
-            amount: txAmount,
-            serviceTypeId: paymentOrder.serviceTypeId,
-            orderId: paymentOrder.id,
-            orderCode: paymentOrder.orderId,
-            note: paymentMode === "naqd" ? `Zakaz ${paymentOrder.orderId} — naqd to'lov`
-              : paymentMode === "click" ? `Zakaz ${paymentOrder.orderId} — Click to'lov`
-              : paymentMode === "dokonga" ? `Zakaz ${paymentOrder.orderId} — Dokonga berildi`
-              : `Zakaz ${paymentOrder.orderId} uchun nasiya`,
-            storeId,
-          }),
-        });
-        if (!txRes.ok) {
-          const err = await txRes.json();
-          toast({ title: "Tranzaksiya xatosi", description: err.error, variant: "destructive" });
-          setPaymentLoading(false); return;
+        const txNote = (type: string, partial?: boolean) =>
+          type === "naqd"    ? `Zakaz ${paymentOrder.orderId} — naqd to'lov${partial ? " (qisman)" : ""}`
+          : type === "click" ? `Zakaz ${paymentOrder.orderId} — Click to'lov${partial ? " (qisman)" : ""}`
+          : type === "dokonga" ? `Zakaz ${paymentOrder.orderId} — Dokonga berildi${partial ? " (qolgan qism)" : ""}`
+          : `Zakaz ${paymentOrder.orderId} uchun nasiya`;
+
+        if (splitPayment) {
+          // 1-tranzaksiya: qisman to'lov (paymentMode bilan)
+          const tx1 = await fetch(`${apiBase}/api/client-accounts/${paymentOrder.clientId}/transaction`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ type: paymentMode, amount: splitAmt, serviceTypeId: paymentOrder.serviceTypeId, orderId: paymentOrder.id, orderCode: paymentOrder.orderId, note: txNote(paymentMode, true), storeId }),
+          });
+          if (!tx1.ok) {
+            const err = await tx1.json();
+            toast({ title: "Tranzaksiya xatosi", description: err.error, variant: "destructive" });
+            setPaymentLoading(false); return;
+          }
+          // 2-tranzaksiya: qolgan qism — dokonga
+          const remainder = orderPrice - splitAmt;
+          const tx2 = await fetch(`${apiBase}/api/client-accounts/${paymentOrder.clientId}/transaction`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ type: "dokonga", amount: remainder, serviceTypeId: paymentOrder.serviceTypeId, orderId: paymentOrder.id, orderCode: paymentOrder.orderId, note: txNote("dokonga", true), storeId }),
+          });
+          if (!tx2.ok) {
+            const err = await tx2.json();
+            toast({ title: "Qolgan qism xatosi", description: err.error, variant: "destructive" });
+            setPaymentLoading(false); return;
+          }
+        } else {
+          const txRes = await fetch(`${apiBase}/api/client-accounts/${paymentOrder.clientId}/transaction`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ type: paymentMode, amount: orderPrice, serviceTypeId: paymentOrder.serviceTypeId, orderId: paymentOrder.id, orderCode: paymentOrder.orderId, note: txNote(paymentMode), storeId }),
+          });
+          if (!txRes.ok) {
+            const err = await txRes.json();
+            toast({ title: "Tranzaksiya xatosi", description: err.error, variant: "destructive" });
+            setPaymentLoading(false); return;
+          }
         }
       }
       updateStatus.mutate(
         { id: paymentOrder.id, data: { status: "topshirildi" } as any },
         {
           onSuccess: () => {
-            const msgs: Record<string, string> = { qarz: "✅ Olib ketildi! Qarz yozildi", click: "✅ Olib ketildi! Click", dokonga: "✅ Olib ketildi! Dokonga", naqd: "✅ Olib ketildi!" };
-            toast({ title: msgs[paymentMode] ?? "✅ Olib ketildi!" });
+            const label = splitPayment ? `✅ Bo'lib to'landi! ${wFmtAmt(splitAmount)} + dokonga`
+              : ({ qarz: "✅ Olib ketildi! Qarz yozildi", click: "✅ Olib ketildi! Click", dokonga: "✅ Olib ketildi! Dokonga", naqd: "✅ Olib ketildi!" }[paymentMode] ?? "✅ Olib ketildi!");
+            toast({ title: label });
             queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
             setPaymentOrder(null);
           },
@@ -976,6 +1004,8 @@ export default function WorkerDashboard() {
       }
       setPaymentMode("naqd");
       setPaymentAmount("");
+      setSplitPayment(false);
+      setSplitAmount("");
       setPaymentOrder(order);
       return;
     }
@@ -1541,23 +1571,67 @@ export default function WorkerDashboard() {
                   </div>
                 </div>
               )}
-              {(paymentMode === "naqd" || paymentMode === "click" || paymentMode === "dokonga") && (
+              {(paymentMode === "naqd" || paymentMode === "click" || paymentMode === "dokonga") && !splitPayment && (
                 <div className={`rounded-lg p-2 text-xs text-center ${paymentMode === "naqd" ? "bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400" : paymentMode === "click" ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400" : "bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400"}`}>
                   {paymentMode === "naqd" ? "💵 Naqd — qarz hisobiga ta'sir etmaydi" : paymentMode === "click" ? "📲 Click to'lov — qarz hisobiga ta'sir etmaydi" : "🏪 Dokonga beriladi — qarz hisobiga ta'sir etmaydi"}
+                </div>
+              )}
+
+              {/* Bo'lib to'lash */}
+              {paymentMode !== "qarz" && paymentOrder?.price && (
+                <div className="border border-border/60 rounded-xl p-3 space-y-2">
+                  <button
+                    className="w-full flex items-center justify-between text-sm font-medium"
+                    onClick={() => { setSplitPayment(v => !v); setSplitAmount(""); }}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Split className="w-4 h-4 text-purple-500" />
+                      Bo'lib to'lash
+                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${splitPayment ? "bg-purple-100 text-purple-700" : "bg-muted text-muted-foreground"}`}>
+                      {splitPayment ? "Yoqilgan" : "O'chirilgan"}
+                    </span>
+                  </button>
+
+                  {splitPayment && (
+                    <div className="space-y-2 pt-1 border-t border-border/40">
+                      <div className="text-xs text-muted-foreground">Hozir qancha to'laydi? ({paymentMode === "naqd" ? "💵 Naqd" : paymentMode === "click" ? "📲 Click" : "🏪 Dokonga"} bilan)</div>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono"
+                        placeholder="Summa kiriting"
+                        value={splitAmount}
+                        onChange={e => setSplitAmount(wFmtAmt(e.target.value))}
+                      />
+                      {wParseAmt(splitAmount) > 0 && wParseAmt(splitAmount) < Number(paymentOrder.price) && (
+                        <div className="text-xs space-y-1 bg-muted/40 rounded-lg p-2">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Hozir to'lanadi:</span>
+                            <span className="font-semibold text-green-600">{splitAmount} so'm</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">🏪 Dokonga yoziladi:</span>
+                            <span className="font-semibold text-orange-600">{(Number(paymentOrder.price) - wParseAmt(splitAmount)).toLocaleString("uz-UZ")} so'm</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setPaymentOrder(null)} disabled={paymentLoading}>Bekor</Button>
+            <Button variant="outline" onClick={() => { setPaymentOrder(null); setSplitPayment(false); setSplitAmount(""); }} disabled={paymentLoading}>Bekor</Button>
             <Button
-              className={`gap-2 ${paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : paymentMode === "click" ? "bg-blue-600 hover:bg-blue-700" : paymentMode === "dokonga" ? "bg-orange-500 hover:bg-orange-600" : "bg-purple-600 hover:bg-purple-700"} text-white`}
+              className={`gap-2 ${splitPayment ? "bg-purple-600 hover:bg-purple-700" : paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : paymentMode === "click" ? "bg-blue-600 hover:bg-blue-700" : paymentMode === "dokonga" ? "bg-orange-500 hover:bg-orange-600" : "bg-purple-600 hover:bg-purple-700"} text-white`}
               disabled={paymentLoading || clientBalanceLoading}
               onClick={doDeliverWithPayment}
             >
               {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4" />}
-              {paymentMode === "qarz" ? "Qarz yozib olib ketildi!" : paymentMode === "click" ? "Click — Olib ketildi!" : paymentMode === "dokonga" ? "Dokonga — Olib ketildi!" : "Olib ketildi!"}
+              {splitPayment ? "Bo'lib to'lab olib ketildi!" : paymentMode === "qarz" ? "Qarz yozib olib ketildi!" : paymentMode === "click" ? "Click — Olib ketildi!" : paymentMode === "dokonga" ? "Dokonga — Olib ketildi!" : "Olib ketildi!"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -79,6 +79,7 @@ router.get("/", async (req, res) => {
             unit
           FROM orders
           WHERE store_id = $1
+            AND status = 'topshirildi'
             AND service_type_id = ANY($2::int[])
             AND (created_at + interval '5 hours')::date = $3::date
           GROUP BY period, service_type_id, service_type_name, unit
@@ -96,7 +97,7 @@ router.get("/", async (req, res) => {
           LEFT JOIN LATERAL (
             SELECT type FROM client_transactions WHERE order_id = o.id ORDER BY created_at DESC LIMIT 1
           ) ct ON true
-          WHERE o.store_id = $1 ${svcFilter2} ${dateFilter2}
+          WHERE o.store_id = $1 AND o.status = 'topshirildi' ${svcFilter2} ${dateFilter2}
         `, queryParams);
         const result = await pool.query(sql, queryParams);
         res.json({
@@ -120,7 +121,7 @@ router.get("/", async (req, res) => {
             COALESCE(SUM(price::numeric), 0) AS total_price,
             unit
           FROM orders
-          WHERE store_id = $1 AND (created_at + interval '5 hours')::date = $2::date
+          WHERE store_id = $1 AND status = 'topshirildi' AND (created_at + interval '5 hours')::date = $2::date
           GROUP BY period, service_type_id, service_type_name, unit
           ORDER BY period DESC, service_type_name
         `;
@@ -136,7 +137,7 @@ router.get("/", async (req, res) => {
           LEFT JOIN LATERAL (
             SELECT type FROM client_transactions WHERE order_id = o.id ORDER BY created_at DESC LIMIT 1
           ) ct ON true
-          WHERE o.store_id = $1 ${dateFilter2}
+          WHERE o.store_id = $1 AND o.status = 'topshirildi' ${dateFilter2}
         `, [storeId, specificDate]);
         const result = await pool.query(sql, [storeId, specificDate]);
         res.json({
@@ -180,6 +181,7 @@ router.get("/", async (req, res) => {
         unit
       FROM orders
       WHERE store_id = $1
+        AND status = 'topshirildi'
         AND created_at >= NOW() - ($2 || ' days')::interval
         ${svcFilterAgg}
       GROUP BY period, service_type_id, service_type_name, unit
@@ -202,6 +204,7 @@ router.get("/", async (req, res) => {
         SELECT type FROM client_transactions WHERE order_id = o.id ORDER BY created_at DESC LIMIT 1
       ) ct ON true
       WHERE o.store_id = $1
+        AND o.status = 'topshirildi'
         AND o.created_at >= NOW() - ($2 || ' days')::interval
         ${svcFilterAggO}
     `, queryParams);
@@ -240,7 +243,7 @@ router.get("/orders", async (req, res) => {
     const conditions: string[] = ["store_id = $1"];
     const params: any[] = [storeId];
 
-    const oConditions: string[] = ["o.store_id = $1"];
+    const oConditions: string[] = ["o.store_id = $1", "o.status = 'topshirildi'"];
 
     if (days && !periodStart && !periodEnd) {
       params.push(days);

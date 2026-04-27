@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, RefreshCw, TrendingUp, ShoppingBag, Wallet, ChevronDown, ChevronUp, Calendar, X, Layers, Search, Phone, TrendingDown, BadgeCheck, Users } from "lucide-react";
+import { Loader2, RefreshCw, TrendingUp, ShoppingBag, Wallet, ChevronDown, ChevronUp, Calendar, X, Layers, Search, Phone, TrendingDown, BadgeCheck, Users, Plus } from "lucide-react";
 
 interface AnalyticsViewProps {
   storeId: number;
@@ -212,6 +212,67 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   const [expandedPeriod, setExpandedPeriod] = useState<string | null>(null);
   const [drillOrders, setDrillOrders] = useState<any[]>([]);
   const [drillLoading, setDrillLoading] = useState(false);
+
+  // Quick "+" tranzaksiya modal
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickClientId, setQuickClientId] = useState<number | null>(null);
+  const [quickClientSearch, setQuickClientSearch] = useState("");
+  const [quickAmount, setQuickAmount] = useState("");
+  const [quickType, setQuickType] = useState<"+" | "-">("+");
+  const [quickTxType, setQuickTxType] = useState<TxType>("tolov");
+  const [quickNote, setQuickNote] = useState("");
+  const [quickServiceTypeId, setQuickServiceTypeId] = useState<string>("");
+  const [quickLoading, setQuickLoading] = useState(false);
+  const [quickClientBal, setQuickClientBal] = useState<number | null>(null);
+  const [quickClientBalLoading, setQuickClientBalLoading] = useState(false);
+
+  const openQuick = () => {
+    setQuickOpen(true);
+    setQuickClientId(null);
+    setQuickClientSearch("");
+    setQuickAmount("");
+    setQuickType("+");
+    setQuickTxType("tolov");
+    setQuickNote("");
+    setQuickServiceTypeId("");
+    setQuickClientBal(null);
+  };
+
+  const selectQuickClient = async (c: any) => {
+    setQuickClientId(c.id);
+    setQuickClientSearch(c.name);
+    setQuickClientBal(null);
+    setQuickClientBalLoading(true);
+    try {
+      const r = await fetch(`${apiBase}/api/client-accounts/${c.id}`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      setQuickClientBal(d.balance ?? 0);
+    } catch { setQuickClientBal(null); } finally { setQuickClientBalLoading(false); }
+  };
+
+  const doQuickTx = async () => {
+    if (!quickClientId) return;
+    const amt = parseFloat(quickAmount.replace(/\s/g, "") || "0");
+    if (!amt || amt <= 0) return;
+    setQuickLoading(true);
+    try {
+      const type: TxType = quickType === "-" ? "qarz" : quickTxType;
+      const stId = quickServiceTypeId ? parseInt(quickServiceTypeId) : (nasiyaServiceTypes[0]?.id ?? null);
+      const note = quickNote || (quickType === "-" ? `Qarz qo'shildi` : `To'lov qabul qilindi`);
+      const res = await fetch(`${apiBase}/api/client-accounts/${quickClientId}/transaction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ type, amount: amt, note, serviceTypeId: stId, storeId }),
+      });
+      if (res.ok) {
+        setQuickOpen(false);
+        fetchNasiyaData();
+      } else {
+        const e = await res.json();
+        alert(e.error ?? "Xatolik");
+      }
+    } catch { alert("Tarmoq xatosi"); } finally { setQuickLoading(false); }
+  };
 
   // Fetch clients + allTx + nasiyaServiceTypes
   const fetchNasiyaData = useCallback(async () => {
@@ -471,10 +532,16 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
             </span>
           )}
         </div>
-        <Button size="sm" variant="outline" onClick={fetchAll} disabled={loading} className="gap-1.5">
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          Yangilash
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={openQuick} className="gap-1.5 border-green-300 text-green-700 hover:bg-green-50">
+            <Plus className="w-3.5 h-3.5" />
+            Tranzaksiya
+          </Button>
+          <Button size="sm" variant="outline" onClick={fetchAll} disabled={loading} className="gap-1.5">
+            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            Yangilash
+          </Button>
+        </div>
       </div>
 
       {/* View + Period selectors */}
@@ -1256,6 +1323,158 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
             <Button disabled={payLoading || !payAmount} onClick={doPayment} className="gap-2">
               {payLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BadgeCheck className="w-4 h-4" />}
               Saqlash
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick "+" tranzaksiya modal */}
+      <Dialog open={quickOpen} onOpenChange={v => { if (!v) setQuickOpen(false); }}>
+        <DialogContent className="w-full max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <Plus className="w-5 h-5" />
+              Tez tranzaksiya
+            </DialogTitle>
+            <DialogDescription>Mijoz balansiga tranzaksiya qo'shing</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {/* Mijoz qidirish */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Mijoz</label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
+                <input
+                  className="w-full pl-8 pr-3 py-2 text-sm rounded-lg border border-border bg-background"
+                  placeholder="Mijoz ismini kiriting..."
+                  value={quickClientSearch}
+                  onChange={e => { setQuickClientSearch(e.target.value); setQuickClientId(null); setQuickClientBal(null); }}
+                />
+              </div>
+              {/* Mijozlar ro'yxati — faqat input bo'lsa va id tanlanmagan bo'lsa */}
+              {quickClientSearch.trim().length >= 1 && !quickClientId && (() => {
+                const matches = clients.filter((c: any) =>
+                  c.name?.toLowerCase().includes(quickClientSearch.toLowerCase()) ||
+                  c.phone?.includes(quickClientSearch)
+                ).slice(0, 6);
+                if (!matches.length) return <div className="text-xs text-muted-foreground px-2 py-1">Topilmadi</div>;
+                return (
+                  <div className="border border-border rounded-lg overflow-hidden shadow-sm">
+                    {matches.map((c: any) => (
+                      <button
+                        key={c.id}
+                        className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center justify-between border-b border-border/40 last:border-0"
+                        onClick={() => selectQuickClient(c)}
+                      >
+                        <span className="font-medium">{c.name}</span>
+                        <span className={`text-xs tabular-nums ${balNum(c.balance) < 0 ? "text-red-500" : balNum(c.balance) > 0 ? "text-green-600" : "text-muted-foreground"}`}>
+                          {balNum(c.balance) < 0 ? `−${Math.abs(balNum(c.balance)).toLocaleString("uz-UZ")} qarz` : balNum(c.balance) > 0 ? `+${balNum(c.balance).toLocaleString("uz-UZ")}` : "0"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* Tanlangan mijoz balans */}
+              {quickClientId && (
+                <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs flex justify-between items-center">
+                  <span className="text-muted-foreground">Hozirgi balans:</span>
+                  {quickClientBalLoading
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <span className={`font-bold tabular-nums ${(quickClientBal ?? 0) < 0 ? "text-red-500" : (quickClientBal ?? 0) > 0 ? "text-green-600" : ""}`}>
+                        {(quickClientBal ?? 0) < 0 ? `−${Math.abs(quickClientBal!).toLocaleString("uz-UZ")}` : (quickClientBal ?? 0) > 0 ? `+${quickClientBal!.toLocaleString("uz-UZ")}` : "0"} so'm
+                        {(quickClientBal ?? 0) < 0 && <span className="ml-1 text-amber-600 font-normal">(eski nasiya mavjud)</span>}
+                      </span>
+                  }
+                </div>
+              )}
+            </div>
+
+            {/* + / - tugmalar */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => { setQuickType("+"); setQuickTxType("tolov"); }}
+                className={`h-12 rounded-xl font-bold text-sm border-2 transition-all flex items-center justify-center gap-1.5 ${quickType === "+" ? "bg-green-500 text-white border-green-500 shadow" : "border-border text-muted-foreground hover:border-green-400"}`}
+              >
+                <span className="text-lg leading-none">+</span> Kirim / To'lov
+              </button>
+              <button
+                onClick={() => { setQuickType("-"); setQuickTxType("qarz"); }}
+                className={`h-12 rounded-xl font-bold text-sm border-2 transition-all flex items-center justify-center gap-1.5 ${quickType === "-" ? "bg-red-500 text-white border-red-500 shadow" : "border-border text-muted-foreground hover:border-red-400"}`}
+              >
+                <span className="text-lg leading-none">−</span> Qarz / Chiqim
+              </button>
+            </div>
+
+            {/* Kirim turi (faqat + bo'lsa) */}
+            {quickType === "+" && (
+              <div className="grid grid-cols-3 gap-1.5">
+                {(["tolov", "naqd", "click"] as TxType[]).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setQuickTxType(t)}
+                    className={`py-2 rounded-lg text-xs font-semibold border transition-all ${quickTxType === t ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/50"}`}
+                  >
+                    {TX_META[t].icon} {TX_META[t].label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Summa */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Summa (so'm)</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono"
+                placeholder="0"
+                value={quickAmount}
+                onChange={e => setQuickAmount(fmtAmt(e.target.value))}
+              />
+            </div>
+
+            {/* Xizmat turi */}
+            {nasiyaServiceTypes.length > 1 && (
+              <Select value={quickServiceTypeId} onValueChange={setQuickServiceTypeId}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Xizmat turi (ixtiyoriy)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {nasiyaServiceTypes.map((s: any) => (
+                    <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Izoh */}
+            <input
+              type="text"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              placeholder={quickClientBal != null && (quickClientBal ?? 0) < 0 && quickType === "+" ? "Eski nasiyadan (ixtiyoriy)" : "Izoh (ixtiyoriy)"}
+              value={quickNote}
+              onChange={e => setQuickNote(e.target.value)}
+            />
+            {quickClientBal != null && (quickClientBal ?? 0) < 0 && quickType === "+" && !quickNote && (
+              <button
+                className="text-xs text-amber-600 underline underline-offset-2 -mt-1"
+                onClick={() => setQuickNote("Eski nasiyadan")}
+              >
+                + "Eski nasiyadan" deb belgilash
+              </button>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setQuickOpen(false)} disabled={quickLoading}>Bekor</Button>
+            <Button
+              disabled={quickLoading || !quickClientId || !quickAmount}
+              onClick={doQuickTx}
+              className={`gap-2 ${quickType === "-" ? "bg-red-500 hover:bg-red-600 text-white" : "bg-green-600 hover:bg-green-700 text-white"}`}
+            >
+              {quickLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BadgeCheck className="w-4 h-4" />}
+              {quickType === "-" ? "Qarz yozish" : "To'lov qabul"}
             </Button>
           </DialogFooter>
         </DialogContent>
