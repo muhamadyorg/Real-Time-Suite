@@ -666,6 +666,44 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
         const sDokonga = summary?.dokonga_total  ?? 0;
         const sQarz    = summary?.qarz_total     ?? 0;
         const hasPayBreak = (sNaqd + sClick + sDokonga + sQarz) > 0;
+
+        // Qabul qilingan to'lovlar (allTx dan, joriy period bo'yicha filterlangan)
+        const txTolov = (() => {
+          const tz5 = 5 * 3600 * 1000; // UTC+5
+          const now5 = Date.now() + tz5;
+          let startMs: number;
+          if (useSpecificDate && specificDate) {
+            startMs = new Date(specificDate + "T00:00:00+05:00").getTime();
+            const endMs = startMs + 86400000;
+            return (allTx as any[])
+              .filter(t => { const ts = new Date(t.created_at).getTime(); return t.type === "tolov" && ts >= startMs && ts < endMs; })
+              .reduce((s: number, t: any) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
+          }
+          const days = PERIOD_DAYS[period] ?? 1;
+          startMs = now5 - days * 86400000;
+          return (allTx as any[])
+            .filter(t => t.type === "tolov" && (new Date(t.created_at).getTime() + tz5) >= startMs)
+            .reduce((s: number, t: any) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
+        })();
+
+        const txQarzSum = (() => {
+          const tz5 = 5 * 3600 * 1000;
+          const now5 = Date.now() + tz5;
+          let startMs: number;
+          if (useSpecificDate && specificDate) {
+            startMs = new Date(specificDate + "T00:00:00+05:00").getTime();
+            const endMs = startMs + 86400000;
+            return (allTx as any[])
+              .filter(t => { const ts = new Date(t.created_at).getTime(); return t.type === "qarz" && ts >= startMs && ts < endMs; })
+              .reduce((s: number, t: any) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
+          }
+          const days = PERIOD_DAYS[period] ?? 1;
+          startMs = now5 - days * 86400000;
+          return (allTx as any[])
+            .filter(t => t.type === "qarz" && (new Date(t.created_at).getTime() + tz5) >= startMs)
+            .reduce((s: number, t: any) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
+        })();
+
         return (
           <div className="grid grid-cols-2 gap-3">
             <Card className="border-blue-200 dark:border-blue-800">
@@ -692,8 +730,38 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                 <div className="text-xs text-muted-foreground">so'm</div>
               </CardContent>
             </Card>
+            {/* Nasiyadan qabul qilingan to'lov kartasi */}
+            {txTolov > 0 && (
+              <Card className="border-purple-200 dark:border-purple-800 bg-purple-50/40 dark:bg-purple-950/20">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 mb-1">
+                    <span className="text-sm">💰</span>
+                    <span className="text-xs font-medium">Qabul qilingan</span>
+                  </div>
+                  <div className="text-xl font-black tabular-nums leading-tight text-purple-700 dark:text-purple-300">
+                    {fmtMoney(txTolov)}
+                  </div>
+                  <div className="text-xs text-purple-500">so'm (eski nasiya)</div>
+                </CardContent>
+              </Card>
+            )}
+            {/* Yangi nasiya kartasi */}
+            {txQarzSum > 0 && (
+              <Card className="border-red-200 dark:border-red-800 bg-red-50/40 dark:bg-red-950/20">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400 mb-1">
+                    <span className="text-sm">📋</span>
+                    <span className="text-xs font-medium">Yangi nasiya</span>
+                  </div>
+                  <div className="text-xl font-black tabular-nums leading-tight text-red-700 dark:text-red-300">
+                    {fmtMoney(txQarzSum)}
+                  </div>
+                  <div className="text-xs text-red-500">so'm (qarz yozildi)</div>
+                </CardContent>
+              </Card>
+            )}
             {hasPayBreak && (
-              <Card className="col-span-2 border-border/50">
+              <Card className={`${(txTolov > 0 || txQarzSum > 0) ? "col-span-2" : "col-span-2"} border-border/50`}>
                 <CardContent className="p-3">
                   <div className="flex flex-wrap gap-2">
                     {sNaqd > 0 && (
