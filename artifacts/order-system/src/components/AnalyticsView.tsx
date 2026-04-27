@@ -665,44 +665,28 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
         const sClick   = summary?.click_total   ?? 0;
         const sDokonga = summary?.dokonga_total  ?? 0;
         const sQarz    = summary?.qarz_total     ?? 0;
-        const hasPayBreak = (sNaqd + sClick + sDokonga + sQarz) > 0;
 
-        // Qabul qilingan to'lovlar (allTx dan, joriy period bo'yicha filterlangan)
-        const txTolov = (() => {
-          const tz5 = 5 * 3600 * 1000; // UTC+5
-          const now5 = Date.now() + tz5;
-          let startMs: number;
-          if (useSpecificDate && specificDate) {
-            startMs = new Date(specificDate + "T00:00:00+05:00").getTime();
-            const endMs = startMs + 86400000;
-            return (allTx as any[])
-              .filter(t => { const ts = new Date(t.created_at).getTime(); return t.type === "tolov" && ts >= startMs && ts < endMs; })
-              .reduce((s: number, t: any) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
-          }
-          const days = PERIOD_DAYS[period] ?? 1;
-          startMs = now5 - days * 86400000;
-          return (allTx as any[])
-            .filter(t => t.type === "tolov" && (new Date(t.created_at).getTime() + tz5) >= startMs)
-            .reduce((s: number, t: any) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
-        })();
-
-        const txQarzSum = (() => {
+        // Qabul qilingan to'lovlar va yangi qarzlar (allTx dan, joriy period bo'yicha)
+        const calcTxSum = (type: string) => {
           const tz5 = 5 * 3600 * 1000;
           const now5 = Date.now() + tz5;
-          let startMs: number;
           if (useSpecificDate && specificDate) {
-            startMs = new Date(specificDate + "T00:00:00+05:00").getTime();
+            const startMs = new Date(specificDate + "T00:00:00+05:00").getTime();
             const endMs = startMs + 86400000;
             return (allTx as any[])
-              .filter(t => { const ts = new Date(t.created_at).getTime(); return t.type === "qarz" && ts >= startMs && ts < endMs; })
+              .filter(t => { const ts = new Date(t.created_at).getTime(); return t.type === type && ts >= startMs && ts < endMs; })
               .reduce((s: number, t: any) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
           }
           const days = PERIOD_DAYS[period] ?? 1;
-          startMs = now5 - days * 86400000;
+          const startMs = now5 - days * 86400000;
           return (allTx as any[])
-            .filter(t => t.type === "qarz" && (new Date(t.created_at).getTime() + tz5) >= startMs)
+            .filter(t => t.type === type && (new Date(t.created_at).getTime() + tz5) >= startMs)
             .reduce((s: number, t: any) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
-        })();
+        };
+        const txTolov   = calcTxSum("tolov");
+        const txQarzSum = calcTxSum("qarz");
+
+        const hasPayBreak = (sNaqd + sClick + sDokonga + sQarz + txTolov + txQarzSum) > 0;
 
         return (
           <div className="grid grid-cols-2 gap-3">
@@ -782,6 +766,21 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                     {sQarz > 0 && (
                       <span className="inline-flex items-center gap-1 text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-2.5 py-1 rounded-full font-semibold">
                         📋 Nasiya: <b>{fmtMoney(sQarz)}</b>
+                      </span>
+                    )}
+                    {txTolov > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-2.5 py-1 rounded-full font-semibold border border-purple-300 dark:border-purple-700">
+                        💰 Qabul qilingan: <b>{fmtMoney(txTolov)}</b>
+                      </span>
+                    )}
+                    {txQarzSum > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 px-2.5 py-1 rounded-full font-semibold border border-red-200 dark:border-red-800">
+                        📋 Yangi nasiya: <b>{fmtMoney(txQarzSum)}</b>
+                      </span>
+                    )}
+                    {(sNaqd + sDokonga + txTolov) > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 px-2.5 py-1 rounded-full font-bold border border-amber-300 dark:border-amber-700">
+                        🏪 Dokonga jami: <b>{fmtMoney(sNaqd + sDokonga + txTolov)}</b>
                       </span>
                     )}
                   </div>
