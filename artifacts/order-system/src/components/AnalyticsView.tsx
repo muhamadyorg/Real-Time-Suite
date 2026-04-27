@@ -236,11 +236,13 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
     setQuickNote("");
     setQuickServiceTypeId("");
     setQuickClientBal(null);
+    // Clients yuklangan bo'lmasa — yuklash
+    if (clients.length === 0) fetchNasiyaData();
   };
 
   const selectQuickClient = async (c: any) => {
     setQuickClientId(c.id);
-    setQuickClientSearch(c.name);
+    setQuickClientSearch(c.name ?? "");
     setQuickClientBal(null);
     setQuickClientBalLoading(true);
     try {
@@ -248,30 +250,6 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
       const d = await r.json();
       setQuickClientBal(d.balance ?? 0);
     } catch { setQuickClientBal(null); } finally { setQuickClientBalLoading(false); }
-  };
-
-  const doQuickTx = async () => {
-    if (!quickClientId) return;
-    const amt = parseFloat(quickAmount.replace(/\s/g, "") || "0");
-    if (!amt || amt <= 0) return;
-    setQuickLoading(true);
-    try {
-      const type: TxType = quickType === "-" ? "qarz" : quickTxType;
-      const stId = quickServiceTypeId ? parseInt(quickServiceTypeId) : (nasiyaServiceTypes[0]?.id ?? null);
-      const note = quickNote || (quickType === "-" ? `Qarz qo'shildi` : `To'lov qabul qilindi`);
-      const res = await fetch(`${apiBase}/api/client-accounts/${quickClientId}/transaction`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ type, amount: amt, note, serviceTypeId: stId, storeId }),
-      });
-      if (res.ok) {
-        setQuickOpen(false);
-        fetchNasiyaData();
-      } else {
-        const e = await res.json();
-        alert(e.error ?? "Xatolik");
-      }
-    } catch { alert("Tarmoq xatosi"); } finally { setQuickLoading(false); }
   };
 
   // Fetch clients + allTx + nasiyaServiceTypes
@@ -329,6 +307,30 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
       setClientTx(prev => { const n = { ...prev }; delete n[closedClient.id]; return n; });
     } catch {}
     setPayLoading(false);
+  };
+
+  const doQuickTx = async () => {
+    if (!quickClientId) return;
+    const amt = parseFloat(quickAmount.replace(/\s/g, "") || "0");
+    if (!amt || amt <= 0) return;
+    setQuickLoading(true);
+    try {
+      const type: TxType = quickType === "-" ? "qarz" : quickTxType;
+      const stId = quickServiceTypeId ? parseInt(quickServiceTypeId) : (nasiyaServiceTypes[0]?.id ?? null);
+      const note = quickNote || (quickType === "-" ? `Qarz qo'shildi` : `To'lov qabul qilindi`);
+      const res = await fetch(`${apiBase}/api/client-accounts/${quickClientId}/transaction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ type, amount: amt, note, serviceTypeId: stId, storeId }),
+      });
+      if (res.ok) {
+        setQuickOpen(false);
+        await fetchNasiyaData();
+      } else {
+        const e = await res.json();
+        alert(e.error ?? "Xatolik");
+      }
+    } catch { alert("Tarmoq xatosi"); } finally { setQuickLoading(false); }
   };
 
   const clientBreakdown = (clientId: number) => {
@@ -1352,14 +1354,15 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                 />
               </div>
               {/* Mijozlar ro'yxati — faqat input bo'lsa va id tanlanmagan bo'lsa */}
-              {quickClientSearch.trim().length >= 1 && !quickClientId && (() => {
+              {(quickClientSearch ?? "").trim().length >= 1 && !quickClientId && (() => {
+                const q = (quickClientSearch ?? "").toLowerCase();
                 const matches = clients.filter((c: any) =>
-                  c.name?.toLowerCase().includes(quickClientSearch.toLowerCase()) ||
-                  c.phone?.includes(quickClientSearch)
+                  (c.name ?? "").toLowerCase().includes(q) ||
+                  (c.phone ?? "").includes(quickClientSearch ?? "")
                 ).slice(0, 6);
-                if (!matches.length) return <div className="text-xs text-muted-foreground px-2 py-1">Topilmadi</div>;
+                if (!matches.length) return <div key="nf" className="text-xs text-muted-foreground px-2 py-1">Topilmadi</div>;
                 return (
-                  <div className="border border-border rounded-lg overflow-hidden shadow-sm">
+                  <div key="list" className="border border-border rounded-lg overflow-hidden shadow-sm">
                     {matches.map((c: any) => (
                       <button
                         key={c.id}
