@@ -1195,12 +1195,15 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
         const ordClick   = dokonOrders.filter(o => o.payment_type === "click").reduce((s, o) => s + parseFloat(o.price ?? "0"), 0);
         const ordDokonga = dokonOrders.filter(o => o.payment_type === "dokonga").reduce((s, o) => s + parseFloat(o.price ?? "0"), 0);
         const ordQarz    = dokonOrders.filter(o => o.payment_type === "qarz").reduce((s, o) => s + parseFloat(o.price ?? "0"), 0);
-        const dokonJami  = ordNaqd + ordDokonga;
         const txTolov    = dokonTx.filter(t => t.type === "tolov").reduce((s, t) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
         const txNaqd     = dokonTx.filter(t => t.type === "naqd").reduce((s, t) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
         const txClick    = dokonTx.filter(t => t.type === "click").reduce((s, t) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
         const txDokonga  = dokonTx.filter(t => t.type === "dokonga").reduce((s, t) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
         const txQarz     = dokonTx.filter(t => t.type === "qarz").reduce((s, t) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
+        // Dokon jami = zakaz naqd + zakaz dokonga + mijozdan qabul qilingan to'lovlar
+        const dokonJami  = ordNaqd + ordDokonga + txTolov;
+        const tolovTxList = dokonTx.filter(t => t.type === "tolov");
+        const qarzTxList  = dokonTx.filter(t => t.type === "qarz");
 
         return (
           <div className="space-y-4">
@@ -1243,39 +1246,81 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
               <>
                 {/* Payment summary cards */}
                 <div className="grid grid-cols-2 gap-2">
+                  {/* Kunlik umumiy hisob */}
                   <Card className="border-amber-200 dark:border-amber-800 col-span-2">
                     <CardContent className="p-3">
                       <div className="text-xs font-medium text-muted-foreground mb-2">
-                        📅 {new Date(dokonDate + "T12:00:00").toLocaleDateString("uz-UZ", { day: "2-digit", month: "long", year: "numeric" })} — Zakazlar hisobi
+                        📅 {new Date(dokonDate + "T12:00:00").toLocaleDateString("uz-UZ", { day: "2-digit", month: "long", year: "numeric" })} — Kunlik hisob
                       </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm mb-2">
                         <div><span className="text-muted-foreground text-xs">Zakazlar: </span><b>{dokonOrders.length} ta</b></div>
                         {dokonOrders.length > 0 && (
-                          <div><span className="text-muted-foreground text-xs">Jami summa: </span><b className="text-amber-600">{fmtMoney(dokonOrders.reduce((s, o) => s + parseFloat(o.price ?? "0"), 0))} so'm</b></div>
+                          <div><span className="text-muted-foreground text-xs">Zakaz jami: </span><b className="text-amber-600">{fmtMoney(dokonOrders.reduce((s, o) => s + parseFloat(o.price ?? "0"), 0))} so'm</b></div>
                         )}
                       </div>
-                      <div className="mt-2 flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2">
                         {ordNaqd > 0 && <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 px-2 py-1 rounded-full font-semibold">💵 Naqd: {fmtMoney(ordNaqd)}</span>}
                         {ordClick > 0 && <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 px-2 py-1 rounded-full font-semibold">📲 Click: {fmtMoney(ordClick)}</span>}
                         {ordDokonga > 0 && <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 px-2 py-1 rounded-full font-semibold">🏪 Dokonga: {fmtMoney(ordDokonga)}</span>}
                         {ordQarz > 0 && <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 px-2 py-1 rounded-full font-semibold">📋 Nasiya: {fmtMoney(ordQarz)}</span>}
-                        {dokonJami > 0 && <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 px-2 py-1 rounded-full font-bold border border-amber-300">🏪 Dokonga jami: {fmtMoney(dokonJami)}</span>}
+                        {txTolov > 0 && <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 px-2 py-1 rounded-full font-semibold">💰 Nasiyadan: {fmtMoney(txTolov)}</span>}
+                        {txQarz > 0 && <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 px-2 py-1 rounded-full font-semibold">📋 Yangi nasiya: {fmtMoney(txQarz)}</span>}
+                        {dokonJami > 0 && (
+                          <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 px-2 py-1 rounded-full font-bold border border-amber-300">
+                            🏪 Dokonga jami: {fmtMoney(dokonJami)}
+                          </span>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
 
-                  {(txTolov > 0 || txNaqd > 0 || txClick > 0 || txDokonga > 0 || txQarz > 0) && (
-                    <Card className="border-purple-200 dark:border-purple-800 col-span-2">
-                      <CardContent className="p-3">
-                        <div className="text-xs font-medium text-muted-foreground mb-2">💰 Mijozlar tranzaksiyalari (nasiya to'lovlari)</div>
-                        <div className="flex flex-wrap gap-2">
-                          {txTolov > 0 && <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 px-2 py-1 rounded-full font-semibold">💰 Qarz uzildi: {fmtMoney(txTolov)}</span>}
-                          {txNaqd > 0 && <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 px-2 py-1 rounded-full font-semibold">💵 Naqd tx: {fmtMoney(txNaqd)}</span>}
-                          {txClick > 0 && <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 px-2 py-1 rounded-full font-semibold">📲 Click tx: {fmtMoney(txClick)}</span>}
-                          {txDokonga > 0 && <span className="text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 px-2 py-1 rounded-full font-semibold">🏪 Dokonga tx: {fmtMoney(txDokonga)}</span>}
-                          {txQarz > 0 && <span className="text-xs bg-red-100 dark:bg-red-900/30 text-red-700 px-2 py-1 rounded-full font-semibold">📋 Yangi nasiya: {fmtMoney(txQarz)}</span>}
-                        </div>
-                      </CardContent>
+                  {/* Qabul qilingan to'lovlar ro'yxati — kimdan, qancha */}
+                  {tolovTxList.length > 0 && (
+                    <Card className="border-purple-200 dark:border-purple-800 bg-purple-50/30 dark:bg-purple-950/10 col-span-2">
+                      <div className="px-4 py-2.5 bg-purple-100/50 dark:bg-purple-950/30 text-sm font-semibold text-purple-800 dark:text-purple-300 flex items-center justify-between">
+                        <span>💰 Qabul qilingan to'lovlar ({tolovTxList.length} ta)</span>
+                        <span className="font-black">{fmtMoney(txTolov)} so'm</span>
+                      </div>
+                      <div className="divide-y divide-purple-100 dark:divide-purple-900/30">
+                        {tolovTxList.map((tx: any) => (
+                          <div key={tx.id} className="px-4 py-2.5 flex items-center justify-between text-sm">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-foreground">{tx.client_name ?? "Noma'lum mijoz"}</div>
+                              {tx.client_phone && <div className="text-xs text-muted-foreground">{tx.client_phone}</div>}
+                              {tx.note && <div className="text-xs text-muted-foreground/70 italic">{tx.note}</div>}
+                            </div>
+                            <div className="text-right shrink-0 ml-4">
+                              <div className="font-black text-purple-700 dark:text-purple-300 text-base">+{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}</div>
+                              <div className="text-xs text-muted-foreground">{fmtTime(tx.created_at)}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* Yangi nasiyalar ro'yxati */}
+                  {qarzTxList.length > 0 && (
+                    <Card className="border-red-200 dark:border-red-800 bg-red-50/30 dark:bg-red-950/10 col-span-2">
+                      <div className="px-4 py-2.5 bg-red-100/50 dark:bg-red-950/30 text-sm font-semibold text-red-800 dark:text-red-300 flex items-center justify-between">
+                        <span>📋 Yangi nasiyalar ({qarzTxList.length} ta)</span>
+                        <span className="font-black">−{fmtMoney(txQarz)} so'm</span>
+                      </div>
+                      <div className="divide-y divide-red-100 dark:divide-red-900/30">
+                        {qarzTxList.map((tx: any) => (
+                          <div key={tx.id} className="px-4 py-2.5 flex items-center justify-between text-sm">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-foreground">{tx.client_name ?? "Noma'lum mijoz"}</div>
+                              {tx.client_phone && <div className="text-xs text-muted-foreground">{tx.client_phone}</div>}
+                              {tx.note && <div className="text-xs text-muted-foreground/70 italic">{tx.note}</div>}
+                            </div>
+                            <div className="text-right shrink-0 ml-4">
+                              <div className="font-black text-red-600 dark:text-red-400 text-base">−{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}</div>
+                              <div className="text-xs text-muted-foreground">{fmtTime(tx.created_at)}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </Card>
                   )}
                 </div>
@@ -1314,12 +1359,12 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                   </Card>
                 )}
 
-                {/* Client tx list */}
-                {dokonTx.length > 0 && (
+                {/* Boshqa tranzaksiyalar (naqd/click/tuzatish) */}
+                {dokonTx.filter(t => t.type !== "tolov" && t.type !== "qarz").length > 0 && (
                   <Card className="overflow-hidden">
-                    <div className="px-4 py-2.5 bg-muted/50 text-sm font-semibold">Nasiya tranzaksiyalari ({dokonTx.length} ta)</div>
+                    <div className="px-4 py-2.5 bg-muted/50 text-sm font-semibold">Boshqa tranzaksiyalar</div>
                     <div className="divide-y divide-border/40">
-                      {dokonTx.map((tx: any) => {
+                      {dokonTx.filter(t => t.type !== "tolov" && t.type !== "qarz").map((tx: any) => {
                         const meta = TX_META[tx.type as TxType] ?? TX_META.tuzatish;
                         return (
                           <div key={tx.id} className="px-4 py-2 flex items-center justify-between text-xs">
@@ -1328,12 +1373,12 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                               <div className="min-w-0">
                                 <div className="font-medium truncate">{tx.client_name ?? "Noma'lum"}</div>
                                 {tx.client_phone && <div className="text-muted-foreground">{tx.client_phone}</div>}
-                                <div className="text-muted-foreground/60">{tx.service_type_name || tx.note || ""}</div>
+                                <div className="text-muted-foreground/60">{tx.note || tx.service_type_name || ""}</div>
                               </div>
                             </div>
                             <div className="text-right shrink-0 ml-3">
-                              <div className={`font-bold ${tx.type === "qarz" ? "text-red-500" : tx.type === "tolov" ? "text-purple-600" : tx.type === "naqd" ? "text-green-600" : tx.type === "click" ? "text-blue-600" : tx.type === "dokonga" ? "text-orange-600" : "text-foreground"}`}>
-                                {tx.type === "qarz" ? "−" : "+"}{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}
+                              <div className="font-bold text-foreground">
+                                +{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}
                               </div>
                               <div className="text-muted-foreground/50">{fmtTime(tx.created_at)}</div>
                             </div>
