@@ -1360,7 +1360,12 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                   (c.name ?? "").toLowerCase().includes(q) ||
                   (c.phone ?? "").includes(quickClientSearch ?? "")
                 ).slice(0, 6);
-                if (!matches.length) return <div key="nf" className="text-xs text-muted-foreground px-2 py-1">Topilmadi</div>;
+                if (!matches.length) return (
+                  <div key="nf" className="border border-border rounded-lg px-3 py-4 text-center space-y-1">
+                    <p className="text-sm text-muted-foreground">Mijoz topilmadi</p>
+                    <p className="text-xs text-muted-foreground/60">«{quickClientSearch ?? ""}» — boshqa nom yoki telefon kiriting</p>
+                  </div>
+                );
                 return (
                   <div key="list" className="border border-border rounded-lg overflow-hidden shadow-sm">
                     {matches.map((c: any) => (
@@ -1399,13 +1404,13 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                 onClick={() => { setQuickType("+"); setQuickTxType("tolov"); }}
                 className={`h-12 rounded-xl font-bold text-sm border-2 transition-all flex items-center justify-center gap-1.5 ${quickType === "+" ? "bg-green-500 text-white border-green-500 shadow" : "border-border text-muted-foreground hover:border-green-400"}`}
               >
-                <span className="text-lg leading-none">+</span> Kirim / To'lov
+                <span className="text-lg leading-none">+</span> Eski nasiyadan to'lov
               </button>
               <button
                 onClick={() => { setQuickType("-"); setQuickTxType("qarz"); }}
                 className={`h-12 rounded-xl font-bold text-sm border-2 transition-all flex items-center justify-center gap-1.5 ${quickType === "-" ? "bg-red-500 text-white border-red-500 shadow" : "border-border text-muted-foreground hover:border-red-400"}`}
               >
-                <span className="text-lg leading-none">−</span> Qarz / Chiqim
+                <span className="text-lg leading-none">−</span> Yangi nasiya
               </button>
             </div>
 

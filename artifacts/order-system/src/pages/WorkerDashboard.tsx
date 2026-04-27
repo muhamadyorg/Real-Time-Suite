@@ -760,6 +760,20 @@ export default function WorkerDashboard() {
   // Summa formatlash (3 raqamda bo'shliq)
   const wFmtAmt = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const wParseAmt = (v: string) => parseFloat(v.replace(/\s/g, "") || "0");
+  // Tez tranzaksiya modal (worker uchun)
+  const [wqOpen, setWqOpen] = useState(false);
+  const [wqSearch, setWqSearch] = useState("");
+  const [wqClientId, setWqClientId] = useState<number | null>(null);
+  const [wqClientName, setWqClientName] = useState("");
+  const [wqClientBal, setWqClientBal] = useState<number | null>(null);
+  const [wqClientBalLoading, setWqClientBalLoading] = useState(false);
+  const [wqClients, setWqClients] = useState<any[]>([]);
+  const [wqClientsLoading, setWqClientsLoading] = useState(false);
+  const [wqAmount, setWqAmount] = useState("");
+  const [wqType, setWqType] = useState<"tolov" | "qarz">("tolov");
+  const [wqNote, setWqNote] = useState("");
+  const [wqStId, setWqStId] = useState<string>("");
+  const [wqLoading, setWqLoading] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { has: hasPerm } = useMyPermissions(token, role);
@@ -905,12 +919,12 @@ export default function WorkerDashboard() {
             toast({ title: "Tranzaksiya xatosi", description: err.error, variant: "destructive" });
             setPaymentLoading(false); return;
           }
-          // 2-tranzaksiya: qolgan qism — dokonga
+          // 2-tranzaksiya: qolgan qism — qarz (kegn to'lanadi)
           const remainder = orderPrice - splitAmt;
           const tx2 = await fetch(`${apiBase}/api/client-accounts/${paymentOrder.clientId}/transaction`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ type: "dokonga", amount: remainder, serviceTypeId: paymentOrder.serviceTypeId, orderId: paymentOrder.id, orderCode: paymentOrder.orderId, note: txNote("dokonga", true), storeId }),
+            body: JSON.stringify({ type: "qarz", amount: remainder, serviceTypeId: paymentOrder.serviceTypeId, orderId: paymentOrder.id, orderCode: paymentOrder.orderId, note: `Zakaz ${paymentOrder.orderId} — qolgan qism (kegn to'lanadi)`, storeId }),
           });
           if (!tx2.ok) {
             const err = await tx2.json();
@@ -948,6 +962,57 @@ export default function WorkerDashboard() {
     } finally {
       setPaymentLoading(false);
     }
+  };
+
+  // Worker tez tranzaksiya funksiyalari
+  const openWq = async () => {
+    setWqOpen(true);
+    setWqSearch(""); setWqClientId(null); setWqClientName("");
+    setWqClientBal(null); setWqAmount(""); setWqType("tolov");
+    setWqNote(""); setWqStId("");
+    setWqClientsLoading(true);
+    try {
+      const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+      const r = await fetch(`${apiBase}/api/client-accounts`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) { const d = await r.json(); setWqClients(Array.isArray(d) ? d : []); }
+    } catch {} finally { setWqClientsLoading(false); }
+  };
+
+  const selectWqClient = async (c: any) => {
+    setWqClientId(c.id);
+    setWqClientName(c.name ?? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim());
+    setWqSearch(c.name ?? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim());
+    setWqClientBal(null); setWqClientBalLoading(true);
+    try {
+      const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+      const r = await fetch(`${apiBase}/api/client-accounts/${c.id}`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json(); setWqClientBal(d.balance ?? 0);
+    } catch { setWqClientBal(null); } finally { setWqClientBalLoading(false); }
+  };
+
+  const doWqTx = async () => {
+    if (!wqClientId || !storeId) return;
+    const amt = parseFloat(wqAmount.replace(/\s/g, "") || "0");
+    if (!amt || amt <= 0) { toast({ title: "Summa kiriting", variant: "destructive" }); return; }
+    const stId = wqStId ? parseInt(wqStId) : (serviceTypes as any[])?.find((s: any) => s.nasiyaEnabled)?.id;
+    if (!stId) { toast({ title: "Xizmat turi tanlanmagan", variant: "destructive" }); return; }
+    setWqLoading(true);
+    try {
+      const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+      const note = wqNote || (wqType === "qarz" ? "Yangi nasiya" : "Eski nasiyadan to'lov");
+      const res = await fetch(`${apiBase}/api/client-accounts/${wqClientId}/transaction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ type: wqType, amount: amt, note, serviceTypeId: stId, storeId }),
+      });
+      if (res.ok) {
+        toast({ title: wqType === "tolov" ? "✅ To'lov qabul qilindi!" : "📋 Qarz yozildi!" });
+        setWqOpen(false);
+      } else {
+        const e = await res.json();
+        toast({ title: e.error ?? "Xatolik", variant: "destructive" });
+      }
+    } catch { toast({ title: "Tarmoq xatosi", variant: "destructive" }); } finally { setWqLoading(false); }
   };
 
   const doReady = () => {
@@ -1314,6 +1379,15 @@ export default function WorkerDashboard() {
               </button>
             )}
           </div>
+          {hasNasiya && (
+            <button
+              onClick={openWq}
+              className="h-11 px-3 rounded-lg border border-green-300 bg-green-50 hover:bg-green-100 text-green-700 flex items-center gap-1.5 text-sm font-semibold shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              TX
+            </button>
+          )}
           {activeTab === "history" && (
             <Input
               type="date"
@@ -1611,8 +1685,8 @@ export default function WorkerDashboard() {
                             <span className="font-semibold text-green-600">{splitAmount} so'm</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">🏪 Dokonga yoziladi:</span>
-                            <span className="font-semibold text-orange-600">{(Number(paymentOrder.price) - wParseAmt(splitAmount)).toLocaleString("uz-UZ")} so'm</span>
+                            <span className="text-muted-foreground">📋 Qarz yoziladi (kegn):</span>
+                            <span className="font-semibold text-red-600">{(Number(paymentOrder.price) - wParseAmt(splitAmount)).toLocaleString("uz-UZ")} so'm</span>
                           </div>
                         </div>
                       )}
@@ -1709,6 +1783,146 @@ export default function WorkerDashboard() {
             >
               {splitPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Split className="w-4 h-4" />}
               Bo'lib ol
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Worker tez tranzaksiya modali */}
+      <Dialog open={wqOpen} onOpenChange={setWqOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5 text-green-600" /> Tez tranzaksiya
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            {/* Tur tanlash */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setWqType("tolov")}
+                className={`py-2.5 rounded-lg border font-semibold text-sm transition-all ${wqType === "tolov" ? "bg-green-600 text-white border-green-600" : "bg-muted text-muted-foreground border-muted-foreground/20 hover:border-green-400"}`}
+              >
+                ✅ Eski nasiyadan to'lov
+              </button>
+              <button
+                onClick={() => setWqType("qarz")}
+                className={`py-2.5 rounded-lg border font-semibold text-sm transition-all ${wqType === "qarz" ? "bg-red-500 text-white border-red-500" : "bg-muted text-muted-foreground border-muted-foreground/20 hover:border-red-400"}`}
+              >
+                📋 Yangi nasiya
+              </button>
+            </div>
+
+            {/* Mijoz qidirish */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Mijoz</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Ism bo'yicha qidirish..."
+                  value={wqSearch}
+                  onChange={e => { setWqSearch(e.target.value); if (wqClientId) { setWqClientId(null); setWqClientBal(null); } }}
+                  className="pl-9"
+                />
+              </div>
+              {/* Dropdown */}
+              {!wqClientId && wqSearch.length > 0 && (
+                <div className="border rounded-lg shadow-md bg-card max-h-44 overflow-y-auto">
+                  {wqClientsLoading ? (
+                    <div className="p-3 text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Yuklanmoqda...
+                    </div>
+                  ) : (() => {
+                    const q = wqSearch.toLowerCase();
+                    const filtered = wqClients.filter(c => {
+                      const nm = (c.name ?? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim()).toLowerCase();
+                      return nm.includes(q);
+                    });
+                    if (!filtered.length) return (
+                      <div className="p-4 text-center space-y-1">
+                        <p className="text-sm text-muted-foreground">Mijoz topilmadi</p>
+                        <p className="text-xs text-muted-foreground/70">«{wqSearch}» — boshqa nom kiriting</p>
+                      </div>
+                    );
+                    return filtered.map(c => {
+                      const nm = c.name ?? `${c.firstName ?? ""} ${c.lastName ?? ""}`.trim();
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => selectWqClient(c)}
+                          className="w-full text-left px-3 py-2 hover:bg-muted/60 transition-colors flex items-center gap-2 text-sm"
+                        >
+                          <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          <span>{nm}</span>
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
+              {/* Tanlangan mijoz balansini ko'rsat */}
+              {wqClientId && (
+                <div className="flex items-center justify-between px-2 py-1.5 bg-muted/40 rounded-lg text-sm">
+                  <span className="text-muted-foreground">Joriy balans:</span>
+                  {wqClientBalLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    : <span className={`font-bold ${(wqClientBal ?? 0) >= 0 ? "text-green-600" : "text-red-500"}`}>
+                        {(wqClientBal ?? 0).toLocaleString("uz-UZ")} so'm
+                      </span>
+                  }
+                </div>
+              )}
+            </div>
+
+            {/* Xizmat turi */}
+            {(serviceTypes as any[])?.filter((s: any) => s.nasiyaEnabled).length > 1 && (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Xizmat turi</label>
+                <select
+                  value={wqStId}
+                  onChange={e => setWqStId(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-card"
+                >
+                  <option value="">Avtomatik</option>
+                  {(serviceTypes as any[])?.filter((s: any) => s.nasiyaEnabled).map((s: any) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Summa */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Summa (so'm)</label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="0"
+                value={wqAmount}
+                onChange={e => setWqAmount(wFmtAmt(e.target.value))}
+                className="text-xl font-bold text-center h-14"
+              />
+            </div>
+
+            {/* Izoh */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Izoh (ixtiyoriy)</label>
+              <Input
+                placeholder={wqType === "tolov" ? "Eski nasiyadan to'lov" : "Yangi nasiya"}
+                value={wqNote}
+                onChange={e => setWqNote(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 pt-2">
+            <Button variant="outline" onClick={() => setWqOpen(false)}>Bekor</Button>
+            <Button
+              onClick={doWqTx}
+              disabled={wqLoading || !wqClientId || !wqAmount || wqAmount === "0"}
+              className={`flex-1 gap-2 ${wqType === "tolov" ? "bg-green-600 hover:bg-green-700" : "bg-red-500 hover:bg-red-600"}`}
+            >
+              {wqLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              {wqType === "tolov" ? "To'lovni saqlash" : "Qarz yozish"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1024,7 +1024,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
           const tx2 = await fetch(`${apiBase}/api/client-accounts/${paymentOrder.clientId}/transaction`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ type: "dokonga", amount: remainder, serviceTypeId: paymentOrder.serviceTypeId, orderId: paymentOrder.id, orderCode: paymentOrder.orderId, note: txNote("dokonga", true), storeId }),
+            body: JSON.stringify({ type: "qarz", amount: remainder, serviceTypeId: paymentOrder.serviceTypeId, orderId: paymentOrder.id, orderCode: paymentOrder.orderId, note: `Zakaz ${paymentOrder.orderId} — qolgan qism (kegn to'lanadi)`, storeId }),
           });
           if (!tx2.ok) {
             const err = await tx2.json();
@@ -1631,8 +1631,8 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
                           <span className="font-semibold text-green-600">{splitAmount} so'm</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">🏪 Dokonga yoziladi:</span>
-                          <span className="font-semibold text-orange-600">{(Number(paymentOrder.price) - adParseAmt(splitAmount)).toLocaleString("uz-UZ")} so'm</span>
+                          <span className="text-muted-foreground">📋 Qarz yoziladi (kegn):</span>
+                          <span className="font-semibold text-red-600">{(Number(paymentOrder.price) - adParseAmt(splitAmount)).toLocaleString("uz-UZ")} so'm</span>
                         </div>
                       </div>
                     )}
