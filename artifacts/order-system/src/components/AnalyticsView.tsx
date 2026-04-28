@@ -468,9 +468,34 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   const aggSummary = aggData?.summary;
   const activePeriod = useSpecificDate ? "daily" : period;
 
+  // Helper: allTx dan berilgan period uchun type bo'yicha summa hisoblash
+  const calcTxSumForPeriod = (type: string, periodKey: string, p: Period) => {
+    const tz5 = 5 * 3600 * 1000;
+    const periodDay = periodKey.slice(0, 10); // "2026-04-27"
+    let endDay: string | null = null;
+    if (p === "weekly") {
+      endDay = new Date(new Date(periodKey).getTime() + 7 * 86400000).toISOString().slice(0, 10);
+    } else if (p === "monthly") {
+      const d = new Date(periodKey);
+      endDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
+    }
+    return (allTx as any[])
+      .filter(t => {
+        if (t.type !== type || !t.created_at) return false;
+        const ms = new Date(t.created_at).getTime();
+        if (isNaN(ms)) return false;
+        const txDay = new Date(ms + tz5).toISOString().slice(0, 10);
+        return endDay ? (txDay >= periodDay && txDay < endDay) : txDay === periodDay;
+      })
+      .reduce((s: number, t: any) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
+  };
+
   const periodGroups = aggRows.reduce((acc: any, row: any) => {
     const key = row.period;
-    if (!acc[key]) acc[key] = { period: key, orderCount: 0, totalPrice: 0, unitTotals: {}, types: [] };
+    if (!acc[key]) {
+      const tolovTotal = calcTxSumForPeriod("tolov", key, activePeriod);
+      acc[key] = { period: key, orderCount: 0, totalPrice: 0, unitTotals: {}, types: [], tolovTotal };
+    }
     acc[key].orderCount += row.order_count;
     acc[key].totalPrice += row.total_price;
     const unitKey = row.unit || "dona";
@@ -956,6 +981,11 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                         {group.totalPrice > 0 && (
                           <span><b className="text-amber-600 dark:text-amber-400">{fmtMoney(group.totalPrice)}</b> so'm</span>
                         )}
+                        {group.tolovTotal > 0 && (
+                          <span className="border border-purple-300 dark:border-purple-700 rounded px-1 py-0.5 text-purple-700 dark:text-purple-300 font-semibold bg-purple-50 dark:bg-purple-950/30">
+                            Eski nasiya: {fmtMoney(group.tolovTotal)}
+                          </span>
+                        )}
                         {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                       </div>
                     </button>
@@ -1007,6 +1037,48 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                             </div>
                           ))}
                         </div>
+                      );
+                    })()}
+
+                    {isExpanded && (() => {
+                      const tz5 = 5 * 3600 * 1000;
+                      const pDay = pKey.slice(0, 10);
+                      let pEndDay: string | null = null;
+                      if (activePeriod === "weekly") pEndDay = new Date(new Date(pKey).getTime() + 7 * 86400000).toISOString().slice(0, 10);
+                      else if (activePeriod === "monthly") { const d2 = new Date(pKey); pEndDay = new Date(Date.UTC(d2.getUTCFullYear(), d2.getUTCMonth() + 1, 1)).toISOString().slice(0, 10); }
+                      const periodTxList = (allTx as any[]).filter(t => {
+                        if (t.type !== "tolov" || !t.created_at) return false;
+                        const ms = new Date(t.created_at).getTime();
+                        if (isNaN(ms)) return false;
+                        const txDay = new Date(ms + tz5).toISOString().slice(0, 10);
+                        return pEndDay ? (txDay >= pDay && txDay < pEndDay) : txDay === pDay;
+                      }).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                      return (
+                        <>
+                          {periodTxList.length > 0 && (
+                            <div className="border-t bg-purple-50/40 dark:bg-purple-950/20">
+                              <div className="px-4 py-1.5 text-xs font-semibold text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                                <span>💜</span> Eski nasiya to'lovlari ({periodTxList.length} ta)
+                              </div>
+                              <div className="divide-y divide-purple-100 dark:divide-purple-900/40 max-h-48 overflow-y-auto">
+                                {periodTxList.map((tx: any) => {
+                                  const cName = tx.client
+                                    ? [tx.client.firstName, tx.client.lastName].filter(Boolean).join(" ") || tx.client.phone || `#${tx.clientId}`
+                                    : `#${tx.clientId}`;
+                                  return (
+                                    <div key={tx.id} className="px-4 py-2 flex items-center justify-between text-sm">
+                                      <span className="text-muted-foreground font-medium truncate max-w-[55%]">{cName}</span>
+                                      <div className="flex items-center gap-3 text-xs">
+                                        <span className="text-purple-700 dark:text-purple-300 font-bold">{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))} so'm</span>
+                                        <span className="text-muted-foreground">{fmtTime(tx.created_at)}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </>
                       );
                     })()}
 
