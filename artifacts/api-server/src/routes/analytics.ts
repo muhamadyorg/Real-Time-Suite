@@ -300,7 +300,7 @@ router.get("/orders", async (req, res) => {
       ) ct ON true
       WHERE ${oConditions.join(" AND ")}
       ORDER BY o.created_at DESC
-      LIMIT 500
+      LIMIT 10000
     `;
 
     const result = await pool.query(sql, params);

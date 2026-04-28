@@ -125,6 +125,17 @@ const STATUS_LABELS: Record<string, string> = {
   new: "Yangi", accepted: "Qabul", ready: "Tayyor", delivered: "Yetkazildi", cancelled: "Bekor",
 };
 
+// allTx tranzaksiya obyektidan mijoz ismi va telefoni
+const txClientName = (tx: any): string => {
+  if (tx.client) {
+    const name = [tx.client.firstName, tx.client.lastName].filter(Boolean).join(" ");
+    return name || tx.client.phone || `#${tx.clientId ?? tx.client_id}`;
+  }
+  return tx.client_name || `Mijoz #${tx.clientId ?? tx.client_id ?? "?"}`;
+};
+const txClientPhone = (tx: any): string | null =>
+  tx.client?.phone ?? tx.client_phone ?? null;
+
 // Batafsil view uchun: period ga qarab guruhlash kaliti
 const getGroupKey = (dateStr: string, p: Period): string => {
   const s = typeof dateStr === "string" ? dateStr.slice(0, 10) : "";
@@ -334,7 +345,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   };
 
   const clientBreakdown = (clientId: number) => {
-    const txs = allTx.filter((t: any) => t.client_id === clientId);
+    const txs = allTx.filter((t: any) => (t.clientId ?? t.client_id) === clientId);
     const bd: Record<TxType, number> = { naqd: 0, qarz: 0, tolov: 0, tuzatish: 0, click: 0, dokonga: 0 };
     for (const t of txs) { const k = t.type as TxType; if (bd[k] !== undefined) bd[k] += Math.abs(parseFloat(t.amount ?? "0")); }
     return { ...bd, dokonBerishi: bd.naqd + bd.click + bd.dokonga };
@@ -916,6 +927,41 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                       </div>
                     )}
 
+                    {/* Faqat to'lov kunlari — eski nasiya ro'yxati */}
+                    {!collapsed && group.txOnly && (() => {
+                      const tz5 = 5 * 3600 * 1000;
+                      const dayTxs = (allTx as any[]).filter(t => {
+                        if (t.type !== "tolov") return false;
+                        const ca = t.createdAt ?? t.created_at;
+                        if (!ca) return false;
+                        const d = new Date(new Date(ca).getTime() + tz5).toISOString().slice(0, 10);
+                        return d === group.day;
+                      }).sort((a, b) => new Date(b.createdAt ?? b.created_at).getTime() - new Date(a.createdAt ?? a.created_at).getTime());
+                      return (
+                        <div className="divide-y divide-purple-100 dark:divide-purple-900/40">
+                          {dayTxs.map((tx: any) => {
+                            const cPhone = txClientPhone(tx);
+                            return (
+                              <div key={tx.id} className="px-4 py-2.5 flex items-center justify-between text-sm bg-purple-50/30 dark:bg-purple-950/10">
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-semibold text-foreground">{txClientName(tx)}</div>
+                                  {(tx.serviceTypeName ?? tx.service_type_name) && (
+                                    <div className="text-xs text-purple-600 dark:text-purple-400">{tx.serviceTypeName ?? tx.service_type_name}</div>
+                                  )}
+                                  {cPhone && <div className="text-xs text-muted-foreground">{cPhone}</div>}
+                                  {tx.note && <div className="text-xs text-muted-foreground/70 italic">{tx.note}</div>}
+                                </div>
+                                <div className="text-right shrink-0 ml-4">
+                                  <div className="font-black text-purple-700 dark:text-purple-300">+{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}</div>
+                                  <div className="text-xs text-muted-foreground">{fmtTime(tx.createdAt ?? tx.created_at)}</div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+
                     {/* Order rows */}
                     {!collapsed && !group.txOnly && (
                       <div className="divide-y divide-border/40">
@@ -1103,20 +1149,20 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                                 <span>💜</span> Eski nasiya to'lovlari ({periodTxList.length} ta)
                               </div>
                               <div className="divide-y divide-purple-100 dark:divide-purple-900/40 max-h-48 overflow-y-auto">
-                                {periodTxList.map((tx: any) => {
-                                  const cName = tx.client
-                                    ? [tx.client.firstName, tx.client.lastName].filter(Boolean).join(" ") || tx.client.phone || `#${tx.clientId}`
-                                    : `#${tx.clientId}`;
-                                  return (
-                                    <div key={tx.id} className="px-4 py-2 flex items-center justify-between text-sm">
-                                      <span className="text-muted-foreground font-medium truncate max-w-[55%]">{cName}</span>
-                                      <div className="flex items-center gap-3 text-xs">
-                                        <span className="text-purple-700 dark:text-purple-300 font-bold">{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))} so'm</span>
-                                        <span className="text-muted-foreground">{fmtTime(tx.createdAt ?? tx.created_at)}</span>
-                                      </div>
+                                {periodTxList.map((tx: any) => (
+                                  <div key={tx.id} className="px-4 py-2 flex items-center justify-between text-sm">
+                                    <div className="flex-1 min-w-0 mr-3">
+                                      <div className="font-medium text-foreground truncate">{txClientName(tx)}</div>
+                                      {(tx.serviceTypeName ?? tx.service_type_name) && (
+                                        <div className="text-xs text-purple-600 dark:text-purple-400">{tx.serviceTypeName ?? tx.service_type_name}</div>
+                                      )}
                                     </div>
-                                  );
-                                })}
+                                    <div className="flex items-center gap-3 text-xs shrink-0">
+                                      <span className="text-purple-700 dark:text-purple-300 font-bold">{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))} so'm</span>
+                                      <span className="text-muted-foreground">{fmtTime(tx.createdAt ?? tx.created_at)}</span>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           )}
@@ -1395,19 +1441,25 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                         <span className="font-black">{fmtMoney(txTolov)} so'm</span>
                       </div>
                       <div className="divide-y divide-purple-100 dark:divide-purple-900/30">
-                        {tolovTxList.map((tx: any) => (
-                          <div key={tx.id} className="px-4 py-2.5 flex items-center justify-between text-sm">
-                            <div className="flex-1 min-w-0">
-                              <div className="font-semibold text-foreground">{tx.client_name ?? "Noma'lum mijoz"}</div>
-                              {tx.client_phone && <div className="text-xs text-muted-foreground">{tx.client_phone}</div>}
-                              {tx.note && <div className="text-xs text-muted-foreground/70 italic">{tx.note}</div>}
+                        {tolovTxList.map((tx: any) => {
+                          const cPhone = txClientPhone(tx);
+                          return (
+                            <div key={tx.id} className="px-4 py-2.5 flex items-center justify-between text-sm">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-foreground">{txClientName(tx)}</div>
+                                {(tx.serviceTypeName ?? tx.service_type_name) && (
+                                  <div className="text-xs text-purple-600 dark:text-purple-400">{tx.serviceTypeName ?? tx.service_type_name}</div>
+                                )}
+                                {cPhone && <div className="text-xs text-muted-foreground">{cPhone}</div>}
+                                {tx.note && <div className="text-xs text-muted-foreground/70 italic">{tx.note}</div>}
+                              </div>
+                              <div className="text-right shrink-0 ml-4">
+                                <div className="font-black text-purple-700 dark:text-purple-300 text-base">+{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}</div>
+                                <div className="text-xs text-muted-foreground">{fmtTime(tx.createdAt ?? tx.created_at)}</div>
+                              </div>
                             </div>
-                            <div className="text-right shrink-0 ml-4">
-                              <div className="font-black text-purple-700 dark:text-purple-300 text-base">+{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}</div>
-                              <div className="text-xs text-muted-foreground">{fmtTime(tx.createdAt ?? tx.created_at)}</div>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </Card>
                   )}
@@ -1420,19 +1472,25 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                         <span className="font-black">−{fmtMoney(txQarz)} so'm</span>
                       </div>
                       <div className="divide-y divide-red-100 dark:divide-red-900/30">
-                        {qarzTxList.map((tx: any) => (
-                          <div key={tx.id} className="px-4 py-2.5 flex items-center justify-between text-sm">
-                            <div className="flex-1 min-w-0">
-                              <div className="font-semibold text-foreground">{tx.client_name ?? "Noma'lum mijoz"}</div>
-                              {tx.client_phone && <div className="text-xs text-muted-foreground">{tx.client_phone}</div>}
-                              {tx.note && <div className="text-xs text-muted-foreground/70 italic">{tx.note}</div>}
+                        {qarzTxList.map((tx: any) => {
+                          const cPhone = txClientPhone(tx);
+                          return (
+                            <div key={tx.id} className="px-4 py-2.5 flex items-center justify-between text-sm">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-foreground">{txClientName(tx)}</div>
+                                {(tx.serviceTypeName ?? tx.service_type_name) && (
+                                  <div className="text-xs text-red-500">{tx.serviceTypeName ?? tx.service_type_name}</div>
+                                )}
+                                {cPhone && <div className="text-xs text-muted-foreground">{cPhone}</div>}
+                                {tx.note && <div className="text-xs text-muted-foreground/70 italic">{tx.note}</div>}
+                              </div>
+                              <div className="text-right shrink-0 ml-4">
+                                <div className="font-black text-red-600 dark:text-red-400 text-base">−{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}</div>
+                                <div className="text-xs text-muted-foreground">{fmtTime(tx.createdAt ?? tx.created_at)}</div>
+                              </div>
                             </div>
-                            <div className="text-right shrink-0 ml-4">
-                              <div className="font-black text-red-600 dark:text-red-400 text-base">−{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}</div>
-                              <div className="text-xs text-muted-foreground">{fmtTime(tx.createdAt ?? tx.created_at)}</div>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </Card>
                   )}
@@ -1484,9 +1542,9 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                             <div className="flex items-center gap-2 flex-1 min-w-0">
                               <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${meta.color}`}>{meta.icon} {meta.label}</span>
                               <div className="min-w-0">
-                                <div className="font-medium truncate">{tx.client_name ?? "Noma'lum"}</div>
-                                {tx.client_phone && <div className="text-muted-foreground">{tx.client_phone}</div>}
-                                <div className="text-muted-foreground/60">{tx.note || tx.service_type_name || ""}</div>
+                                <div className="font-medium truncate">{txClientName(tx)}</div>
+                                {txClientPhone(tx) && <div className="text-muted-foreground">{txClientPhone(tx)}</div>}
+                                <div className="text-muted-foreground/60">{tx.note || tx.serviceTypeName || tx.service_type_name || ""}</div>
                               </div>
                             </div>
                             <div className="text-right shrink-0 ml-3">
