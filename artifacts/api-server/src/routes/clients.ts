@@ -61,12 +61,13 @@ router.post("/", async (req, res) => {
       res.status(403).json({ error: "Ruxsat yo'q" });
       return;
     }
-    const { firstName, lastName, phone, telegramUserId } = req.body as {
-      firstName: string; lastName: string; phone: string; telegramUserId?: string;
+    const { firstName, lastName, phone, telegramUserId, botStoreId } = req.body as {
+      firstName: string; lastName: string; phone: string; telegramUserId?: string; botStoreId?: number;
     };
     const [client] = await db.insert(clientsTable).values({
       firstName, lastName, phone,
       telegramUserId: telegramUserId ?? null,
+      botStoreId: botStoreId ?? null,
       status: "approved",
     }).returning();
     res.status(201).json(client);
