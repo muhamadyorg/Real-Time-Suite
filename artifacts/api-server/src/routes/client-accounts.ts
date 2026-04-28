@@ -309,6 +309,51 @@ router.post("/:clientId/transaction", async (req, res) => {
   }
 });
 
+// DELETE /api/client-accounts/transactions/:txId — tranzaksiyani o'chirish (faqat sudo/superadmin)
+router.delete("/transactions/:txId", async (req, res) => {
+  try {
+    const payload = await authenticateToken(req.headers.authorization);
+    if (!payload || !["sudo", "superadmin"].includes(payload.role)) {
+      res.status(403).json({ error: "Ruxsat yo'q" }); return;
+    }
+
+    const txId = parseInt(req.params.txId);
+    if (!txId) { res.status(400).json({ error: "Tranzaksiya ID noto'g'ri" }); return; }
+
+    const tx = await db.query.clientTransactionsTable.findFirst({
+      where: eq(clientTransactionsTable.id, txId),
+    });
+    if (!tx) { res.status(404).json({ error: "Tranzaksiya topilmadi" }); return; }
+
+    const delta = parseFloat(tx.balanceAfter ?? "0") - parseFloat(tx.balanceBefore ?? "0");
+
+    if (delta !== 0 && tx.clientId && tx.storeId) {
+      const account = await db.query.clientAccountsTable.findFirst({
+        where: and(
+          eq(clientAccountsTable.clientId, tx.clientId),
+          eq(clientAccountsTable.storeId, tx.storeId)
+        ),
+      });
+      if (account) {
+        const newBalance = parseFloat(account.balance ?? "0") - delta;
+        await db.update(clientAccountsTable)
+          .set({ balance: newBalance.toFixed(2), updatedAt: new Date() })
+          .where(and(
+            eq(clientAccountsTable.clientId, tx.clientId),
+            eq(clientAccountsTable.storeId, tx.storeId)
+          ));
+      }
+    }
+
+    await db.delete(clientTransactionsTable).where(eq(clientTransactionsTable.id, txId));
+
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Server xatosi" });
+  }
+});
+
 // GET /api/client-accounts/:clientId/transactions — to'liq tarix
 router.get("/:clientId/transactions", async (req, res) => {
   try {

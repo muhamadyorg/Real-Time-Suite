@@ -424,6 +424,7 @@ function ClientAccountsView({ storeId, token }: { storeId: number; token: string
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
   const [payLoading, setPayLoading] = useState(false);
+  const [deletingTxId, setDeletingTxId] = useState<number | null>(null);
   const fmtPayAmount = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const parsePayAmount = (v: string) => parseFloat(v.replace(/\s/g, "") || "0");
 
@@ -472,6 +473,23 @@ function ClientAccountsView({ storeId, token }: { storeId: number; token: string
       setTxCache(prev => { const n = { ...prev }; delete n[payModalClient.id]; return n; });
       fetchAccounts();
     } catch { toast({ title: "Tarmoq xatosi", variant: "destructive" }); } finally { setPayLoading(false); }
+  };
+
+  const handleDeleteTx = async (tx: any, clientId: number) => {
+    const amt = Math.abs(parseFloat(tx.amount)).toLocaleString("uz-UZ");
+    if (!confirm(`Bu tranzaksiyani o'chirasizmi?\n${amt} so'm — ${tx.note || tx.type}\n\nBalans qayta hisoblanadi.`)) return;
+    setDeletingTxId(tx.id);
+    try {
+      const r = await fetch(`${apiBase}/api/client-accounts/transactions/${tx.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await r.json();
+      if (!r.ok) { toast({ title: data.error ?? "Xatolik", variant: "destructive" }); return; }
+      toast({ title: "✅ Tranzaksiya o'chirildi" });
+      setTxCache(prev => ({ ...prev, [clientId]: (prev[clientId] ?? []).filter((t: any) => t.id !== tx.id) }));
+      fetchAccounts();
+    } catch { toast({ title: "Tarmoq xatosi", variant: "destructive" }); } finally { setDeletingTxId(null); }
   };
 
   const fmtBalance = (bal: number) => {
@@ -565,13 +583,21 @@ function ClientAccountsView({ storeId, token }: { storeId: number; token: string
                                 )}
                                 <div className="text-xs text-muted-foreground/60 mt-0.5">{dateStr} · {timeStr}</div>
                               </div>
-                              <div className="shrink-0 text-right">
+                              <div className="shrink-0 text-right flex flex-col items-end gap-1">
                                 <div className={`font-bold tabular-nums ${isNegative ? "text-red-500" : isPositive ? "text-green-600" : "text-muted-foreground"}`}>
                                   {isNegative ? "−" : "+"}{Math.abs(parseFloat(tx.amount)).toLocaleString("uz-UZ")} so'm
                                 </div>
                                 <div className="text-[10px] text-muted-foreground/60">
                                   Bal: {parseFloat(tx.balanceAfter) < 0 ? `−${Math.abs(parseFloat(tx.balanceAfter)).toLocaleString("uz-UZ")}` : `+${parseFloat(tx.balanceAfter).toLocaleString("uz-UZ")}`}
                                 </div>
+                                <button
+                                  onClick={() => handleDeleteTx(tx, c.id)}
+                                  disabled={deletingTxId === tx.id}
+                                  className="mt-0.5 p-1 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40"
+                                  title="O'chirish"
+                                >
+                                  {deletingTxId === tx.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                </button>
                               </div>
                             </div>
                           );
