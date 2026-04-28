@@ -49,7 +49,7 @@ const calcBalonFromRows = (rows: any[]) => {
     const q = Number(r.total_quantity ?? 0);
     if (r.unit === "metr") cm += q * 100;
     else if (r.unit === "kardon") kardon += Math.round(q);
-    else if (BALON_SM_UNITS.has(String(r.unit))) cm += q * parseInt(r.unit);
+    else if (BALON_SM_UNITS.has(String(r.unit))) cm += q * 100 + parseInt(r.unit);
   }
   return { metr: Math.floor(cm / 100), sm: cm % 100, kardon };
 };
@@ -62,7 +62,7 @@ const calcBalonFromOrders = (orders: any[]) => {
     const q = Number(o.quantity ?? 0);
     if (o.unit === "metr") cm += q * 100;
     else if (o.unit === "kardon") kardon += Math.round(q);
-    else if (BALON_SM_UNITS.has(String(o.unit))) cm += q * parseInt(o.unit);
+    else if (BALON_SM_UNITS.has(String(o.unit))) cm += q * 100 + parseInt(o.unit);
   }
   return { metr: Math.floor(cm / 100), sm: cm % 100, kardon };
 };
