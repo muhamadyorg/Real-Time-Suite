@@ -1488,6 +1488,7 @@ export default function SuperadminDashboard() {
             storeId={storeId}
             token={token ?? ""}
             serviceTypes={Array.isArray(allServiceTypes) ? allServiceTypes as any[] : []}
+            role="superadmin"
           />
         </TabsContent>
 

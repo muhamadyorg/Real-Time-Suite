@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, RefreshCw, TrendingUp, ShoppingBag, Wallet, ChevronDown, ChevronUp, Calendar, X, Layers, Search, Phone, TrendingDown, BadgeCheck, Users, Plus } from "lucide-react";
+import { Loader2, RefreshCw, TrendingUp, ShoppingBag, Wallet, ChevronDown, ChevronUp, Calendar, X, Layers, Search, Phone, TrendingDown, BadgeCheck, Users, Plus, Trash2 } from "lucide-react";
 
 interface AnalyticsViewProps {
   storeId: number;
   token: string;
   serviceTypes?: { id: number; name: string }[];
+  role?: string;
 }
 
 type Period = "daily" | "weekly" | "monthly";
@@ -172,7 +173,8 @@ const PAYMENT_META: Record<string, { label: string; icon: string; cls: string }>
   tolov:   { label: "To'lov",  icon: "💰", cls: "text-purple-600 bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800" },
 };
 
-export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsViewProps) {
+export function AnalyticsView({ storeId, token, serviceTypes = [], role }: AnalyticsViewProps) {
+  const canDelete = role === "sudo" || role === "superadmin";
   const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
   const [period, setPeriod] = useState<Period>("daily");
   const [selTypes, setSelTypes] = useState<number[]>([]);
@@ -226,6 +228,21 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
 
   // Qabul qilingan (eski nasiya to'lovlari) detail dialog
   const [tolovListOpen, setTolovListOpen] = useState(false);
+  const [deletingTxId, setDeletingTxId] = useState<number | null>(null);
+
+  const handleDeleteTx = async (txId: number) => {
+    if (!confirm("Bu to'lovni o'chirasizmi? Balans qayta hisoblanadi.")) return;
+    setDeletingTxId(txId);
+    try {
+      const r = await fetch(`${apiBase}/api/client-accounts/transactions/${txId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (r.ok) {
+        setAllTx(prev => prev.filter((t: any) => t.id !== txId));
+      }
+    } catch { /* silent */ } finally { setDeletingTxId(null); }
+  };
 
   // Quick "+" tranzaksiya modal
   const [quickOpen, setQuickOpen] = useState(false);
@@ -862,7 +879,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                               )}
                               <div className="text-xs text-muted-foreground/60">{dateStr} · {timeStr}</div>
                             </div>
-                            <div className="text-right shrink-0">
+                            <div className="text-right shrink-0 flex flex-col items-end gap-1">
                               <div className="font-bold text-green-600 dark:text-green-400 tabular-nums">
                                 +{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}
                               </div>
@@ -870,6 +887,16 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                                 <div className="text-[10px] text-muted-foreground/60">
                                   Bal: {parseFloat(tx.balance_after) < 0 ? `−${fmtMoney(Math.abs(parseFloat(tx.balance_after)))}` : `+${fmtMoney(parseFloat(tx.balance_after))}`}
                                 </div>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDeleteTx(tx.id)}
+                                  disabled={deletingTxId === tx.id}
+                                  className="p-1 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40"
+                                  title="O'chirish"
+                                >
+                                  {deletingTxId === tx.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                </button>
                               )}
                             </div>
                           </div>
