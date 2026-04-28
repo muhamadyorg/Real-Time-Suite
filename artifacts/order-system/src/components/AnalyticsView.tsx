@@ -851,7 +851,8 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                 }
                 const dokongaBerish = (payBrk.naqd ?? 0) + (payBrk.dokonga ?? 0);
                 const qarzSum = payBrk.qarz ?? 0;
-                const hasPayBreakdown = Object.keys(payBrk).length > 0;
+                const eskiNasiya = txDayMap[group.day]?.tolov ?? 0;
+                const hasPayBreakdown = Object.keys(payBrk).length > 0 || eskiNasiya > 0;
 
                 return (
                   <Card key={group.day} className="overflow-hidden">
@@ -878,13 +879,14 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                     {/* Payment breakdown row (always visible if exists) */}
                     {hasPayBreakdown && (
                       <div className="px-4 py-1.5 bg-muted/20 border-b border-border/40 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                        {payBrk.naqd > 0 && <span className="text-green-600">💵 {fmtMoney(payBrk.naqd)}</span>}
-                        {payBrk.click > 0 && <span className="text-blue-600">📲 {fmtMoney(payBrk.click)}</span>}
-                        {payBrk.dokonga > 0 && <span className="text-orange-600">🏪 {fmtMoney(payBrk.dokonga)}</span>}
-                        {qarzSum > 0 && <span className="text-red-600">📋 {fmtMoney(qarzSum)} nasiya</span>}
-                        {payBrk.tolov > 0 && <span className="text-purple-600">💰 {fmtMoney(payBrk.tolov)} to'lov</span>}
+                        {payBrk.naqd > 0 && <span className="text-green-600">💵 Naqd: {fmtMoney(payBrk.naqd)}</span>}
+                        {payBrk.click > 0 && <span className="text-blue-600">📲 Click: {fmtMoney(payBrk.click)}</span>}
+                        {payBrk.dokonga > 0 && <span className="text-orange-600">🏪 Dokonga: {fmtMoney(payBrk.dokonga)}</span>}
+                        {qarzSum > 0 && <span className="text-red-600">📋 Nasiya: {fmtMoney(qarzSum)}</span>}
+                        {eskiNasiya > 0 && <span className="font-semibold text-purple-600 bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 rounded">💜 Eski nasiya: {fmtMoney(eskiNasiya)}</span>}
+                        {payBrk.tolov > 0 && <span className="text-purple-500">💰 {fmtMoney(payBrk.tolov)} to'lov</span>}
                         {dokongaBerish > 0 && (
-                          <span className="ml-auto font-semibold text-amber-700 dark:text-amber-400">🏪 Dokonga: {fmtMoney(dokongaBerish)}</span>
+                          <span className="ml-auto font-semibold text-amber-700 dark:text-amber-400">🏪 Dokonga jami: {fmtMoney(dokongaBerish)}</span>
                         )}
                       </div>
                     )}
