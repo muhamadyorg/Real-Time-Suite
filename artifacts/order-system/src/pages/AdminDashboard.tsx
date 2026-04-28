@@ -1749,7 +1749,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
             >
               {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4" />}
               {splitStep2
-                ? "✅ Tasdiqlash"
+                ? "✅ Bo'lib to'lab olib ket!"
                 : splitPayment
                   ? "Keyingi qadam →"
                   : paymentMode === "qarz" ? "Qarz yozib olib ketildi!" : paymentMode === "click" ? "Click — Olib ketildi!" : paymentMode === "dokonga" ? "Dokonga — Olib ketildi!" : "Olib ketildi!"}
