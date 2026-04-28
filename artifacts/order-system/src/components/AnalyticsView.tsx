@@ -519,7 +519,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   }, [aggRows, txDayMap, activePeriod]);
 
   // Individual orders grouped by period (daily/weekly/monthly)
-  const dayGroups = orders.reduce((acc: any, o: any) => {
+  const dayGroups: Record<string, any> = orders.reduce((acc: any, o: any) => {
     const rawDate = typeof o.day === "string"
       ? o.day.slice(0, 10)
       : o.created_at
@@ -531,6 +531,26 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
     acc[key].totalPrice += parseFloat(o.price ?? "0");
     return acc;
   }, {});
+
+  // Buyurtmasiz kunlarni ham qo'shish: tolov (eski nasiya) tranzaksiyasi bor kunlar
+  {
+    const tz5 = 5 * 3600 * 1000;
+    const days = PERIOD_DAYS[activePeriod] ?? 1;
+    const periodCutoffMs = useSpecificDate && specificDate
+      ? new Date(specificDate + "T00:00:00+05:00").getTime()
+      : Date.now() + tz5 - days * 86400000;
+    const periodEndMs = useSpecificDate && specificDate
+      ? new Date(specificDate + "T00:00:00+05:00").getTime() + 86400000
+      : Infinity;
+    for (const [txDay, types] of Object.entries(txDayMap)) {
+      if (!(types as any).tolov) continue;
+      const dayMs = new Date(txDay + "T00:00:00+05:00").getTime();
+      if (dayMs < periodCutoffMs || dayMs >= periodEndMs) continue;
+      const key = getGroupKey(txDay, activePeriod);
+      if (!dayGroups[key]) dayGroups[key] = { day: key, orders: [], totalPrice: 0, txOnly: true };
+    }
+  }
+
   const dayList = (Object.values(dayGroups) as any[]).sort((a, b) => b.day.localeCompare(a.day));
 
   const toggleDay = (day: string) =>
@@ -866,7 +886,10 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                         <span className="font-bold text-sm">{fmtGroupHeader(group.day, period)}</span>
                       </div>
                       <div className="flex gap-2 text-xs text-muted-foreground flex-wrap justify-end">
-                        <span><b className="text-foreground">{group.orders.length}</b> ta</span>
+                        {group.txOnly
+                          ? <span className="text-purple-500 font-medium">faqat to'lovlar</span>
+                          : <span><b className="text-foreground">{group.orders.length}</b> ta</span>
+                        }
                         {dayBalonStr && (
                           <span className="text-violet-600 dark:text-violet-400 font-semibold">{dayBalonStr}</span>
                         )}
@@ -892,7 +915,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                     )}
 
                     {/* Order rows */}
-                    {!collapsed && (
+                    {!collapsed && !group.txOnly && (
                       <div className="divide-y divide-border/40">
                         {group.orders.map((o: any) => {
                           const price = fmtPrice(o.price);
