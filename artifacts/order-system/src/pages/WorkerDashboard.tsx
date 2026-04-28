@@ -757,6 +757,9 @@ export default function WorkerDashboard() {
   // Bo'lib to'lash
   const [splitPayment, setSplitPayment] = useState(false);
   const [splitAmount, setSplitAmount] = useState("");
+  // Bo'lib to'lash 2-qadam
+  const [splitStep2, setSplitStep2] = useState(false);
+  const [splitStep2Mode, setSplitStep2Mode] = useState<"naqd" | "qarz" | "click" | "dokonga">("qarz");
   // Summa formatlash (3 raqamda bo'shliq)
   const wFmtAmt = (v: string) => v.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   const wParseAmt = (v: string) => parseFloat(v.replace(/\s/g, "") || "0");
@@ -887,6 +890,12 @@ export default function WorkerDashboard() {
 
   // Nasiya zakaz uchun olib ketildi bosqichi: naqd/qarz + tranzaksiya
   // Summa — tayyor bosqichida kiritilgan narxdan olinadi (paymentOrder.price)
+  const resetWPaymentModal = () => {
+    setPaymentOrder(null);
+    setSplitPayment(false); setSplitAmount("");
+    setSplitStep2(false); setSplitStep2Mode("qarz");
+  };
+
   const doDeliverWithPayment = async () => {
     if (!paymentOrder || !storeId) return;
     const orderPrice = paymentOrder.price ? Number(paymentOrder.price) : 0;
@@ -894,41 +903,49 @@ export default function WorkerDashboard() {
       toast({ title: "Zakaz summasi kiritilmagan", variant: "destructive" }); return;
     }
     const splitAmt = splitPayment ? wParseAmt(splitAmount) : 0;
-    if (splitPayment && (splitAmt <= 0 || splitAmt >= orderPrice)) {
-      toast({ title: "To'g'ri qisman summa kiriting", variant: "destructive" }); return;
+
+    // 1-qadam: validatsiya qilib 2-qadamga o'tkazamiz
+    if (splitPayment && !splitStep2) {
+      if (splitAmt <= 0 || splitAmt >= orderPrice) {
+        toast({ title: "To'g'ri qisman summa kiriting", variant: "destructive" }); return;
+      }
+      setSplitStep2(true);
+      setSplitStep2Mode("qarz");
+      return;
     }
+
     setPaymentLoading(true);
     try {
       const apiBase = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
       if (paymentOrder.clientId) {
-        const txNote = (type: string, partial?: boolean) =>
-          type === "naqd"    ? `Zakaz ${paymentOrder.orderId} — naqd to'lov${partial ? " (qisman)" : ""}`
-          : type === "click" ? `Zakaz ${paymentOrder.orderId} — Click to'lov${partial ? " (qisman)" : ""}`
-          : type === "dokonga" ? `Zakaz ${paymentOrder.orderId} — Dokonga berildi${partial ? " (qolgan qism)" : ""}`
-          : `Zakaz ${paymentOrder.orderId} uchun nasiya`;
+        const txNote = (type: string, suffix?: string) => {
+          const base = `Zakaz ${paymentOrder.orderId}`;
+          if (type === "naqd")    return `${base} — naqd to'lov${suffix ?? ""}`;
+          if (type === "click")   return `${base} — Click to'lov${suffix ?? ""}`;
+          if (type === "dokonga") return `${base} — Dokonga berildi${suffix ?? ""}`;
+          return `${base} uchun nasiya${suffix ?? ""}`;
+        };
 
-        if (splitPayment) {
-          // 1-tranzaksiya: qisman to'lov (paymentMode bilan)
+        if (splitPayment && splitStep2) {
           const tx1 = await fetch(`${apiBase}/api/client-accounts/${paymentOrder.clientId}/transaction`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ type: paymentMode, amount: splitAmt, serviceTypeId: paymentOrder.serviceTypeId, orderId: paymentOrder.id, orderCode: paymentOrder.orderId, note: txNote(paymentMode, true), storeId }),
+            body: JSON.stringify({ type: paymentMode, amount: splitAmt, serviceTypeId: paymentOrder.serviceTypeId, orderId: paymentOrder.id, orderCode: paymentOrder.orderId, note: txNote(paymentMode, " (1-qism)"), storeId }),
           });
           if (!tx1.ok) {
             const err = await tx1.json();
-            toast({ title: "Tranzaksiya xatosi", description: err.error, variant: "destructive" });
+            toast({ title: "1-qism tranzaksiya xatosi", description: err.error, variant: "destructive" });
             setPaymentLoading(false); return;
           }
-          // 2-tranzaksiya: qolgan qism — qarz (kegn to'lanadi)
           const remainder = orderPrice - splitAmt;
           const tx2 = await fetch(`${apiBase}/api/client-accounts/${paymentOrder.clientId}/transaction`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ type: "qarz", amount: remainder, serviceTypeId: paymentOrder.serviceTypeId, orderId: paymentOrder.id, orderCode: paymentOrder.orderId, note: `Zakaz ${paymentOrder.orderId} — qolgan qism (kegn to'lanadi)`, storeId }),
+            body: JSON.stringify({ type: splitStep2Mode, amount: remainder, serviceTypeId: paymentOrder.serviceTypeId, orderId: paymentOrder.id, orderCode: paymentOrder.orderId, note: txNote(splitStep2Mode, " (2-qism)"), storeId }),
           });
           if (!tx2.ok) {
             const err = await tx2.json();
-            toast({ title: "Qolgan qism xatosi", description: err.error, variant: "destructive" });
+            toast({ title: "2-qism tranzaksiya xatosi", description: err.error, variant: "destructive" });
             setPaymentLoading(false); return;
           }
         } else {
@@ -944,15 +961,17 @@ export default function WorkerDashboard() {
           }
         }
       }
+      const MODE_LABELS: Record<string, string> = { naqd: "Naqd", click: "Click", dokonga: "Dokonga", qarz: "Qarz" };
       updateStatus.mutate(
         { id: paymentOrder.id, data: { status: "topshirildi" } as any },
         {
           onSuccess: () => {
-            const label = splitPayment ? `✅ Bo'lib to'landi! ${wFmtAmt(splitAmount)} + dokonga`
+            const label = splitPayment
+              ? `✅ Bo'lib to'landi! ${MODE_LABELS[paymentMode] ?? paymentMode} + ${MODE_LABELS[splitStep2Mode] ?? splitStep2Mode}`
               : ({ qarz: "✅ Olib ketildi! Qarz yozildi", click: "✅ Olib ketildi! Click", dokonga: "✅ Olib ketildi! Dokonga", naqd: "✅ Olib ketildi!" }[paymentMode] ?? "✅ Olib ketildi!");
             toast({ title: label });
             queryClient.invalidateQueries({ queryKey: [getGetOrdersQueryKey()[0]] });
-            setPaymentOrder(null);
+            resetWPaymentModal();
           },
           onError: () => toast({ title: "Xatolik", variant: "destructive" })
         }
@@ -1569,143 +1588,149 @@ export default function WorkerDashboard() {
       </Dialog>
 
       {/* Nasiya Payment Modal — OLIB KETILDI bosilganda naqd/qarz so'raladi */}
-      <Dialog open={!!paymentOrder} onOpenChange={(v) => { if (!v) setPaymentOrder(null); }}>
-        <DialogContent className="w-full max-w-sm mx-4">
+      <Dialog open={!!paymentOrder} onOpenChange={(v) => { if (!v) resetWPaymentModal(); }}>
+        <DialogContent className="w-full max-w-sm mx-4 max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Truck className="w-5 h-5 text-purple-600" />
-              Olib ketildi — to'lov
+              {splitStep2 ? "Qolgan qism — to'lov turi" : "Olib ketildi — to'lov"}
             </DialogTitle>
             <DialogDescription>
-              <span className="font-mono font-bold">{paymentOrder?.orderId}</span> — to'lov turini tanlang
+              <span className="font-mono font-bold">{paymentOrder?.orderId}</span>
+              {splitStep2
+                ? ` — 1-qism: ${splitAmount} so'm (${paymentMode === "naqd" ? "💵 Naqd" : paymentMode === "click" ? "📲 Click" : "🏪 Dokonga"}) to'landi`
+                : " — to'lov turini tanlang"}
             </DialogDescription>
           </DialogHeader>
 
-          {clientBalanceLoading ? (
-            <div className="flex justify-center py-6"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
-          ) : (
-            <div className="space-y-4 py-1">
-              {/* Zakaz summasi — tayyor bosqichida kiritilgan narx */}
-              <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl p-3 flex justify-between items-center">
-                <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Zakaz summasi</span>
-                <span className="text-xl font-black tabular-nums text-amber-700 dark:text-amber-400">
-                  {paymentOrder?.price ? Number(paymentOrder.price).toLocaleString("uz-UZ") : "—"} <span className="text-sm font-normal">so'm</span>
-                </span>
+          <div className="flex-1 overflow-y-auto py-1">
+          {splitStep2 ? (
+            /* ── 2-QADAM: Qolgan qism uchun to'lov turi ── */
+            <div className="space-y-4">
+              <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl px-4 py-3 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-amber-700 dark:text-amber-400 font-medium">Jami summa:</span>
+                  <span className="font-bold text-amber-700">{paymentOrder?.price ? Number(paymentOrder.price).toLocaleString("uz-UZ") : "—"} so'm</span>
+                </div>
+                <div className="flex justify-between items-center mt-1 pt-1 border-t border-amber-200 dark:border-amber-800">
+                  <span className="text-green-700 dark:text-green-400 font-medium">✅ To'landi:</span>
+                  <span className="font-bold text-green-700">{splitAmount} so'm</span>
+                </div>
+                <div className="flex justify-between items-center mt-1 pt-1 border-t border-amber-200 dark:border-amber-800">
+                  <span className="text-red-600 dark:text-red-400 font-semibold">💬 Qolgan qism:</span>
+                  <span className="font-black text-red-600 text-base">{(Number(paymentOrder?.price) - wParseAmt(splitAmount)).toLocaleString("uz-UZ")} so'm</span>
+                </div>
               </div>
-
-              {/* Mijoz balansi */}
-              {clientInfo && (
-                <div className="bg-muted/40 rounded-xl p-3 space-y-2">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <User className="w-4 h-4 text-muted-foreground" />
-                    {clientInfo.firstName} {clientInfo.lastName}
-                  </div>
-                  <div className="flex items-center justify-between pt-1 border-t border-border/50">
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Wallet className="w-3.5 h-3.5" />Hozirgi holat:
-                    </span>
-                    <span className={`text-base font-bold tabular-nums ${clientBalance < 0 ? "text-red-500" : clientBalance > 0 ? "text-green-600" : "text-muted-foreground"}`}>
-                      {clientBalance < 0 ? `−${Math.abs(clientBalance).toLocaleString("uz-UZ")} so'm qarz` : clientBalance > 0 ? `+${clientBalance.toLocaleString("uz-UZ")} so'm` : "0"}
-                    </span>
-                  </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-2 font-medium">Qolgan qism bilan nima qilamiz?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => setSplitStep2Mode("naqd")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${splitStep2Mode === "naqd" ? "bg-green-500 text-white border-green-500 shadow" : "border-border bg-card text-muted-foreground hover:border-green-400"}`}>💵 NAQD</button>
+                  <button onClick={() => setSplitStep2Mode("click")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${splitStep2Mode === "click" ? "bg-blue-500 text-white border-blue-500 shadow" : "border-border bg-card text-muted-foreground hover:border-blue-400"}`}>📲 CLICK</button>
+                  <button onClick={() => setSplitStep2Mode("dokonga")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${splitStep2Mode === "dokonga" ? "bg-orange-500 text-white border-orange-500 shadow" : "border-border bg-card text-muted-foreground hover:border-orange-400"}`}>🏪 DOKONGA</button>
+                  <button onClick={() => setSplitStep2Mode("qarz")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${splitStep2Mode === "qarz" ? "bg-red-500 text-white border-red-500 shadow" : "border-border bg-card text-muted-foreground hover:border-red-400"}`}>📋 QARZ</button>
                 </div>
-              )}
-
-              {/* To'lov turini tanlash */}
-              <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => setPaymentMode("naqd")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${paymentMode === "naqd" ? "bg-green-500 text-white border-green-500 shadow" : "border-border bg-card text-muted-foreground hover:border-green-400"}`}>
-                  💵 NAQD
-                </button>
-                <button onClick={() => setPaymentMode("click")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${paymentMode === "click" ? "bg-blue-500 text-white border-blue-500 shadow" : "border-border bg-card text-muted-foreground hover:border-blue-400"}`}>
-                  📲 CLICK
-                </button>
-                <button onClick={() => setPaymentMode("dokonga")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${paymentMode === "dokonga" ? "bg-orange-500 text-white border-orange-500 shadow" : "border-border bg-card text-muted-foreground hover:border-orange-400"}`}>
-                  🏪 DOKONGA
-                </button>
-                <button onClick={() => setPaymentMode("qarz")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${paymentMode === "qarz" ? "bg-red-500 text-white border-red-500 shadow" : "border-border bg-card text-muted-foreground hover:border-red-400"}`}>
-                  📋 QARZ
-                </button>
               </div>
-
-              {paymentMode === "qarz" && paymentOrder?.price && (
-                <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-3 text-sm space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Hozir:</span>
-                    <span className={`font-semibold ${clientBalance < 0 ? "text-red-500" : "text-green-600"}`}>{clientBalance >= 0 ? "+" : ""}{clientBalance.toLocaleString("uz-UZ")} so'm</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Qarz qo'shiladi:</span>
-                    <span className="text-red-500 font-semibold">−{Number(paymentOrder.price).toLocaleString("uz-UZ")} so'm</span>
-                  </div>
-                  <div className="flex justify-between border-t border-border/50 pt-1">
-                    <span className="font-medium">Yangi holat:</span>
-                    <span className={`font-bold tabular-nums ${(clientBalance - Number(paymentOrder.price)) < 0 ? "text-red-500" : "text-green-600"}`}>
-                      {(clientBalance - Number(paymentOrder.price)) >= 0 ? "+" : ""}{(clientBalance - Number(paymentOrder.price)).toLocaleString("uz-UZ")} so'm
-                    </span>
-                  </div>
-                </div>
-              )}
-              {(paymentMode === "naqd" || paymentMode === "click" || paymentMode === "dokonga") && !splitPayment && (
-                <div className={`rounded-lg p-2 text-xs text-center ${paymentMode === "naqd" ? "bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400" : paymentMode === "click" ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400" : "bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400"}`}>
-                  {paymentMode === "naqd" ? "💵 Naqd — qarz hisobiga ta'sir etmaydi" : paymentMode === "click" ? "📲 Click to'lov — qarz hisobiga ta'sir etmaydi" : "🏪 Dokonga beriladi — qarz hisobiga ta'sir etmaydi"}
-                </div>
-              )}
-
-              {/* Bo'lib to'lash */}
-              {paymentMode !== "qarz" && paymentOrder?.price && (
-                <div className="border border-border/60 rounded-xl p-3 space-y-2">
-                  <button
-                    className="w-full flex items-center justify-between text-sm font-medium"
-                    onClick={() => { setSplitPayment(v => !v); setSplitAmount(""); }}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <Split className="w-4 h-4 text-purple-500" />
-                      Bo'lib to'lash
-                    </span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${splitPayment ? "bg-purple-100 text-purple-700" : "bg-muted text-muted-foreground"}`}>
-                      {splitPayment ? "Yoqilgan" : "O'chirilgan"}
-                    </span>
-                  </button>
-
-                  {splitPayment && (
-                    <div className="space-y-2 pt-1 border-t border-border/40">
-                      <div className="text-xs text-muted-foreground">Hozir qancha to'laydi? ({paymentMode === "naqd" ? "💵 Naqd" : paymentMode === "click" ? "📲 Click" : "🏪 Dokonga"} bilan)</div>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono"
-                        placeholder="Summa kiriting"
-                        value={splitAmount}
-                        onChange={e => setSplitAmount(wFmtAmt(e.target.value))}
-                      />
-                      {wParseAmt(splitAmount) > 0 && wParseAmt(splitAmount) < Number(paymentOrder.price) && (
-                        <div className="text-xs space-y-1 bg-muted/40 rounded-lg p-2">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Hozir to'lanadi:</span>
-                            <span className="font-semibold text-green-600">{splitAmount} so'm</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">📋 Qarz yoziladi (kegn):</span>
-                            <span className="font-semibold text-red-600">{(Number(paymentOrder.price) - wParseAmt(splitAmount)).toLocaleString("uz-UZ")} so'm</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+              {splitStep2Mode === "qarz" && (
+                <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-3 text-xs text-red-600 dark:text-red-400 space-y-1">
+                  <div className="flex justify-between"><span>Hozirgi qarz:</span><span className="font-semibold">{clientBalance < 0 ? `−${Math.abs(clientBalance).toLocaleString("uz-UZ")}` : clientBalance.toLocaleString("uz-UZ")} so'm</span></div>
+                  <div className="flex justify-between"><span>Qo'shiladi:</span><span className="font-semibold">−{(Number(paymentOrder?.price) - wParseAmt(splitAmount)).toLocaleString("uz-UZ")} so'm</span></div>
+                  <div className="flex justify-between border-t border-red-200 dark:border-red-800 pt-1"><span className="font-medium">Yangi qarz:</span><span className="font-bold">{(clientBalance - (Number(paymentOrder?.price) - wParseAmt(splitAmount))).toLocaleString("uz-UZ")} so'm</span></div>
                 </div>
               )}
             </div>
+          ) : (
+            /* ── 1-QADAM: Asosiy to'lov turi ── */
+            clientBalanceLoading ? (
+              <div className="flex justify-center py-6"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl p-3 flex justify-between items-center">
+                  <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Zakaz summasi</span>
+                  <span className="text-xl font-black tabular-nums text-amber-700 dark:text-amber-400">
+                    {paymentOrder?.price ? Number(paymentOrder.price).toLocaleString("uz-UZ") : "—"} <span className="text-sm font-normal">so'm</span>
+                  </span>
+                </div>
+                {clientInfo && (
+                  <div className="bg-muted/40 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <User className="w-4 h-4 text-muted-foreground" />
+                      {clientInfo.firstName} {clientInfo.lastName}
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-border/50">
+                      <span className="text-xs text-muted-foreground flex items-center gap-1"><Wallet className="w-3.5 h-3.5" />Hozirgi holat:</span>
+                      <span className={`text-base font-bold tabular-nums ${clientBalance < 0 ? "text-red-500" : clientBalance > 0 ? "text-green-600" : "text-muted-foreground"}`}>
+                        {clientBalance < 0 ? `−${Math.abs(clientBalance).toLocaleString("uz-UZ")} so'm qarz` : clientBalance > 0 ? `+${clientBalance.toLocaleString("uz-UZ")} so'm` : "0"}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => setPaymentMode("naqd")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${paymentMode === "naqd" ? "bg-green-500 text-white border-green-500 shadow" : "border-border bg-card text-muted-foreground hover:border-green-400"}`}>💵 NAQD</button>
+                  <button onClick={() => setPaymentMode("click")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${paymentMode === "click" ? "bg-blue-500 text-white border-blue-500 shadow" : "border-border bg-card text-muted-foreground hover:border-blue-400"}`}>📲 CLICK</button>
+                  <button onClick={() => setPaymentMode("dokonga")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${paymentMode === "dokonga" ? "bg-orange-500 text-white border-orange-500 shadow" : "border-border bg-card text-muted-foreground hover:border-orange-400"}`}>🏪 DOKONGA</button>
+                  <button onClick={() => setPaymentMode("qarz")} className={`h-14 rounded-xl font-bold text-sm border-2 transition-all ${paymentMode === "qarz" ? "bg-red-500 text-white border-red-500 shadow" : "border-border bg-card text-muted-foreground hover:border-red-400"}`}>📋 QARZ</button>
+                </div>
+                {paymentMode === "qarz" && paymentOrder?.price && (
+                  <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-3 text-sm space-y-1">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Hozir:</span><span className={`font-semibold ${clientBalance < 0 ? "text-red-500" : "text-green-600"}`}>{clientBalance >= 0 ? "+" : ""}{clientBalance.toLocaleString("uz-UZ")} so'm</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Qarz qo'shiladi:</span><span className="text-red-500 font-semibold">−{Number(paymentOrder.price).toLocaleString("uz-UZ")} so'm</span></div>
+                    <div className="flex justify-between border-t border-border/50 pt-1">
+                      <span className="font-medium">Yangi holat:</span>
+                      <span className={`font-bold tabular-nums ${(clientBalance - Number(paymentOrder.price)) < 0 ? "text-red-500" : "text-green-600"}`}>{(clientBalance - Number(paymentOrder.price)) >= 0 ? "+" : ""}{(clientBalance - Number(paymentOrder.price)).toLocaleString("uz-UZ")} so'm</span>
+                    </div>
+                  </div>
+                )}
+                {(paymentMode === "naqd" || paymentMode === "click" || paymentMode === "dokonga") && !splitPayment && (
+                  <div className={`rounded-lg p-2 text-xs text-center ${paymentMode === "naqd" ? "bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400" : paymentMode === "click" ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400" : "bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400"}`}>
+                    {paymentMode === "naqd" ? "💵 Naqd — qarz hisobiga ta'sir etmaydi" : paymentMode === "click" ? "📲 Click to'lov — qarz hisobiga ta'sir etmaydi" : "🏪 Dokonga beriladi — qarz hisobiga ta'sir etmaydi"}
+                  </div>
+                )}
+                {/* Bo'lib to'lash */}
+                {paymentMode !== "qarz" && paymentOrder?.price && (
+                  <div className="border border-border/60 rounded-xl p-3 space-y-2">
+                    <button className="w-full flex items-center justify-between text-sm font-medium" onClick={() => { setSplitPayment(v => !v); setSplitAmount(""); }}>
+                      <span className="flex items-center gap-1.5"><Split className="w-4 h-4 text-purple-500" />Bo'lib to'lash</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${splitPayment ? "bg-purple-100 text-purple-700" : "bg-muted text-muted-foreground"}`}>{splitPayment ? "Yoqilgan" : "O'chirilgan"}</span>
+                    </button>
+                    {splitPayment && (
+                      <div className="space-y-2 pt-1 border-t border-border/40">
+                        <div className="text-xs text-muted-foreground">{paymentMode === "naqd" ? "💵 Naqd" : paymentMode === "click" ? "📲 Click" : "🏪 Dokonga"} bilan qancha to'laydi?</div>
+                        <input type="text" inputMode="numeric" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono" placeholder="Summa kiriting" value={splitAmount} onChange={e => setSplitAmount(wFmtAmt(e.target.value))} />
+                        {wParseAmt(splitAmount) > 0 && wParseAmt(splitAmount) < Number(paymentOrder.price) && (
+                          <div className="text-xs space-y-1 bg-purple-50 dark:bg-purple-950/30 rounded-lg p-2 border border-purple-200 dark:border-purple-800">
+                            <div className="flex justify-between"><span className="text-muted-foreground">Hozir to'lanadi:</span><span className="font-semibold text-green-600">{splitAmount} so'm</span></div>
+                            <div className="flex justify-between"><span className="text-muted-foreground">Qolgan qism:</span><span className="font-semibold text-purple-600">{(Number(paymentOrder.price) - wParseAmt(splitAmount)).toLocaleString("uz-UZ")} so'm</span></div>
+                            <div className="text-purple-500 text-center pt-0.5">→ Keyingi qadamda qolgan qism uchun to'lov turi tanlaysiz</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
           )}
+          </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setPaymentOrder(null); setSplitPayment(false); setSplitAmount(""); }} disabled={paymentLoading}>Bekor</Button>
+            <Button variant="outline" onClick={() => { if (splitStep2) { setSplitStep2(false); } else { resetWPaymentModal(); } }} disabled={paymentLoading}>
+              {splitStep2 ? "← Orqaga" : "Bekor"}
+            </Button>
             <Button
-              className={`gap-2 ${splitPayment ? "bg-purple-600 hover:bg-purple-700" : paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : paymentMode === "click" ? "bg-blue-600 hover:bg-blue-700" : paymentMode === "dokonga" ? "bg-orange-500 hover:bg-orange-600" : "bg-purple-600 hover:bg-purple-700"} text-white`}
+              className={`gap-2 ${
+                splitStep2
+                  ? splitStep2Mode === "qarz" ? "bg-red-500 hover:bg-red-600" : splitStep2Mode === "click" ? "bg-blue-600 hover:bg-blue-700" : splitStep2Mode === "dokonga" ? "bg-orange-500 hover:bg-orange-600" : "bg-green-600 hover:bg-green-700"
+                  : splitPayment ? "bg-purple-600 hover:bg-purple-700" : paymentMode === "qarz" ? "bg-red-500 hover:bg-red-600" : paymentMode === "click" ? "bg-blue-600 hover:bg-blue-700" : paymentMode === "dokonga" ? "bg-orange-500 hover:bg-orange-600" : "bg-purple-600 hover:bg-purple-700"
+              } text-white`}
               disabled={paymentLoading || clientBalanceLoading}
               onClick={doDeliverWithPayment}
             >
               {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Truck className="w-4 h-4" />}
-              {splitPayment ? "Bo'lib to'lab olib ketildi!" : paymentMode === "qarz" ? "Qarz yozib olib ketildi!" : paymentMode === "click" ? "Click — Olib ketildi!" : paymentMode === "dokonga" ? "Dokonga — Olib ketildi!" : "Olib ketildi!"}
+              {splitStep2
+                ? "✅ Bo'lib to'lab olib ket!"
+                : splitPayment
+                  ? "Keyingi qadam →"
+                  : paymentMode === "qarz" ? "Qarz yozib olib ketildi!" : paymentMode === "click" ? "Click — Olib ketildi!" : paymentMode === "dokonga" ? "Dokonga — Olib ketildi!" : "Olib ketildi!"}
             </Button>
           </DialogFooter>
         </DialogContent>
