@@ -536,23 +536,41 @@ function ClientAccountsView({ storeId, token }: { storeId: number; token: string
                     {txs.length === 0 ? (
                       <div className="text-sm text-muted-foreground py-2 text-center">Tranzaksiyalar yo'q</div>
                     ) : (
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                      <div className="space-y-1 max-h-72 overflow-y-auto">
                         {txs.map((tx: any) => {
                           const txInfo = TX_LABELS[tx.type] ?? { label: tx.type, icon: null };
+                          const performer = tx.performedByName ?? tx.performed_by_name;
+                          const svcName = tx.serviceTypeName ?? tx.service_type_name;
+                          const txDate = new Date(tx.createdAt);
+                          const dateStr = txDate.toLocaleDateString("uz-UZ", { day: "2-digit", month: "2-digit", year: "numeric" });
+                          const timeStr = txDate.toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" });
+                          const isPositive = parseFloat(tx.balanceAfter) > parseFloat(tx.balanceBefore);
+                          const isNegative = parseFloat(tx.balanceAfter) < parseFloat(tx.balanceBefore);
                           return (
-                            <div key={tx.id} className="flex items-center gap-3 text-sm py-1 border-b border-border/30 last:border-0">
-                              <div className="shrink-0">{txInfo.icon}</div>
+                            <div key={tx.id} className="flex items-start gap-3 text-sm py-2 border-b border-border/30 last:border-0">
+                              <div className="shrink-0 mt-0.5">{txInfo.icon}</div>
                               <div className="flex-1 min-w-0">
-                                <span className="font-medium">{txInfo.label}</span>
-                                {tx.orderCode && <span className="text-muted-foreground ml-1 text-xs">#{tx.orderCode}</span>}
-                                {tx.note && <div className="text-xs text-muted-foreground truncate">{tx.note}</div>}
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-semibold">{txInfo.label}</span>
+                                  {svcName && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-medium">{svcName}</span>
+                                  )}
+                                </div>
+                                {tx.orderCode && <div className="text-xs text-muted-foreground">#{tx.orderCode}</div>}
+                                {tx.note && <div className="text-xs text-muted-foreground/80 italic truncate">{tx.note}</div>}
+                                {performer && (
+                                  <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5">
+                                    <span>👤</span><span className="font-medium">{performer}</span>
+                                  </div>
+                                )}
+                                <div className="text-xs text-muted-foreground/60 mt-0.5">{dateStr} · {timeStr}</div>
                               </div>
                               <div className="shrink-0 text-right">
-                                <div className={`font-semibold tabular-nums ${parseFloat(tx.balanceAfter) < parseFloat(tx.balanceBefore) ? "text-red-500" : parseFloat(tx.balanceAfter) > parseFloat(tx.balanceBefore) ? "text-green-600" : "text-muted-foreground"}`}>
-                                  {parseFloat(tx.amount).toLocaleString("uz-UZ", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} so'm
+                                <div className={`font-bold tabular-nums ${isNegative ? "text-red-500" : isPositive ? "text-green-600" : "text-muted-foreground"}`}>
+                                  {isNegative ? "−" : "+"}{Math.abs(parseFloat(tx.amount)).toLocaleString("uz-UZ")} so'm
                                 </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {new Date(tx.createdAt).toLocaleDateString("uz-UZ")}
+                                <div className="text-[10px] text-muted-foreground/60">
+                                  Bal: {parseFloat(tx.balanceAfter) < 0 ? `−${Math.abs(parseFloat(tx.balanceAfter)).toLocaleString("uz-UZ")}` : `+${parseFloat(tx.balanceAfter).toLocaleString("uz-UZ")}`}
                                 </div>
                               </div>
                             </div>

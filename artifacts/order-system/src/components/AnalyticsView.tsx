@@ -941,19 +941,27 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                         <div className="divide-y divide-purple-100 dark:divide-purple-900/40">
                           {dayTxs.map((tx: any) => {
                             const cPhone = txClientPhone(tx);
+                            const performer = tx.performedByName ?? tx.performed_by_name;
                             return (
-                              <div key={tx.id} className="px-4 py-2.5 flex items-center justify-between text-sm bg-purple-50/30 dark:bg-purple-950/10">
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-semibold text-foreground">{txClientName(tx)}</div>
-                                  {(tx.serviceTypeName ?? tx.service_type_name) && (
-                                    <div className="text-xs text-purple-600 dark:text-purple-400">{tx.serviceTypeName ?? tx.service_type_name}</div>
-                                  )}
-                                  {cPhone && <div className="text-xs text-muted-foreground">{cPhone}</div>}
-                                  {tx.note && <div className="text-xs text-muted-foreground/70 italic">{tx.note}</div>}
-                                </div>
-                                <div className="text-right shrink-0 ml-4">
-                                  <div className="font-black text-purple-700 dark:text-purple-300">+{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}</div>
-                                  <div className="text-xs text-muted-foreground">{fmtTime(tx.createdAt ?? tx.created_at)}</div>
+                              <div key={tx.id} className="px-4 py-2.5 bg-purple-50/30 dark:bg-purple-950/10">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-semibold text-foreground text-sm">{txClientName(tx)}</div>
+                                    {(tx.serviceTypeName ?? tx.service_type_name) && (
+                                      <div className="text-xs text-purple-600 dark:text-purple-400 font-medium">{tx.serviceTypeName ?? tx.service_type_name}</div>
+                                    )}
+                                    {cPhone && <div className="text-xs text-muted-foreground">{cPhone}</div>}
+                                    {performer && (
+                                      <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5">
+                                        <span>👤</span><span>{performer}</span>
+                                      </div>
+                                    )}
+                                    {tx.note && <div className="text-xs text-muted-foreground/70 italic mt-0.5">{tx.note}</div>}
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <div className="font-black text-purple-700 dark:text-purple-300 text-sm">+{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}</div>
+                                    <div className="text-xs text-muted-foreground">{fmtTime(tx.createdAt ?? tx.created_at)}</div>
+                                  </div>
                                 </div>
                               </div>
                             );
@@ -1148,21 +1156,36 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                               <div className="px-4 py-1.5 text-xs font-semibold text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
                                 <span>💜</span> Eski nasiya to'lovlari ({periodTxList.length} ta)
                               </div>
-                              <div className="divide-y divide-purple-100 dark:divide-purple-900/40 max-h-48 overflow-y-auto">
-                                {periodTxList.map((tx: any) => (
-                                  <div key={tx.id} className="px-4 py-2 flex items-center justify-between text-sm">
-                                    <div className="flex-1 min-w-0 mr-3">
-                                      <div className="font-medium text-foreground truncate">{txClientName(tx)}</div>
-                                      {(tx.serviceTypeName ?? tx.service_type_name) && (
-                                        <div className="text-xs text-purple-600 dark:text-purple-400">{tx.serviceTypeName ?? tx.service_type_name}</div>
-                                      )}
+                              <div className="divide-y divide-purple-100 dark:divide-purple-900/40 max-h-80 overflow-y-auto">
+                                {periodTxList.map((tx: any) => {
+                                  const performer = tx.performedByName ?? tx.performed_by_name;
+                                  const cPhone = txClientPhone(tx);
+                                  const txDate = tx.createdAt ?? tx.created_at;
+                                  return (
+                                    <div key={tx.id} className="px-4 py-2.5">
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="flex-1 min-w-0">
+                                          <div className="font-semibold text-foreground text-sm">{txClientName(tx)}</div>
+                                          {(tx.serviceTypeName ?? tx.service_type_name) && (
+                                            <div className="text-xs text-purple-600 dark:text-purple-400 font-medium">{tx.serviceTypeName ?? tx.service_type_name}</div>
+                                          )}
+                                          {cPhone && <div className="text-xs text-muted-foreground">{cPhone}</div>}
+                                          {performer && (
+                                            <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5">
+                                              <span>👤</span><span>{performer}</span>
+                                            </div>
+                                          )}
+                                          {tx.note && <div className="text-xs text-muted-foreground/70 italic mt-0.5">{tx.note}</div>}
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                          <div className="font-black text-purple-700 dark:text-purple-300 text-sm">+{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))} so'm</div>
+                                          <div className="text-xs text-muted-foreground">{fmtDate(txDate)}</div>
+                                          <div className="text-xs text-muted-foreground">{fmtTime(txDate)}</div>
+                                        </div>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center gap-3 text-xs shrink-0">
-                                      <span className="text-purple-700 dark:text-purple-300 font-bold">{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))} so'm</span>
-                                      <span className="text-muted-foreground">{fmtTime(tx.createdAt ?? tx.created_at)}</span>
-                                    </div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             </div>
                           )}
@@ -1314,14 +1337,24 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                                 {(clientTx[client.id] ?? []).length === 0 && <div className="text-center py-4 text-xs text-muted-foreground">Tranzaksiya yo'q</div>}
                                 {(clientTx[client.id] ?? []).map((tx: any) => {
                                   const meta = TX_META[tx.type as TxType] ?? TX_META.tuzatish;
+                                  const performer = tx.performedByName ?? tx.performed_by_name;
+                                  const txDate = tx.createdAt ?? tx.created_at;
                                   return (
-                                    <div key={tx.id} className="flex items-start justify-between px-3 py-2 text-xs">
+                                    <div key={tx.id} className="flex items-start justify-between px-3 py-2.5 text-xs">
                                       <div className="flex items-start gap-2 flex-1 min-w-0">
-                                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${meta.color}`}>{meta.icon} {meta.label}</span>
+                                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold mt-0.5 ${meta.color}`}>{meta.icon} {meta.label}</span>
                                         <div className="min-w-0">
-                                          <div className="text-muted-foreground truncate">{tx.service_type_name || tx.note || "—"}</div>
+                                          {(tx.service_type_name ?? tx.serviceTypeName) && (
+                                            <div className="font-semibold text-purple-600 dark:text-purple-400">{tx.service_type_name ?? tx.serviceTypeName}</div>
+                                          )}
+                                          {tx.note && <div className="text-muted-foreground truncate italic">{tx.note}</div>}
                                           {tx.order_code && <div className="text-muted-foreground/60">#{tx.order_code}</div>}
-                                          <div className="text-muted-foreground/50">{fmtDate(tx.createdAt ?? tx.created_at)}</div>
+                                          {performer && (
+                                            <div className="text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                                              <span>👤</span><span className="font-medium">{performer}</span>
+                                            </div>
+                                          )}
+                                          <div className="text-muted-foreground/60">{fmtDate(txDate)} · {fmtTime(txDate)}</div>
                                         </div>
                                       </div>
                                       <div className="text-right shrink-0 ml-2">
