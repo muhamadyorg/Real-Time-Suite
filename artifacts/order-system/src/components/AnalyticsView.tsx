@@ -267,7 +267,6 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
         setNasiyaServiceTypes((all as any[]).filter((s: any) => s.nasiyaEnabled));
       }
       if (txRes.ok) { const d = await txRes.json(); setAllTx(Array.isArray(d) ? d : []); }
-      else { console.error("[AnalyticsView] allTx fetch failed:", txRes.status, "token prefix:", token?.slice(0, 20)); }
     } catch {}
     setNasiyaLoading(false);
   }, [storeId, token, apiBase]);
@@ -545,11 +544,9 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
     const periodEndMs = useSpecificDate && specificDate
       ? new Date(specificDate + "T00:00:00+05:00").getTime() + 86400000
       : Infinity;
-    console.log("[DEBUG] txDayMap keys:", Object.keys(txDayMap), "cutoff:", new Date(periodCutoffMs).toISOString());
     for (const [txDay, types] of Object.entries(txDayMap)) {
       if (!(types as any).tolov) continue;
       const dayMs = new Date(txDay + "T00:00:00+05:00").getTime();
-      console.log("[DEBUG] txDay:", txDay, "dayMs:", dayMs, "cutoff:", periodCutoffMs, "ok:", dayMs >= periodCutoffMs);
       if (dayMs < periodCutoffMs || dayMs >= periodEndMs) continue;
       const key = getGroupKey(txDay, activePeriod);
       if (!dayGroups[key]) dayGroups[key] = { day: key, orders: [], totalPrice: 0, txOnly: true };
