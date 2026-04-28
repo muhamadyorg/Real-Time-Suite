@@ -1545,7 +1545,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
 
       {/* Nasiya Payment Modal — OLIB KETILDI bosilganda naqd/qarz so'raladi */}
       <Dialog open={!!paymentOrder} onOpenChange={(v) => { if (!v) resetPaymentModal(); }}>
-        <DialogContent className="w-full max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full max-w-sm mx-4 max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-purple-600">
               <Truck className="w-5 h-5" />
@@ -1559,6 +1559,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
             </DialogDescription>
           </DialogHeader>
 
+          <div className="flex-1 overflow-y-auto py-1">
           {splitStep2 ? (
             /* ─── 2-QADAM: Qolgan qism uchun to'lov turi ─── */
             <div className="space-y-4">
@@ -1728,6 +1729,7 @@ export default function AdminDashboard({ hideHeader = false, stickyTop = 60 }: {
               )}
             </div>
           )}
+          </div>
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => {
