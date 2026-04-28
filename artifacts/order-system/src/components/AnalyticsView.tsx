@@ -35,7 +35,7 @@ const PERIOD_LABELS: Record<Period, string> = {
   weekly: "Hafta",
   monthly: "Oylik",
 };
-const PERIOD_DAYS: Record<Period, number> = { daily: 30, weekly: 84, monthly: 365 };
+const PERIOD_DAYS: Record<Period, number> = { daily: 365, weekly: 730, monthly: 1460 };
 
 // Balon tsex — maxsus hisoblash
 const BALON_SERVICE_NAME = "Balon tsex";
@@ -259,7 +259,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
       const [cRes, stRes, txRes] = await Promise.all([
         fetch(`${apiBase}/api/client-accounts`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${apiBase}/api/service-types`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${apiBase}/api/client-accounts/all/transactions?limit=500`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${apiBase}/api/client-accounts/all/transactions?limit=5000`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (cRes.ok) { const d = await cRes.json(); setClients(Array.isArray(d) ? d : []); }
       if (stRes.ok) {
@@ -352,7 +352,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
       const [ordRes, txRes] = await Promise.all([
         fetch(`${apiBase}/api/analytics/orders?storeId=${storeId}&periodStart=${encodeURIComponent(pStart)}&periodEnd=${encodeURIComponent(pEnd)}${cid}${stid}`,
           { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${apiBase}/api/client-accounts/all/transactions?limit=1000`,
+        fetch(`${apiBase}/api/client-accounts/all/transactions?limit=5000`,
           { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (ordRes.ok) setDokonOrders(await ordRes.json());

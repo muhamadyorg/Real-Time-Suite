@@ -36,7 +36,7 @@ router.get("/all/transactions", async (req, res) => {
     }
 
     const storeId = payload.role === "sudo" ? undefined : payload.storeId;
-    const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+    const limit = Math.min(parseInt(req.query.limit as string) || 100, 10000);
 
     const where = storeId ? eq(clientTransactionsTable.storeId, storeId) : undefined;
 
