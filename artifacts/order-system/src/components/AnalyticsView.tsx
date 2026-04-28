@@ -267,6 +267,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
         setNasiyaServiceTypes((all as any[]).filter((s: any) => s.nasiyaEnabled));
       }
       if (txRes.ok) { const d = await txRes.json(); setAllTx(Array.isArray(d) ? d : []); }
+      else { console.error("[AnalyticsView] allTx fetch failed:", txRes.status, "token prefix:", token?.slice(0, 20)); }
     } catch {}
     setNasiyaLoading(false);
   }, [storeId, token, apiBase]);
@@ -360,9 +361,9 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
         const allTxData = await txRes.json();
         // Filter to the selected date
         setDokonTx((allTxData as any[]).filter((t: any) => {
-          const d = new Date(t.created_at).toISOString().slice(0, 10);
+          const d = new Date(t.createdAt ?? t.created_at).toISOString().slice(0, 10);
           if (d !== dokonDate) return false;
-          if (dokonClientId && t.client_id !== dokonClientId) return false;
+          if (dokonClientId && (t.clientId ?? t.client_id) !== dokonClientId) return false;
           return true;
         }));
       }
@@ -473,8 +474,9 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
     const tz5 = 5 * 3600 * 1000;
     const map: Record<string, Record<string, number>> = {}; // { "2026-04-27": { tolov: 400000, qarz: 200000 } }
     for (const t of allTx as any[]) {
-      if (!t.created_at) continue;
-      const ms = new Date(t.created_at).getTime();
+      const ca = t.createdAt ?? t.created_at;
+      if (!ca) continue;
+      const ms = new Date(ca).getTime();
       if (isNaN(ms)) continue;
       const day = new Date(ms + tz5).toISOString().slice(0, 10);
       if (!map[day]) map[day] = {};
@@ -533,18 +535,21 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   }, {});
 
   // Buyurtmasiz kunlarni ham qo'shish: tolov (eski nasiya) tranzaksiyasi bor kunlar
-  {
+  if (view === "batafsil") {
     const tz5 = 5 * 3600 * 1000;
-    const days = PERIOD_DAYS[activePeriod] ?? 1;
+    const days = PERIOD_DAYS[activePeriod] ?? 60;
+    const cutoffNow = Date.now() + tz5 - days * 86400000;
     const periodCutoffMs = useSpecificDate && specificDate
       ? new Date(specificDate + "T00:00:00+05:00").getTime()
-      : Date.now() + tz5 - days * 86400000;
+      : cutoffNow;
     const periodEndMs = useSpecificDate && specificDate
       ? new Date(specificDate + "T00:00:00+05:00").getTime() + 86400000
       : Infinity;
+    console.log("[DEBUG] txDayMap keys:", Object.keys(txDayMap), "cutoff:", new Date(periodCutoffMs).toISOString());
     for (const [txDay, types] of Object.entries(txDayMap)) {
       if (!(types as any).tolov) continue;
       const dayMs = new Date(txDay + "T00:00:00+05:00").getTime();
+      console.log("[DEBUG] txDay:", txDay, "dayMs:", dayMs, "cutoff:", periodCutoffMs, "ok:", dayMs >= periodCutoffMs);
       if (dayMs < periodCutoffMs || dayMs >= periodEndMs) continue;
       const key = getGroupKey(txDay, activePeriod);
       if (!dayGroups[key]) dayGroups[key] = { day: key, orders: [], totalPrice: 0, txOnly: true };
@@ -732,13 +737,13 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
             const startMs = new Date(specificDate + "T00:00:00+05:00").getTime();
             const endMs = startMs + 86400000;
             return (allTx as any[])
-              .filter(t => { const ts = new Date(t.created_at).getTime(); return t.type === type && ts >= startMs && ts < endMs; })
+              .filter(t => { const ts = new Date(t.createdAt ?? t.created_at).getTime(); return t.type === type && ts >= startMs && ts < endMs; })
               .reduce((s: number, t: any) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
           }
           const days = PERIOD_DAYS[period] ?? 1;
           const startMs = now5 - days * 86400000;
           return (allTx as any[])
-            .filter(t => t.type === type && (new Date(t.created_at).getTime() + tz5) >= startMs)
+            .filter(t => t.type === type && (new Date(t.createdAt ?? t.created_at).getTime() + tz5) >= startMs)
             .reduce((s: number, t: any) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
         };
         const txTolov   = calcTxSum("tolov");
@@ -1085,12 +1090,14 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                       if (activePeriod === "weekly") pEndDay = new Date(new Date(pKey).getTime() + 7 * 86400000).toISOString().slice(0, 10);
                       else if (activePeriod === "monthly") { const d2 = new Date(pKey); pEndDay = new Date(Date.UTC(d2.getUTCFullYear(), d2.getUTCMonth() + 1, 1)).toISOString().slice(0, 10); }
                       const periodTxList = (allTx as any[]).filter(t => {
-                        if (t.type !== "tolov" || !t.created_at) return false;
-                        const ms = new Date(t.created_at).getTime();
+                        if (t.type !== "tolov") return false;
+                        const ca = t.createdAt ?? t.created_at;
+                        if (!ca) return false;
+                        const ms = new Date(ca).getTime();
                         if (isNaN(ms)) return false;
                         const txDay = new Date(ms + tz5).toISOString().slice(0, 10);
                         return pEndDay ? (txDay >= pDay && txDay < pEndDay) : txDay === pDay;
-                      }).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                      }).sort((a: any, b: any) => new Date(b.createdAt ?? b.created_at).getTime() - new Date(a.createdAt ?? a.created_at).getTime());
                       return (
                         <>
                           {periodTxList.length > 0 && (
@@ -1108,7 +1115,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                                       <span className="text-muted-foreground font-medium truncate max-w-[55%]">{cName}</span>
                                       <div className="flex items-center gap-3 text-xs">
                                         <span className="text-purple-700 dark:text-purple-300 font-bold">{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))} so'm</span>
-                                        <span className="text-muted-foreground">{fmtTime(tx.created_at)}</span>
+                                        <span className="text-muted-foreground">{fmtTime(tx.createdAt ?? tx.created_at)}</span>
                                       </div>
                                     </div>
                                   );
@@ -1271,7 +1278,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                                         <div className="min-w-0">
                                           <div className="text-muted-foreground truncate">{tx.service_type_name || tx.note || "—"}</div>
                                           {tx.order_code && <div className="text-muted-foreground/60">#{tx.order_code}</div>}
-                                          <div className="text-muted-foreground/50">{fmtDate(tx.created_at)}</div>
+                                          <div className="text-muted-foreground/50">{fmtDate(tx.createdAt ?? tx.created_at)}</div>
                                         </div>
                                       </div>
                                       <div className="text-right shrink-0 ml-2">
@@ -1400,7 +1407,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                             </div>
                             <div className="text-right shrink-0 ml-4">
                               <div className="font-black text-purple-700 dark:text-purple-300 text-base">+{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}</div>
-                              <div className="text-xs text-muted-foreground">{fmtTime(tx.created_at)}</div>
+                              <div className="text-xs text-muted-foreground">{fmtTime(tx.createdAt ?? tx.created_at)}</div>
                             </div>
                           </div>
                         ))}
@@ -1425,7 +1432,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                             </div>
                             <div className="text-right shrink-0 ml-4">
                               <div className="font-black text-red-600 dark:text-red-400 text-base">−{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}</div>
-                              <div className="text-xs text-muted-foreground">{fmtTime(tx.created_at)}</div>
+                              <div className="text-xs text-muted-foreground">{fmtTime(tx.createdAt ?? tx.created_at)}</div>
                             </div>
                           </div>
                         ))}
@@ -1489,7 +1496,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                               <div className="font-bold text-foreground">
                                 +{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}
                               </div>
-                              <div className="text-muted-foreground/50">{fmtTime(tx.created_at)}</div>
+                              <div className="text-muted-foreground/50">{fmtTime(tx.createdAt ?? tx.created_at)}</div>
                             </div>
                           </div>
                         );

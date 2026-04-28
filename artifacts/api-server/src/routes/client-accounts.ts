@@ -31,7 +31,7 @@ async function isNasiyaEnabled(serviceTypeId: number): Promise<boolean> {
 router.get("/all/transactions", async (req, res) => {
   try {
     const payload = await authenticateToken(req.headers.authorization);
-    if (!payload || !["sudo", "superadmin", "admin"].includes(payload.role)) {
+    if (!payload || !["sudo", "superadmin", "admin", "store"].includes(payload.role)) {
       res.status(403).json({ error: "Ruxsat yo'q" }); return;
     }
 
