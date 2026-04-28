@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +35,7 @@ const PERIOD_LABELS: Record<Period, string> = {
   weekly: "Hafta",
   monthly: "Oylik",
 };
-const PERIOD_DAYS: Record<Period, number> = { daily: 365, weekly: 730, monthly: 1460 };
+const PERIOD_DAYS: Record<Period, number> = { daily: 60, weekly: 180, monthly: 730 };
 
 // Balon tsex — maxsus hisoblash
 const BALON_SERVICE_NAME = "Balon tsex";
@@ -468,10 +468,23 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   const aggSummary = aggData?.summary;
   const activePeriod = useSpecificDate ? "daily" : period;
 
-  // Helper: allTx dan berilgan period uchun type bo'yicha summa hisoblash
-  const calcTxSumForPeriod = (type: string, periodKey: string, p: Period) => {
+  // allTx dan period bo'yicha summa (memoized lookup map)
+  const txDayMap = useMemo(() => {
     const tz5 = 5 * 3600 * 1000;
-    const periodDay = periodKey.slice(0, 10); // "2026-04-27"
+    const map: Record<string, Record<string, number>> = {}; // { "2026-04-27": { tolov: 400000, qarz: 200000 } }
+    for (const t of allTx as any[]) {
+      if (!t.created_at) continue;
+      const ms = new Date(t.created_at).getTime();
+      if (isNaN(ms)) continue;
+      const day = new Date(ms + tz5).toISOString().slice(0, 10);
+      if (!map[day]) map[day] = {};
+      map[day][t.type] = (map[day][t.type] ?? 0) + Math.abs(parseFloat(t.amount ?? "0"));
+    }
+    return map;
+  }, [allTx]);
+
+  const calcTxSumForPeriod = (type: string, periodKey: string, p: Period) => {
+    const periodDay = periodKey.slice(0, 10);
     let endDay: string | null = null;
     if (p === "weekly") {
       endDay = new Date(new Date(periodKey).getTime() + 7 * 86400000).toISOString().slice(0, 10);
@@ -479,31 +492,31 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
       const d = new Date(periodKey);
       endDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
     }
-    return (allTx as any[])
-      .filter(t => {
-        if (t.type !== type || !t.created_at) return false;
-        const ms = new Date(t.created_at).getTime();
-        if (isNaN(ms)) return false;
-        const txDay = new Date(ms + tz5).toISOString().slice(0, 10);
-        return endDay ? (txDay >= periodDay && txDay < endDay) : txDay === periodDay;
-      })
-      .reduce((s: number, t: any) => s + Math.abs(parseFloat(t.amount ?? "0")), 0);
+    if (!endDay) return txDayMap[periodDay]?.[type] ?? 0;
+    let sum = 0;
+    for (const [day, types] of Object.entries(txDayMap)) {
+      if (day >= periodDay && day < endDay) sum += types[type] ?? 0;
+    }
+    return sum;
   };
 
-  const periodGroups = aggRows.reduce((acc: any, row: any) => {
-    const key = row.period;
-    if (!acc[key]) {
-      const tolovTotal = calcTxSumForPeriod("tolov", key, activePeriod);
-      acc[key] = { period: key, orderCount: 0, totalPrice: 0, unitTotals: {}, types: [], tolovTotal };
-    }
-    acc[key].orderCount += row.order_count;
-    acc[key].totalPrice += row.total_price;
-    const unitKey = row.unit || "dona";
-    acc[key].unitTotals[unitKey] = (acc[key].unitTotals[unitKey] ?? 0) + row.total_quantity;
-    acc[key].types.push(row);
-    return acc;
-  }, {});
-  const periodList = Object.values(periodGroups) as any[];
+  const { periodGroups, periodList } = useMemo(() => {
+    const groups = aggRows.reduce((acc: any, row: any) => {
+      const key = row.period;
+      if (!acc[key]) {
+        const tolovTotal = calcTxSumForPeriod("tolov", key, activePeriod);
+        acc[key] = { period: key, orderCount: 0, totalPrice: 0, unitTotals: {}, types: [], tolovTotal };
+      }
+      acc[key].orderCount += row.order_count;
+      acc[key].totalPrice += row.total_price;
+      const unitKey = row.unit || "dona";
+      acc[key].unitTotals[unitKey] = (acc[key].unitTotals[unitKey] ?? 0) + row.total_quantity;
+      acc[key].types.push(row);
+      return acc;
+    }, {});
+    return { periodGroups: groups, periodList: Object.values(groups) as any[] };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aggRows, txDayMap, activePeriod]);
 
   // Individual orders grouped by period (daily/weekly/monthly)
   const dayGroups = orders.reduce((acc: any, o: any) => {

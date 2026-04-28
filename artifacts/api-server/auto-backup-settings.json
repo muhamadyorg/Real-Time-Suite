@@ -1,8 +1,8 @@
 {
   "botToken": "8650301807:AAH5unO4F9bxchQ2GIpedddwxs92k6noi8",
   "chatId": "7111728007",
-  "intervalSeconds": 10,
+  "intervalSeconds": 10800,
   "enabled": true,
-  "lastBackupAt": "2026-04-12T12:28:35.369Z",
-  "nextBackupAt": "2026-04-12T12:28:45.370Z"
+  "lastBackupAt": null,
+  "nextBackupAt": null
 }

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, clientsTable, clientAccountsTable, clientTransactionsTable, serviceTypesTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { authenticateToken } from "../lib/auth";
 import { notifyStoreAdmin, sendTelegramNotification } from "./telegram";
 
@@ -46,10 +46,12 @@ router.get("/all/transactions", async (req, res) => {
       limit,
     });
 
-    const withClients = await Promise.all(transactions.map(async (tx) => {
-      const client = await db.query.clientsTable.findFirst({ where: eq(clientsTable.id, tx.clientId) });
-      return { ...tx, client };
-    }));
+    const clientIds = [...new Set(transactions.map(tx => tx.clientId).filter(Boolean))];
+    const clients = clientIds.length
+      ? await db.query.clientsTable.findMany({ where: inArray(clientsTable.id, clientIds as number[]) })
+      : [];
+    const clientMap = new Map(clients.map(c => [c.id, c]));
+    const withClients = transactions.map(tx => ({ ...tx, client: clientMap.get(tx.clientId!) ?? null }));
 
     res.json(withClients);
   } catch (err) {
@@ -85,12 +87,22 @@ router.get("/", async (req, res) => {
       );
     });
 
-    // Har bir mijoz uchun account balance
-    const results = await Promise.all(filtered.map(async (client) => {
-      const whereConditions = storeId
-        ? and(eq(clientAccountsTable.clientId, client.id), eq(clientAccountsTable.storeId, storeId))
-        : eq(clientAccountsTable.clientId, client.id);
-      const accounts = await db.query.clientAccountsTable.findMany({ where: whereConditions });
+    // Barcha accountlarni bitta so'rovda olamiz (N+1 dan qochish)
+    const filteredIds = filtered.map(c => c.id);
+    const allAccounts = filteredIds.length
+      ? await db.query.clientAccountsTable.findMany({
+          where: storeId
+            ? and(inArray(clientAccountsTable.clientId, filteredIds), eq(clientAccountsTable.storeId, storeId))
+            : inArray(clientAccountsTable.clientId, filteredIds),
+        })
+      : [];
+    const accountsByClient = new Map<number, typeof allAccounts>();
+    for (const acc of allAccounts) {
+      if (!accountsByClient.has(acc.clientId)) accountsByClient.set(acc.clientId, []);
+      accountsByClient.get(acc.clientId)!.push(acc);
+    }
+    const results = filtered.map(client => {
+      const accounts = accountsByClient.get(client.id) ?? [];
       const totalBalance = accounts.reduce((sum, a) => sum + parseFloat(a.balance ?? "0"), 0);
       return {
         id: client.id,
@@ -102,7 +114,7 @@ router.get("/", async (req, res) => {
         balance: totalBalance,
         accounts,
       };
-    }));
+    });
 
     res.json(results);
   } catch (err) {
