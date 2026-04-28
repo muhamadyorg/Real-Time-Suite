@@ -224,6 +224,9 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
   const [drillOrders, setDrillOrders] = useState<any[]>([]);
   const [drillLoading, setDrillLoading] = useState(false);
 
+  // Qabul qilingan (eski nasiya to'lovlari) detail dialog
+  const [tolovListOpen, setTolovListOpen] = useState(false);
+
   // Quick "+" tranzaksiya modal
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickClientId, setQuickClientId] = useState<number | null>(null);
@@ -787,11 +790,17 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
             </Card>
             {/* Nasiyadan qabul qilingan to'lov kartasi */}
             {txTolov > 0 && (
-              <Card className="border-purple-200 dark:border-purple-800 bg-purple-50/40 dark:bg-purple-950/20">
+              <Card
+                className="border-purple-200 dark:border-purple-800 bg-purple-50/40 dark:bg-purple-950/20 cursor-pointer hover:bg-purple-100/60 dark:hover:bg-purple-900/30 transition-colors"
+                onClick={() => setTolovListOpen(true)}
+              >
                 <CardContent className="p-3">
-                  <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 mb-1">
-                    <span className="text-sm">💰</span>
-                    <span className="text-xs font-medium">Qabul qilingan</span>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
+                      <span className="text-sm">💰</span>
+                      <span className="text-xs font-medium">Qabul qilingan</span>
+                    </div>
+                    <ChevronDown className="w-3.5 h-3.5 text-purple-400" />
                   </div>
                   <div className="text-xl font-black tabular-nums leading-tight text-purple-700 dark:text-purple-300">
                     {fmtMoney(txTolov)}
@@ -800,6 +809,77 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                 </CardContent>
               </Card>
             )}
+            {/* Qabul qilingan to'lovlar detail dialog */}
+            <Dialog open={tolovListOpen} onOpenChange={setTolovListOpen}>
+              <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
+                <DialogHeader className="shrink-0">
+                  <DialogTitle className="flex items-center gap-2 text-purple-700 dark:text-purple-300">
+                    <span>💰</span> Qabul qilingan to'lovlar
+                  </DialogTitle>
+                  <DialogDescription className="text-xs">
+                    Eski nasiyalardan olingan to'lovlar ro'yxati
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex-1 overflow-y-auto divide-y divide-border/40 -mx-1 px-1">
+                  {(() => {
+                    const tz5 = 5 * 3600 * 1000;
+                    const now5 = Date.now() + tz5;
+                    const days = PERIOD_DAYS[period] ?? 1;
+                    const defaultStart = now5 - days * 86400000;
+                    const periodTxs = (allTx as any[]).filter(t => {
+                      if (t.type !== "tolov") return false;
+                      const ts = new Date(t.createdAt ?? t.created_at).getTime();
+                      if (useSpecificDate && specificDate) {
+                        const s = new Date(specificDate + "T00:00:00+05:00").getTime();
+                        return ts >= s && ts < s + 86400000;
+                      }
+                      return (ts + tz5) >= defaultStart;
+                    }).sort((a, b) => new Date(b.createdAt ?? b.created_at).getTime() - new Date(a.createdAt ?? a.created_at).getTime());
+
+                    if (periodTxs.length === 0) {
+                      return <div className="text-center py-8 text-muted-foreground text-sm">To'lovlar yo'q</div>;
+                    }
+                    return periodTxs.map((tx: any) => {
+                      const clientName = txClientName(tx);
+                      const phone = txClientPhone(tx);
+                      const performer = tx.performedByName ?? tx.performed_by_name;
+                      const svcName = tx.serviceTypeName ?? tx.service_type_name;
+                      const txDate = new Date(tx.createdAt ?? tx.created_at);
+                      const dateStr = txDate.toLocaleDateString("uz-UZ", { day: "2-digit", month: "2-digit", year: "numeric" });
+                      const timeStr = txDate.toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" });
+                      return (
+                        <div key={tx.id} className="py-2.5 px-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-sm truncate">{clientName}</div>
+                              {phone && <div className="text-xs text-muted-foreground flex items-center gap-1">📞 {phone}</div>}
+                              {svcName && <div className="text-xs text-purple-600 dark:text-purple-400 font-medium">{svcName}</div>}
+                              {tx.note && <div className="text-xs text-muted-foreground/80 italic truncate">{tx.note}</div>}
+                              {performer && (
+                                <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                                  👤 <span className="font-medium">{performer}</span>
+                                </div>
+                              )}
+                              <div className="text-xs text-muted-foreground/60">{dateStr} · {timeStr}</div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="font-bold text-green-600 dark:text-green-400 tabular-nums">
+                                +{fmtMoney(Math.abs(parseFloat(tx.amount ?? "0")))}
+                              </div>
+                              {tx.balance_after != null && (
+                                <div className="text-[10px] text-muted-foreground/60">
+                                  Bal: {parseFloat(tx.balance_after) < 0 ? `−${fmtMoney(Math.abs(parseFloat(tx.balance_after)))}` : `+${fmtMoney(parseFloat(tx.balance_after))}`}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </DialogContent>
+            </Dialog>
             {/* Yangi nasiya kartasi */}
             {txQarzSum > 0 && (
               <Card className="border-red-200 dark:border-red-800 bg-red-50/40 dark:bg-red-950/20">
