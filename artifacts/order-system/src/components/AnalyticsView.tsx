@@ -1164,7 +1164,7 @@ export function AnalyticsView({ storeId, token, serviceTypes = [] }: AnalyticsVi
                       </div>
                     </button>
 
-                    {group.types.length > 1 && (() => {
+                    {group.types.length > 0 && (() => {
                       // Balon tsex qatorlarini bitta qilib ko'rsat
                       const balonRows = group.types.filter((r: any) => r.service_type_name === BALON_SERVICE_NAME);
                       const otherRows = group.types.filter((r: any) => r.service_type_name !== BALON_SERVICE_NAME);
