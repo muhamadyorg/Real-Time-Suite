@@ -542,7 +542,6 @@ function ServiceTypesView() {
 function ClientsView() {
   const [status, setStatus] = useState<any>("all");
   const { data, isLoading } = useGetClients(status !== "all" ? { status } : {}, { query: { queryKey: getGetClientsQueryKey({ status }) } });
-  const { data: stores } = useGetStores({ query: { queryKey: getGetStoresQueryKey() } });
   const approve = useApproveClient();
   const reject = useRejectClient();
   const createClient = useCreateClient();
@@ -559,7 +558,6 @@ function ClientsView() {
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [tgUserId, setTgUserId] = useState("");
-  const [botStoreId, setBotStoreId] = useState<string>("1");
 
   const [editFirst, setEditFirst] = useState("");
   const [editLast, setEditLast] = useState("");
@@ -570,10 +568,10 @@ function ClientsView() {
 
   const handleCreate = () => {
     if (!firstName || !phone) return toast({ title: "Xatolik", description: "Ism va telefon kerak", variant: "destructive" });
-    createClient.mutate({ data: { firstName, lastName: lastName || null, phone, telegramUserId: tgUserId || null, botStoreId: parseInt(botStoreId) || 1 } as any }, {
+    createClient.mutate({ data: { firstName, lastName: lastName || null, phone, telegramUserId: tgUserId || null } as any }, {
       onSuccess: () => {
         toast({ title: "Mijoz qo'shildi" }); inv();
-        setCreateOpen(false); setFirstName(""); setLastName(""); setPhone(""); setTgUserId(""); setBotStoreId("1");
+        setCreateOpen(false); setFirstName(""); setLastName(""); setPhone(""); setTgUserId("");
       },
       onError: (e: any) => toast({ title: "Xatolik", description: e.data?.error, variant: "destructive" })
     });
@@ -638,15 +636,6 @@ function ClientsView() {
                 <div className="space-y-1.5"><Label>Familiya</Label><Input placeholder="Familiya" value={lastName} onChange={e => setLastName(e.target.value)} /></div>
                 <div className="space-y-1.5"><Label>Telefon *</Label><Input placeholder="+998901234567" value={phone} onChange={e => setPhone(e.target.value)} /></div>
                 <div className="space-y-1.5"><Label>Telegram User ID</Label><Input type="tel" placeholder="123456789" value={tgUserId} onChange={e => setTgUserId(e.target.value.replace(/\D/g, ""))} /></div>
-                <div className="space-y-1.5">
-                  <Label>Do'kon *</Label>
-                  <Select value={botStoreId} onValueChange={setBotStoreId}>
-                    <SelectTrigger><SelectValue placeholder="Do'kon tanlang" /></SelectTrigger>
-                    <SelectContent>
-                      {(stores ?? []).map((s: any) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setCreateOpen(false)}>Bekor</Button>
