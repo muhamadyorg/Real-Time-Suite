@@ -68,6 +68,7 @@ router.post("/", async (req, res) => {
       firstName, lastName, phone,
       telegramUserId: telegramUserId ?? null,
       status: "approved",
+      registrationStep: "done",
     }).returning();
     res.status(201).json(client);
   } catch (err) {
